@@ -2,7 +2,10 @@ import { mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import { loadPiModelRuntime } from "../src/model.js";
+import {
+  createPiModelRuntime,
+  loadPiModelRuntime,
+} from "../src/model.js";
 
 const temporaryDirectories: string[] = [];
 
@@ -84,6 +87,33 @@ afterEach(async () => {
 });
 
 describe("loadPiModelRuntime", () => {
+  it("constructs a container runtime directly from protected environment configuration", async () => {
+    const previous = process.env["PIMEM_CONTAINER_MODEL_KEY"];
+    process.env["PIMEM_CONTAINER_MODEL_KEY"] = "container-only-key";
+    try {
+      const runtime = createPiModelRuntime({
+        providerId: "container-provider",
+        modelId: "container-model",
+        baseUrl: "https://provider.example/v1/",
+        apiKeyEnv: "PIMEM_CONTAINER_MODEL_KEY",
+        thinkingLevel: "off",
+        contextWindow: 128_000,
+        maxTokens: 16_384,
+      });
+      expect(runtime.model).toMatchObject({
+        provider: "container-provider",
+        id: "container-model",
+        baseUrl: "https://provider.example/v1",
+        compat: { maxTokensField: "max_tokens" },
+      });
+      expect(await runtime.getApiKey("container-provider"))
+        .toBe("container-only-key");
+    } finally {
+      if (previous === undefined) delete process.env["PIMEM_CONTAINER_MODEL_KEY"];
+      else process.env["PIMEM_CONTAINER_MODEL_KEY"] = previous;
+    }
+  });
+
   it("loads only the configured default model and resolves its trusted command", async () => {
     const agentDir = await createAgentDir();
     const runtime = await loadPiModelRuntime({ agentDir });

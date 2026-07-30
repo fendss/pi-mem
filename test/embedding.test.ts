@@ -140,6 +140,20 @@ describe("OpenAI-compatible embedding boundary", () => {
     }
   });
 
+  it("fails fast on embedding authentication and authorization errors", async () => {
+    for (const status of [401, 403]) {
+      const fetchImpl = vi.fn(async () =>
+        new Response("credential rejected", { status })
+      ) as unknown as typeof fetch;
+      const embedder = mockEmbedder(fetchImpl);
+
+      await expect(embedder.embedQueries(["query"])).rejects.toThrow(
+        `HTTP ${status}`,
+      );
+      expect(fetchImpl).toHaveBeenCalledTimes(1);
+    }
+  });
+
   it("backs off through rate limits indefinitely", async () => {
     vi.useFakeTimers();
     try {

@@ -377,6 +377,12 @@ export class OpenAICompatibleEmbedder implements Embedder {
             error = fallbackError;
           }
         }
+        if (
+          error instanceof EmbeddingHttpError &&
+          (error.status === 401 || error.status === 403)
+        ) {
+          throw error;
+        }
         if (signal?.aborted) throw new Error("Embedding request aborted");
         await wait(retryDelayMs, signal);
         retryDelayMs = Math.min(retryDelayMs * 2, 30_000);

@@ -32,6 +32,17 @@ export interface PiModelRuntime {
   getApiKey: (providerId: string) => Promise<string | undefined>;
 }
 
+export interface CreatePiModelRuntimeOptions {
+  providerId: string;
+  modelId: string;
+  baseUrl: string;
+  apiKeyEnv: string;
+  thinkingLevel?: ThinkingLevel;
+  contextWindow?: number;
+  maxTokens?: number;
+  maxTokensField?: "max_tokens" | "max_completion_tokens";
+}
+
 const THINKING_LEVELS = new Set<ThinkingLevel>([
   "off",
   "minimal",
@@ -226,6 +237,56 @@ async function executeTrustedApiKeyCommand(command: string): Promise<string> {
     throw new Error("Configured API key command returned an invalid value");
   }
   return apiKey;
+}
+
+export function createPiModelRuntime(
+  options: CreatePiModelRuntimeOptions,
+): PiModelRuntime {
+  const providerId = asNonEmptyString(options.providerId, "providerId");
+  const modelId = asNonEmptyString(options.modelId, "modelId");
+  if (!/^[A-Z_][A-Z0-9_]*$/u.test(options.apiKeyEnv)) {
+    throw new Error("apiKeyEnv must be an environment variable name");
+  }
+  const thinkingLevel = options.thinkingLevel ?? "off";
+  if (!THINKING_LEVELS.has(thinkingLevel)) {
+    throw new Error("thinkingLevel is invalid");
+  }
+  const model: Model<"openai-completions"> = {
+    id: modelId,
+    name: modelId,
+    api: "openai-completions",
+    provider: providerId,
+    baseUrl: validateBaseUrl(options.baseUrl),
+    reasoning: false,
+    input: ["text"],
+    cost: { ...DEFAULT_COST },
+    contextWindow: optionalPositiveInteger(
+      options.contextWindow,
+      128_000,
+      "contextWindow",
+    ),
+    maxTokens: optionalPositiveInteger(options.maxTokens, 16_384, "maxTokens"),
+    compat: { maxTokensField: options.maxTokensField ?? "max_tokens" },
+  };
+  const api = openAICompletionsApi();
+  const getApiKey = async (
+    requestedProviderId: string,
+  ): Promise<string | undefined> => {
+    if (requestedProviderId !== providerId) return undefined;
+    const apiKey = process.env[options.apiKeyEnv]?.trim();
+    if (!apiKey || apiKey.includes("\n") || apiKey.includes("\r")) {
+      throw new Error("Configured API key environment variable is invalid");
+    }
+    return apiKey;
+  };
+  return {
+    providerId,
+    modelId,
+    thinkingLevel,
+    model,
+    streamFn: api.streamSimple,
+    getApiKey,
+  };
 }
 
 export async function loadPiModelRuntime(

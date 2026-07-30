@@ -98,6 +98,85 @@ model-authored SQL is used. The Agent still sees only `search`, `read`,
 `bash_ro`, and `finish`. Search results become candidates, `read` promotes exact
 raw records to evidence, and only read evidence may be cited by `finish`.
 
+## Leaderboard Add / Search API
+
+The production wrapper implements the synchronous Agent Memory Leaderboard
+contract:
+
+```text
+GET  /health
+POST /v1/memories/add
+POST /v1/memories/search
+```
+
+`user_id` is hashed into the only retrieval scope. Add requests are immutable
+and idempotent by `request_id`; HTTP 200 is returned only after SQLite, FTS5,
+embeddings, and deterministic fact sidecars are searchable. Search runs the
+normal PiMem Agent and returns at most `top_k` items in this order:
+
+```text
+deterministic source-grounded evidence capsule
+cited immutable raw memories
+other read evidence
+remaining candidates
+```
+
+The capsule is a JSON string in the first result's `content`. It preserves
+`status`, `evidence_summary`, citation supports, count, inventory, and source
+IDs. It contains no final answer or model instructions, and every cited claim
+is followed by its raw source memory. The capsule ID is a deterministic hash of
+the scope, query, and canonical package.
+
+Build and run the container:
+
+```bash
+docker build -t pimem:1.0.0 .
+chmod 600 /path/to/pimem-leaderboard.env
+
+docker run --rm --name pimem \
+  --env-file /path/to/pimem-leaderboard.env \
+  -v pimem-data:/data \
+  -p 8080:8080 \
+  pimem:1.0.0
+```
+
+The protected environment file must provide:
+
+```text
+PIMEM_AUTH_SCHEME=x-api-key
+PIMEM_MEMORY_API_KEY=<leaderboard-facing secret>
+PIMEM_AGENT_PROVIDER=pimem-openai
+PIMEM_AGENT_MODEL=gpt-4o-mini
+PIMEM_AGENT_BASE_URL=<OpenAI-compatible base URL>
+PIMEM_AGENT_API_KEY=<retrieval Agent provider secret>
+PIMEM_EMBEDDING_BASE_URL=<OpenAI-compatible embedding base URL>
+PIMEM_EMBEDDING_API_KEY=<embedding provider secret>
+PIMEM_EMBEDDING_MODEL=text-embedding-v4
+PIMEM_EMBEDDING_DIMENSIONS=1024
+```
+
+The wrapper constructs the requested OpenAI-compatible Agent runtime directly
+from these environment variables; no provider configuration or secret is baked
+into the image. Optional capacity controls are
+`PIMEM_MAX_CONCURRENT_ADDS` (default 1), `PIMEM_MAX_CONCURRENT_SEARCHES`
+(default 4), and `PIMEM_MAX_RUN_MS` (default 120000). Terminate HTTPS in a
+public reverse proxy, keep `/health` unauthenticated, and delete evaluation data
+from the persistent volume within the leaderboard retention window.
+
+Contract examples:
+
+```bash
+curl -X POST https://memory.example.com/v1/memories/add \
+  -H 'Content-Type: application/json' \
+  -H 'X-Api-Key: ...' \
+  -d '{"request_id":"req-1","messages":[{"role":"user","content":"memory text","timestamp":1704067200000}],"user_id":"eval:user-1","session_id":"session-1"}'
+
+curl -X POST https://memory.example.com/v1/memories/search \
+  -H 'Content-Type: application/json' \
+  -H 'X-Api-Key: ...' \
+  -d '{"query":"What should be remembered?","user_id":"eval:user-1","top_k":100}'
+```
+
 ## Commands
 
 Node 22.19 or newer is required. The full benchmark suite also requires

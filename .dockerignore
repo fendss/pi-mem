@@ -1,0 +1,10 @@
+.git
+.github
+node_modules
+dist
+data
+runs
+coverage
+*.log
+.env
+.env.*

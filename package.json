@@ -22,7 +22,8 @@
     "test": "vitest run",
     "test:python": "python3 -m unittest scripts/test_longmemeval_frozen_eval.py",
     "check": "npm run typecheck && npm test -- --maxWorkers=4 && npm run test:python && npm run build",
-    "cli": "node --disable-warning=ExperimentalWarning dist/cli.js"
+    "cli": "node --disable-warning=ExperimentalWarning dist/cli.js",
+    "server": "node --disable-warning=ExperimentalWarning dist/server.js"
   },
   "dependencies": {
     "@earendil-works/pi-agent-core": "0.82.1",

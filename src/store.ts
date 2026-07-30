@@ -9,7 +9,7 @@ import type {
   SearchRequest,
 } from "./types.js";
 import { finalizeSearchHits } from "./search-results.js";
-import { episodicPreview, safePathSegment } from "./util.js";
+import { episodicPreview, safePathSegment, sha256, stableMemoryId } from "./util.js";
 
 interface MemoryRow {
   memory_id: string;
@@ -60,6 +60,35 @@ export interface StoredEmbeddingRecord {
 export interface StoreEmbeddingBatchResult {
   inserted: number;
   unchanged: number;
+}
+
+export interface AppendMemoryMessage {
+  role: MemoryRecord["role"];
+  content: string;
+  timestamp?: string;
+}
+
+export interface AppendMemoryRequest {
+  requestId: string;
+  requestHash: string;
+  scopeId: string;
+  sourceSessionId: string;
+  messages: readonly AppendMemoryMessage[];
+}
+
+export interface AppendMemoryResult {
+  status: "pending" | "complete";
+  records: MemoryRecord[];
+}
+
+interface AppendRequestRow {
+  request_hash: string;
+  scope_id: string;
+  source_session_id: string;
+  session_id: string;
+  start_turn_index: number;
+  message_count: number;
+  complete: number;
 }
 
 export interface StoreSearchHit {
@@ -246,6 +275,26 @@ export class MemoryStore {
       );
       CREATE INDEX IF NOT EXISTS memory_embeddings_profile
         ON memory_embeddings(profile_id, memory_id);
+      CREATE TABLE IF NOT EXISTS memory_append_sessions (
+        scope_id TEXT NOT NULL,
+        source_session_id TEXT NOT NULL,
+        session_id TEXT NOT NULL,
+        next_turn_index INTEGER NOT NULL,
+        PRIMARY KEY (scope_id, source_session_id),
+        UNIQUE (scope_id, session_id)
+      );
+      CREATE TABLE IF NOT EXISTS memory_append_requests (
+        request_id TEXT PRIMARY KEY,
+        request_hash TEXT NOT NULL,
+        scope_id TEXT NOT NULL,
+        source_session_id TEXT NOT NULL,
+        session_id TEXT NOT NULL,
+        start_turn_index INTEGER NOT NULL,
+        message_count INTEGER NOT NULL,
+        complete INTEGER NOT NULL DEFAULT 0 CHECK (complete IN (0, 1))
+      );
+      CREATE INDEX IF NOT EXISTS memory_append_requests_scope
+        ON memory_append_requests(scope_id, request_id);
     `);
     this.evidenceOperators = new DatabaseEvidenceOperators(this.db);
   }
@@ -329,6 +378,195 @@ export class MemoryStore {
       this.db.exec("ROLLBACK");
       throw error;
     }
+  }
+
+  /**
+   * Appends one immutable, idempotent request chunk to an online memory scope.
+   * The mutable request/session tables are bookkeeping sidecars only; inserted
+   * source memories retain the same immutable raw-record contract as ingestScope.
+   */
+  appendMemoryRequest(request: AppendMemoryRequest): AppendMemoryResult {
+    if (request.messages.length === 0) {
+      throw new Error("Append request must contain at least one message");
+    }
+    const existing = this.db.prepare(`
+      SELECT request_hash, scope_id, source_session_id, session_id,
+             start_turn_index, message_count, complete
+      FROM memory_append_requests
+      WHERE request_id = ?
+    `).get(request.requestId) as unknown as AppendRequestRow | undefined;
+    if (existing) {
+      if (
+        existing.request_hash !== request.requestHash ||
+        existing.scope_id !== request.scopeId ||
+        existing.source_session_id !== request.sourceSessionId ||
+        existing.message_count !== request.messages.length
+      ) {
+        throw new Error(`Append request ID conflict: ${request.requestId}`);
+      }
+      return {
+        status: existing.complete === 1 ? "complete" : "pending",
+        records: this.recordsInTurnRange(
+          request.scopeId,
+          existing.session_id,
+          existing.start_turn_index,
+          existing.message_count,
+        ),
+      };
+    }
+
+    const sessionId = `s-${sha256(
+      `${request.scopeId}\0${request.sourceSessionId}`,
+    ).slice(0, 24)}`;
+    const getSession = this.db.prepare(`
+      SELECT session_id, next_turn_index
+      FROM memory_append_sessions
+      WHERE scope_id = ? AND source_session_id = ?
+    `);
+    const insertSession = this.db.prepare(`
+      INSERT INTO memory_append_sessions (
+        scope_id, source_session_id, session_id, next_turn_index
+      ) VALUES (?, ?, ?, 0)
+    `);
+    const updateSession = this.db.prepare(`
+      UPDATE memory_append_sessions
+      SET next_turn_index = ?
+      WHERE scope_id = ? AND source_session_id = ?
+    `);
+    const insertRequest = this.db.prepare(`
+      INSERT INTO memory_append_requests (
+        request_id, request_hash, scope_id, source_session_id, session_id,
+        start_turn_index, message_count, complete
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, 0)
+    `);
+    const insertRecord = this.db.prepare(`
+      INSERT INTO memories (
+        memory_id, scope_id, session_id, turn_index, role, content,
+        timestamp, content_hash, metadata_json
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `);
+    const insertFts = this.db.prepare(`
+      INSERT INTO memory_fts(memory_id, scope_id, content)
+      VALUES (?, ?, ?)
+    `);
+
+    this.db.exec("BEGIN IMMEDIATE");
+    try {
+      let session = getSession.get(
+        request.scopeId,
+        request.sourceSessionId,
+      ) as unknown as { session_id: string; next_turn_index: number } | undefined;
+      if (!session) {
+        insertSession.run(request.scopeId, request.sourceSessionId, sessionId);
+        session = { session_id: sessionId, next_turn_index: 0 };
+      }
+      if (session.session_id !== sessionId) {
+        throw new Error(`Append session identity conflict: ${request.sourceSessionId}`);
+      }
+      const startTurnIndex = session.next_turn_index;
+      const records = request.messages.map((message, messageIndex) => {
+        const turnIndex = startTurnIndex + messageIndex;
+        const record: MemoryRecord = {
+          memoryId: stableMemoryId(request.scopeId, sessionId, turnIndex),
+          scopeId: request.scopeId,
+          sessionId,
+          turnIndex,
+          role: message.role,
+          content: message.content,
+          contentHash: sha256(message.content),
+          metadata: {
+            session: { sourceSessionId: request.sourceSessionId },
+            turn: { sourceMessageIndex: messageIndex },
+          },
+          ...(message.timestamp === undefined
+            ? {}
+            : { timestamp: message.timestamp }),
+        };
+        return record;
+      });
+      for (const record of records) {
+        insertRecord.run(
+          record.memoryId,
+          record.scopeId,
+          record.sessionId,
+          record.turnIndex,
+          record.role,
+          record.content,
+          record.timestamp ?? null,
+          record.contentHash,
+          JSON.stringify(record.metadata),
+        );
+        insertFts.run(
+          record.memoryId,
+          record.scopeId,
+          `${record.role}: ${record.content}`,
+        );
+      }
+      insertRequest.run(
+        request.requestId,
+        request.requestHash,
+        request.scopeId,
+        request.sourceSessionId,
+        sessionId,
+        startTurnIndex,
+        records.length,
+      );
+      updateSession.run(
+        startTurnIndex + records.length,
+        request.scopeId,
+        request.sourceSessionId,
+      );
+      this.db.exec("COMMIT");
+      this.completeEmbeddingStatuses.clear();
+      return { status: "pending", records };
+    } catch (error) {
+      this.db.exec("ROLLBACK");
+      throw error;
+    }
+  }
+
+  hasPendingAppendRequests(scopeId: string): boolean {
+    return this.db.prepare(`
+      SELECT 1 FROM memory_append_requests
+      WHERE scope_id = ? AND complete = 0
+      LIMIT 1
+    `).get(scopeId) !== undefined;
+  }
+
+  markAppendRequestComplete(requestId: string, requestHash: string): void {
+    const result = this.db.prepare(`
+      UPDATE memory_append_requests
+      SET complete = 1
+      WHERE request_id = ? AND request_hash = ?
+    `).run(requestId, requestHash);
+    if (result.changes !== 1) {
+      throw new Error(`Cannot complete unknown append request: ${requestId}`);
+    }
+  }
+
+  private recordsInTurnRange(
+    scopeId: string,
+    sessionId: string,
+    startTurnIndex: number,
+    count: number,
+  ): MemoryRecord[] {
+    const rows = this.db.prepare(`
+      SELECT memory_id, scope_id, session_id, turn_index, role, content,
+             timestamp, content_hash, metadata_json
+      FROM memories
+      WHERE scope_id = ? AND session_id = ?
+        AND turn_index >= ? AND turn_index < ?
+      ORDER BY turn_index ASC
+    `).all(
+      scopeId,
+      sessionId,
+      startTurnIndex,
+      startTurnIndex + count,
+    ) as unknown as MemoryRow[];
+    if (rows.length !== count) {
+      throw new Error(`Append request records are incomplete in scope ${scopeId}`);
+    }
+    return rows.map(rowToRecord);
   }
 
   /** Builds or validates the deterministic sidecar index for one scope. */
