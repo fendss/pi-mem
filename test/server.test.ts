@@ -10,6 +10,7 @@ import {
   parseLeaderboardAddRequest,
   parseLeaderboardSearchRequest,
   PiMemLeaderboardBackend,
+  runSearchWithRetries,
   type LeaderboardApiBackend,
 } from "../src/server.js";
 import { embeddingProfile } from "../src/embedding-index.js";
@@ -101,6 +102,30 @@ function retrievalFixture(): PiMemResult {
 }
 
 describe("leaderboard API contract", () => {
+  it("retries failed or insufficient searches within one bounded budget", async () => {
+    const budgets: number[] = [];
+    const result = await runSearchWithRetries({
+      maxRunMs: 600_000,
+      maxAttempts: 3,
+      retryDelayMs: 0,
+      async run(attemptRunMs, attempt) {
+        budgets.push(attemptRunMs);
+        if (attempt === 1) {
+          return { status: "insufficient" as const, citations: [], evidence: [] };
+        }
+        if (attempt === 2) throw new Error("transient provider failure");
+        return {
+          status: "sufficient" as const,
+          citations: [{}],
+          evidence: [{}],
+        };
+      },
+    });
+    expect(result.status).toBe("sufficient");
+    expect(budgets).toHaveLength(3);
+    expect(budgets.every((budget) => budget > 0 && budget <= 600_000)).toBe(true);
+  });
+
   it("validates the fixed Add and Search request schemas", () => {
     expect(parseLeaderboardAddRequest({
       request_id: "request-1",

@@ -90,6 +90,7 @@ export interface PiMemLeaderboardBackendOptions {
   maxConcurrentAdds?: number;
   maxConcurrentSearches?: number;
   maxRunMs?: number;
+  searchAttempts?: number;
 }
 
 class ApiError extends Error {
@@ -325,6 +326,65 @@ export function buildLeaderboardSearchResponse(
   return { data: [capsuleItem, ...rawItems].slice(0, topK) };
 }
 
+interface RetryableSearchResult {
+  status: "sufficient" | "insufficient";
+  citations: readonly unknown[];
+  evidence: readonly unknown[];
+}
+
+export async function runSearchWithRetries<T extends RetryableSearchResult>(
+  options: {
+    maxRunMs: number;
+    maxAttempts: number;
+    retryDelayMs?: number;
+    run: (attemptRunMs: number, attempt: number) => Promise<T>;
+  },
+): Promise<T> {
+  const startedAt = Date.now();
+  let best: T | undefined;
+  let lastError: unknown;
+  for (let attempt = 1; attempt <= options.maxAttempts; attempt += 1) {
+    const elapsed = Date.now() - startedAt;
+    const remainingMs = options.maxRunMs - elapsed;
+    if (remainingMs < 1) break;
+    const remainingAttempts = options.maxAttempts - attempt + 1;
+    const attemptRunMs = Math.max(1, Math.floor(remainingMs / remainingAttempts));
+    try {
+      const result = await options.run(attemptRunMs, attempt);
+      if (
+        best === undefined ||
+        Number(result.status === "sufficient") >
+          Number(best.status === "sufficient") ||
+        (
+          result.status === best.status &&
+          (result.citations.length > best.citations.length ||
+            (
+              result.citations.length === best.citations.length &&
+              result.evidence.length > best.evidence.length
+            ))
+        )
+      ) {
+        best = result;
+      }
+      if (result.status === "sufficient") return result;
+    } catch (error) {
+      lastError = error;
+    }
+    if (attempt < options.maxAttempts) {
+      const delayMs = Math.min(
+        options.retryDelayMs ?? 1_000 * 2 ** (attempt - 1),
+        Math.max(0, options.maxRunMs - (Date.now() - startedAt) - 1),
+      );
+      if (delayMs > 0) {
+        await new Promise<void>((resolveDelay) => setTimeout(resolveDelay, delayMs));
+      }
+    }
+  }
+  if (best !== undefined) return best;
+  if (lastError !== undefined) throw lastError;
+  throw new Error(`PiMem exceeded the ${options.maxRunMs}ms search limit`);
+}
+
 export class PiMemLeaderboardBackend implements LeaderboardApiBackend {
   private readonly rawStore: MemoryStore;
   private readonly embedder: Embedder;
@@ -333,6 +393,7 @@ export class PiMemLeaderboardBackend implements LeaderboardApiBackend {
   private readonly addGate: AsyncRequestGate;
   private readonly searchGate: AsyncRequestGate;
   private readonly maxRunMs: number;
+  private readonly searchAttempts: number;
 
   constructor(options: PiMemLeaderboardBackendOptions) {
     this.rawStore = options.rawStore;
@@ -345,6 +406,7 @@ export class PiMemLeaderboardBackend implements LeaderboardApiBackend {
       1_000,
     );
     this.maxRunMs = options.maxRunMs ?? 120_000;
+    this.searchAttempts = options.searchAttempts ?? 1;
   }
 
   add(request: LeaderboardAddRequest): Promise<LeaderboardAddResponse> {
@@ -396,12 +458,16 @@ export class PiMemLeaderboardBackend implements LeaderboardApiBackend {
       if (this.rawStore.listScopeRecords(scopeId).length === 0) {
         return { data: [] };
       }
-      const result = await runPiMem({
-        store: this.hybridStore,
-        modelRuntime: this.modelRuntime,
-        scopeId,
-        question: retrievalQuestion(request),
+      const result = await runSearchWithRetries({
         maxRunMs: this.maxRunMs,
+        maxAttempts: this.searchAttempts,
+        run: (attemptRunMs) => runPiMem({
+          store: this.hybridStore,
+          modelRuntime: this.modelRuntime,
+          scopeId,
+          question: retrievalQuestion(request),
+          maxRunMs: attemptRunMs,
+        }),
       });
       return buildLeaderboardSearchResponse(
         result,
@@ -609,6 +675,7 @@ export async function startLeaderboardServer(): Promise<void> {
       64,
     ),
     maxRunMs: positiveEnvironmentInteger("PIMEM_MAX_RUN_MS", 120_000, 600_000),
+    searchAttempts: positiveEnvironmentInteger("PIMEM_SEARCH_ATTEMPTS", 1, 5),
   });
   const authScheme = authSchemeFromEnvironment();
   const apiKey = process.env.PIMEM_MEMORY_API_KEY;
