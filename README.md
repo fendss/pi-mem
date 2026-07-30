@@ -18,16 +18,16 @@ caller-owned benchmark answer adapter
 
 PiMem stops at the cited evidence package. It does not own answer formatting or a universal answer prompt. Each benchmark adapter supplies its own answer protocol after retrieval. Ingest never invokes a generative model.
 
-## Version 0.1
+## Version 1.0
 
-- deterministic TypeScript ingest;
-- immutable SQLite source store;
-- SQLite FTS5 lexical search as the default profile;
-- optional `text-embedding-v4` dense retrieval with candidate-local BM25 and RRF;
+- deterministic TypeScript ingest and an immutable SQLite source store;
+- SQLite FTS5 plus optional `text-embedding-v4` dense retrieval, candidate-local BM25, and RRF;
+- Agent-routed `hybrid`, `lexical`, `coverage`, `temporal`, `numeric`, and `history` search operators behind a three-field API;
+- harness-owned scope enforcement, prepared SQL, session aggregation, fact joins, ranking, and provenance;
 - resumable Float32 derived embeddings that never modify raw memory;
 - exact `read` with neighboring source turns;
 - networkless, read-only Docker shell over one sanitized scope;
-- Pi Core retrieval-agent loop;
+- Pi Core retrieval-agent loop with internally consistent evidence summaries, citation supports, counts, and inventories;
 - structured `sufficient` / `insufficient` evidence selection;
 - benchmark-owned answer adapters, including LongMemEval-S;
 - automatic candidate, evidence, citation and tool-trace export;
