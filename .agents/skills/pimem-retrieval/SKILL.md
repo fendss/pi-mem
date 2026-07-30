@@ -17,4 +17,14 @@ Choose the `search` operator yourself. The harness never routes from question ke
 
 Use another focused search only when evidence is missing. For preference questions, direct user likes, dislikes, comparisons, and constraints are strong evidence; one purchase or trial is weak, and an assistant recommendation is not a user preference. A later claim replaces an earlier one only for the same subject, attribute, and condition.
 
-Search output is navigation. `read` every cited candidate and nearby turns when context is needed. Treat similar entities as distractors. Call `finish` alone with a concise evidence summary and source-grounded citations. Do not produce the caller's final answer.
+Search output is navigation. `read` every cited candidate and nearby turns when context is needed. Treat similar entities as distractors.
+
+Before calling `finish` alone, make the package internally consistent:
+
+- Cover every independent evidence need; do not mark `sufficient` while a requested part is missing.
+- Each citation `supports` states one atomic fact from that cited memory only. Do not combine sources, calculate, or infer in a support string.
+- `evidenceSummary` is a lossless compact ledger of those supported facts. Keep distinct items, sessions, and updates separate; add no unsupported conclusion.
+- `inventory` has one row per distinct supported item, with every referenced memory also cited. Use `count` only when stated by a source or exactly derived from a complete inventory.
+- Check that summary, supports, inventory, count, and cited raw memories agree.
+
+Do not produce the caller's final answer.

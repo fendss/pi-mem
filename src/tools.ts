@@ -58,14 +58,29 @@ export const FinishParameters = Type.Object({
   status: Type.Union([
     Type.Literal("sufficient"),
     Type.Literal("insufficient"),
-  ]),
+  ], {
+    description:
+      "Use sufficient only when every independent evidence need is represented by cited raw memory.",
+  }),
   citations: Type.Array(
     Type.Object({
       candidateRef: Type.Integer({ minimum: 0 }),
-      supports: Type.String({ minLength: 1 }),
+      supports: Type.String({
+        minLength: 1,
+        description:
+          "One atomic fact stated by this memory only; do not combine sources, calculate, or infer here.",
+      }),
     }),
+    {
+      description:
+        "Source citations covering every independent fact in the evidence package.",
+    },
   ),
-  evidenceSummary: Type.String({ minLength: 1 }),
+  evidenceSummary: Type.String({
+    minLength: 1,
+    description:
+      "Lossless compact ledger of the cited facts. Keep distinct items, sessions, and updates separate and add no unsupported conclusion.",
+  }),
   count: Type.Optional(Type.Integer({
     minimum: 0,
     description:
@@ -74,9 +89,14 @@ export const FinishParameters = Type.Object({
   inventory: Type.Optional(
     Type.Array(
       Type.Object({
-        item: Type.String({ minLength: 1 }),
+        item: Type.String({
+          minLength: 1,
+          description: "One distinct, explicitly supported inventory item.",
+        }),
         candidateRefs: Type.Array(Type.Integer({ minimum: 0 }), {
           minItems: 1,
+          description:
+            "Sources for this item. Every referenced candidate must also appear in citations.",
         }),
       }),
       {
@@ -665,7 +685,7 @@ export function createFinishTool(
     name: "finish",
     label: "Finish",
     description:
-      "Submit a compact evidence package. Cite candidate numbers returned by search/read; the harness converts them to exact source IDs and deterministically auto-reads any selected candidate not already durable, then enforces provenance. Mark sufficient only when every required subclaim is supported. Use count only for a source-grounded aggregate and inventory only for explicitly enumerated supported items. Do not generate the benchmark answer.",
+      "Submit an internally consistent evidence package. Cite candidate numbers returned by search/read; the harness converts them to exact source IDs, auto-reads selected candidates, and enforces provenance. Cover every independent evidence need. Keep citation supports atomic and source-local; make evidenceSummary a lossless ledger of those facts; keep inventory, count, summary, supports, and raw citations consistent. Do not generate the benchmark answer.",
     parameters: FinishParameters,
     executionMode: "sequential",
     async execute(_toolCallId, params) {
