@@ -17,21 +17,23 @@ INTERNAL_SEARCH_ATTEMPTS="${PIMEM_LOCAL_EVAL_INTERNAL_SEARCH_ATTEMPTS:-1}"
 MAX_RECORDS="${PIMEM_LOCAL_EVAL_MAX_RECORDS:-0}"
 MAX_QUESTIONS="${PIMEM_LOCAL_EVAL_MAX_QUESTIONS_PER_RECORD:-0}"
 
+# Produce complete small-benchmark artifacts first; the largest embedding and
+# question workloads remain resumable at the end of the queue.
 DEFAULT_BENCHMARKS=(
-  locomo_refined
+  scriptmem_man_earth
+  scriptmem_enemy
+  scriptmem_angry
+  scriptmem_friends
   longmemeval_refined
-  longmemeval_s_cleaned
-  clbench_locomo_0_4k
   clbench_locomo_16_32k
+  clbench_locomo_0_4k
+  locomo_refined
   personamem_v1_32k
+  longmemeval_s_cleaned
   personamem_v1_128k
-  personamem_v1_1m
   personamem_v2_32k
   personamem_v2_128k
-  scriptmem_angry
-  scriptmem_enemy
-  scriptmem_man_earth
-  scriptmem_friends
+  personamem_v1_1m
 )
 if [[ -n "${PIMEM_LOCAL_EVAL_BENCHMARKS:-}" ]]; then
   IFS=',' read -r -a BENCHMARKS <<<"${PIMEM_LOCAL_EVAL_BENCHMARKS}"
