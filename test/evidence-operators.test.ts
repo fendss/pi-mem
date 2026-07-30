@@ -78,7 +78,7 @@ describe("timeline evidence operator", () => {
       "Which event happened first?",
       "2023/03/25 (Sat) 18:26",
     );
-    expect(result.operator).toBe("timeline");
+    expect(result.operator).toBe("temporal");
     expect(result.rows.map((row) => row.memoryId)).toEqual(["m-early", "m-late"]);
     expect(result.rows[0]).toMatchObject({ eventTime: "2023-03-01" });
   });
@@ -92,7 +92,7 @@ describe("aggregate evidence operator", () => {
       hit("m-plants", "I sold 20 potted plants for $7.5 each.", "2023-05-15T10:00:00"),
       hit("m-target", "I hope to earn $500 next time.", "2023-05-20T10:00:00"),
     ]);
-    expect(result.operator).toBe("aggregate");
+    expect(result.operator).toBe("numeric");
     expect(result.rows.map((row) => row.valueKind)).toEqual([
       "increment",
       "increment",

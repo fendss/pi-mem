@@ -89,46 +89,6 @@ function operatorTokens(queries: readonly string[]): string[] {
   ))];
 }
 
-/** Returns a deterministic source-side action cue for temporal ranking. */
-function temporalActionPattern(question: string): RegExp | undefined {
-  const normalized = question.normalize("NFKC").toLowerCase();
-  if (/\b(?:buy|bought|purchase|purchased)\b/u.test(normalized)) {
-    return /\b(?:bought|purchased|acquired|ordered|picked\s+up|got\s+(?:a|an|the|my|some))\b/iu;
-  }
-  if (/\b(?:start|started|begin|began)\b/u.test(normalized)) {
-    return /\b(?:start|started|begin|began|first\s+(?:started|began))\b/iu;
-  }
-  if (/\b(?:visit|visited|travel|traveled|went)\b/u.test(normalized)) {
-    return /\b(?:visit|visited|travel|traveled|travelled|went)\b/iu;
-  }
-  if (/\b(?:finish|finished|complete|completed)\b/u.test(normalized)) {
-    return /\b(?:finish|finished|complete|completed)\b/iu;
-  }
-  if (/\b(?:receive|received|get|got)\b/u.test(normalized)) {
-    return /\b(?:receive|received|got)\b/iu;
-  }
-  return undefined;
-}
-
-/**
- * Chooses the source-side action vocabulary used to reject nearby but
- * semantically different numbers (for example loyalty thresholds in a sales
- * total question).
- */
-function aggregateActionPattern(question: string): RegExp | undefined {
-  const normalized = question.normalize("NFKC").toLowerCase();
-  if (/\b(?:sell|sold|selling|sales?|markets?|revenue)\b/u.test(normalized)) {
-    return /\b(?:sell|sold|selling|sales?|markets?|revenue)\b/iu;
-  }
-  if (/\b(?:spend|spent|cost|paid|pay|bought|purchase)\b/u.test(normalized)) {
-    return /\b(?:spend|spent|cost|paid|pay|bought|purchase)\b/iu;
-  }
-  if (/\b(?:earn|earned|earning|income|profit|revenue)\b/u.test(normalized)) {
-    return /\b(?:earn|earned|earning|income|profit|revenue)\b/iu;
-  }
-  return undefined;
-}
-
 /**
  * Owns all deterministic, database-backed evidence indexing and expansion.
  * It never mutates raw memories; every table below is a versioned sidecar.
@@ -154,7 +114,7 @@ export class DatabaseEvidenceOperators {
     seedHits: readonly DatabaseOperatorSeed[],
   ): DatabaseOperatorHit[] {
     this.ensureScope(scopeId);
-    return context.operator === "timeline"
+    return context.operator === "temporal"
       ? this.expandTimeline(scopeId, request, context, seedHits)
       : this.expandAggregate(scopeId, request, context, seedHits);
   }
@@ -207,8 +167,11 @@ export class DatabaseEvidenceOperators {
       WHERE t.scope_id = ? AND t.extractor_version = ?
       ORDER BY t.resolved_date ASC, m.session_id ASC, m.turn_index ASC
     `).all(scopeId, EVIDENCE_FACT_EXTRACTOR_VERSION) as unknown as TemporalFactRow[];
-    const targetDates = new Set(context.targetDates);
-    const actionPattern = temporalActionPattern(context.question);
+    const targetDates = new Set(
+      request.queries.flatMap((query) =>
+        query.match(/\b\d{4}-\d{2}-\d{2}\b/gu) ?? []
+      ),
+    );
     const seedSessions = new Set(seedHits.map((hit) => hit.record.sessionId));
     const seedMemories = new Set(seedHits.map((hit) => hit.record.memoryId));
     const seedOrder = new Map(seedHits.map((hit, index) => [hit.record.memoryId, index]));
@@ -234,7 +197,6 @@ export class DatabaseEvidenceOperators {
     const ranked = [...grouped.values()]
       .map((entry) => {
         const targetMatch = [...entry.dates].some((date) => targetDates.has(date));
-        const eventMatch = actionPattern?.test(entry.record.content) ?? false;
         const seedMemory = seedMemories.has(entry.record.memoryId);
         const seedSession = seedSessions.has(entry.record.sessionId);
         return {
@@ -242,19 +204,17 @@ export class DatabaseEvidenceOperators {
           targetMatch,
           seedSession,
           seedOrder: seedOrder.get(entry.record.memoryId) ?? Number.MAX_SAFE_INTEGER,
-          priority: targetMatch && eventMatch
+          priority: targetMatch && seedMemory
             ? 0
-            : targetMatch && seedMemory
+            : targetMatch && seedSession
               ? 1
-              : targetMatch && seedSession
+              : targetMatch
                 ? 2
-                : targetMatch
+                : seedMemory
                   ? 3
-                  : seedMemory
+                  : seedSession
                     ? 4
-                    : seedSession
-                      ? 5
-                      : 6,
+                    : 5,
         };
       })
       .filter((entry) => entry.targetMatch || entry.seedSession)
@@ -293,7 +253,6 @@ export class DatabaseEvidenceOperators {
     const seedSessions = new Set(seedHits.map((hit) => hit.record.sessionId));
     const seedMemories = new Set(seedHits.map((hit) => hit.record.memoryId));
     const tokens = operatorTokens(request.queries);
-    const actionPattern = aggregateActionPattern(context.question);
     const grouped = new Map<string, {
       record: MemoryRecord;
       factIndexes: number[];
@@ -315,8 +274,7 @@ export class DatabaseEvidenceOperators {
       const overlap = tokens.filter((token) => localContext.includes(token)).length;
       const seedMemory = seedMemories.has(record.memoryId);
       const seedSession = seedSessions.has(record.sessionId);
-      const actionMatch = actionPattern === undefined || actionPattern.test(localContext);
-      if (!actionMatch || (!seedMemory && !seedSession && overlap === 0)) continue;
+      if (!seedMemory && !seedSession && overlap === 0) continue;
       const entry = grouped.get(record.memoryId) ?? {
         record,
         factIndexes: [],
@@ -354,7 +312,7 @@ export class DatabaseEvidenceOperators {
     return ranked.map((entry, index) => ({
       ...this.hit(
         entry.record,
-        `database aggregate facts for ${request.queries.join(" | ")}`,
+        `database numeric facts for ${request.queries.join(" | ")}`,
         "pimem-aggregate-db",
         index + 1,
       ),

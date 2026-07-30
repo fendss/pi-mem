@@ -84,16 +84,19 @@ fts5:
   query -> scope/session/time filters -> SQLite FTS5 -> candidates
 
 pimem-hybrid:
-  query embedding -> scope/session/time filtered vectors
-  -> cosine dense top max(20, 4 * limit)
-  -> identity rank + candidate-local BM25Okapi
-  -> RRF(k=60) -> candidates
+  query embedding -> scope-filtered dense candidates
+  + SQLite FTS5 candidates
+  -> candidate-local BM25Okapi over the union
+  -> RRF(dense, FTS5, BM25, k=60) -> candidates
 ```
 
-Reranking is supported inside `pimem-hybrid`; it is not exposed as another
-Agent tool. The Agent still sees only `search`, `read`, `bash_ro`, and `finish`.
-Search results become candidates, `read` promotes exact raw records to evidence,
-and only read evidence may be cited by `finish`.
+The Agent routes one `search` call with only `operator`, `queries`, and optional
+`limit`. Operators are `hybrid`, `lexical`, `coverage`, `temporal`, `numeric`,
+and `history`. Their SQL, per-query coverage, session aggregation, fact joins,
+and provenance stay inside the harness; no question-keyword routing or
+model-authored SQL is used. The Agent still sees only `search`, `read`,
+`bash_ro`, and `finish`. Search results become candidates, `read` promotes exact
+raw records to evidence, and only read evidence may be cited by `finish`.
 
 ## Commands
 

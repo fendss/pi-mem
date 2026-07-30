@@ -346,6 +346,10 @@ export class MemoryStore {
     return this.evidenceOperators.expand(scopeId, request, context, seedHits);
   }
 
+  searchLexical(scopeId: string, request: SearchRequest): StoreSearchHit[] {
+    return this.search(scopeId, request);
+  }
+
   search(scopeId: string, request: SearchRequest): StoreSearchHit[] {
     const limit = Math.min(Math.max(request.limit ?? 20, 1), 100);
     const fetchLimit =

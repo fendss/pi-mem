@@ -32,13 +32,16 @@ export type SearchOrder =
   | "chronological"
   | "reverse-chronological";
 
-export type EvidenceOperator = "standard" | "timeline" | "aggregate";
+export type SearchOperator =
+  | "hybrid"
+  | "lexical"
+  | "coverage"
+  | "temporal"
+  | "numeric"
+  | "history";
 
 export interface EvidenceOperatorSearchContext {
-  operator: Exclude<EvidenceOperator, "standard">;
-  question: string;
-  questionDate?: string;
-  targetDates: string[];
+  operator: "temporal" | "numeric";
   maxCandidates: number;
 }
 
@@ -67,7 +70,7 @@ export interface EvidenceOperatorRow {
 
 export interface EvidenceOperatorResult {
   version: "pimem-evidence-operators-v1";
-  operator: EvidenceOperator;
+  operator: "temporal" | "numeric";
   rows: EvidenceOperatorRow[];
   coverage: {
     candidateCount: number;

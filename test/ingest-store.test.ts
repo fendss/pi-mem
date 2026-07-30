@@ -197,17 +197,18 @@ describe("deterministic ingest and source store", () => {
         queries: ["market sales"],
         limit: 1,
       });
+      const timelineSeed = store.search("scope-1", {
+        queries: ["kitchen appliance"],
+        limit: 1,
+      });
       const timeline = store.expandEvidenceOperator(
         "scope-1",
         { queries: ["kitchen appliance"], limit: 1 },
         {
-          operator: "timeline",
-          question: "What did I buy 10 days ago?",
-          questionDate: "2024/01/20 (Sat) 12:00",
-          targetDates: ["2024-01-10"],
+          operator: "temporal",
           maxCandidates: 20,
         },
-        seed,
+        timelineSeed,
       );
       expect(timeline.map((hit) => hit.record.memoryId)).toContain(
         "m-100000000000000000000001",
@@ -219,9 +220,7 @@ describe("deterministic ingest and source store", () => {
         "scope-1",
         { queries: ["market sales"], limit: 1 },
         {
-          operator: "aggregate",
-          question: "What was the total from all market sales?",
-          targetDates: [],
+          operator: "numeric",
           maxCandidates: 20,
         },
         seed,

@@ -370,7 +370,7 @@ export function buildTimelineOperatorResult(
   }).map((item) => item.row);
   return {
     version: "pimem-evidence-operators-v1",
-    operator: "timeline",
+    operator: "temporal",
     rows,
     coverage: {
       candidateCount: hits.length,

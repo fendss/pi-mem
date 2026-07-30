@@ -182,7 +182,7 @@ export function buildAggregateOperatorResult(
 
   return {
     version: "pimem-evidence-operators-v1",
-    operator: "aggregate",
+    operator: "numeric",
     rows: rows.slice(0, 40),
     coverage: {
       candidateCount: hits.length,

@@ -5,7 +5,6 @@ import type { StoreSearchHit } from "../src/store.js";
 import {
   createFinishOnlyBeforeToolCall,
   createPiMemTools,
-  inferEvidenceOperator,
   validateFinishToolBatch,
   type MemoryToolStore,
 } from "../src/tools.js";
@@ -48,12 +47,6 @@ function createStore(
 }
 
 describe("PiMem tools", () => {
-  it("does not treat an unanchored previous reference as temporal", () => {
-    expect(inferEvidenceOperator("What was the previous value?")).toBe("standard");
-    expect(inferEvidenceOperator("How many previous items were there?")).toBe("aggregate");
-    expect(inferEvidenceOperator("How many items were there in the previous week?")).toBe("timeline");
-  });
-
   it("collects structured search and read candidates, including expansion", async () => {
     const searched = record("m1", 0);
     const expanded = record("m2", 1);
@@ -104,7 +97,7 @@ describe("PiMem tools", () => {
     expect(ledger.selection?.status).toBe("sufficient");
   });
 
-  it("passes focused time controls and annotates relative time", async () => {
+  it("keeps history routing simple and chronological", async () => {
     const searched = {
       ...record("m-time", 0),
       timestamp: "2024-01-01T00:00:00",
@@ -134,16 +127,16 @@ describe("PiMem tools", () => {
     });
 
     const result = await tools.search.execute("search-time", {
+      operator: "history",
       queries: ["source"],
-      order: "chronological",
-      maxPerSession: 2,
     });
 
     expect(observed).toEqual({
       queries: ["source"],
-      limit: 8,
+      limit: 40,
+      roles: ["user"],
       order: "chronological",
-      maxPerSession: 2,
+      maxPerSession: 4,
     });
     expect(JSON.stringify(result.content)).toContain(
       "2 days before question",
@@ -302,7 +295,7 @@ describe("PiMem tools", () => {
     ]);
   });
 
-  it("automatically applies a temporal operator and prioritizes a resolved date window", async () => {
+  it("uses the Agent-selected temporal operator without question routing", async () => {
     const generic = {
       ...record("m-generic", 0),
       timestamp: "2023-03-10T10:00:00",
@@ -318,14 +311,23 @@ describe("PiMem tools", () => {
     const store: MemoryToolStore = {
       search(_scopeId, request) {
         requests.push(request);
-        const selected = request.after ? target : generic;
         return [{
-          record: selected,
+          record: generic,
           query: request.queries[0] ?? "",
           retriever: "pimem-hybrid",
           rank: 1,
           score: 1,
-          preview: selected.content,
+          preview: generic.content,
+        }];
+      },
+      expandEvidenceOperator(_scopeId, request) {
+        return [{
+          record: target,
+          query: request.queries[0] ?? "",
+          retriever: "pimem-timeline-db",
+          rank: 1,
+          score: 1,
+          preview: target.content,
         }];
       },
       read(_scopeId, memoryIds) {
@@ -342,19 +344,14 @@ describe("PiMem tools", () => {
     });
 
     const result = await tools.search.execute("search-temporal", {
+      operator: "temporal",
       queries: ["kitchen appliance purchase"],
     });
 
-    expect(requests).toHaveLength(2);
-    expect(requests[1]).toMatchObject({
-      after: "2023-03-15T00:00:00",
-      before: "2023-03-15T23:59:59",
-      order: "chronological",
-    });
-    expect(result.details.operator).toBe("timeline");
+    expect(requests).toHaveLength(1);
+    expect(result.details.operator).toBe("temporal");
     expect(result.details.candidates[0]?.memoryId).toBe("m-target");
     expect(JSON.stringify(result.content)).toContain("candidate_refs");
-    expect(JSON.stringify(result.content)).toContain("temporal_plan");
   });
 
   it("keeps opaque memory IDs inside the harness and validates simple refs", async () => {
