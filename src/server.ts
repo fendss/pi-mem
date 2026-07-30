@@ -465,9 +465,9 @@ export class PiMemLeaderboardBackend implements LeaderboardApiBackend {
           modelRuntime: this.modelRuntime,
           scopeId,
           question: retrievalQuestion(request),
-          maxTurns: 64,
-          maxToolCalls: 160,
-          maxProtocolNudges: 4,
+          maxTurns: 1_024,
+          maxToolCalls: 4_096,
+          maxProtocolNudges: 8,
           maxRunMs: attemptRunMs,
         }),
       });
