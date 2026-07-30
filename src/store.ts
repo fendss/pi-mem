@@ -68,8 +68,10 @@ export interface StoreSearchHit {
   retriever:
     | "fts5"
     | "pimem-hybrid"
-    | "pimem-timeline-db"
-    | "pimem-aggregate-db";
+    | "pimem-time-range"
+    | "pimem-session-expand"
+    | "pimem-temporal-facts-db"
+    | "pimem-numeric-facts-db";
   rank: number;
   score: number;
   preview: string;
@@ -346,6 +348,10 @@ export class MemoryStore {
     return this.evidenceOperators.expand(scopeId, request, context, seedHits);
   }
 
+  searchLexical(scopeId: string, request: SearchRequest): StoreSearchHit[] {
+    return this.search(scopeId, request);
+  }
+
   search(scopeId: string, request: SearchRequest): StoreSearchHit[] {
     const limit = Math.min(Math.max(request.limit ?? 20, 1), 100);
     const fetchLimit =
@@ -423,6 +429,52 @@ export class MemoryStore {
       if (!unique.has(hit.record.memoryId)) unique.set(hit.record.memoryId, hit);
     }
     return finalizeSearchHits([...unique.values()], request, limit);
+  }
+
+  scanTimeRange(scopeId: string, request: SearchRequest): StoreSearchHit[] {
+    const limit = Math.min(Math.max(request.limit ?? 20, 1), 100);
+    const fetchLimit = request.maxPerSession === undefined
+      ? limit
+      : Math.min(100, Math.max(limit, limit * 4));
+    const where = ["scope_id = ?"];
+    const params: Array<string | number> = [scopeId];
+    if (request.sessionIds && request.sessionIds.length > 0) {
+      where.push(`session_id IN (${request.sessionIds.map(() => "?").join(", ")})`);
+      params.push(...request.sessionIds);
+    }
+    if (request.roles && request.roles.length > 0) {
+      where.push(`role IN (${request.roles.map(() => "?").join(", ")})`);
+      params.push(...request.roles);
+    }
+    if (request.after) {
+      where.push("timestamp >= ?");
+      params.push(request.after);
+    }
+    if (request.before) {
+      where.push("timestamp <= ?");
+      params.push(request.before);
+    }
+    const direction = request.order === "reverse-chronological" ? "DESC" : "ASC";
+    params.push(fetchLimit);
+    const rows = this.db.prepare(`
+      SELECT memory_id, scope_id, session_id, turn_index, role, content,
+             timestamp, content_hash, metadata_json
+      FROM memories
+      WHERE ${where.join(" AND ")}
+      ORDER BY timestamp IS NULL ASC, timestamp ${direction},
+               session_id ${direction}, turn_index ${direction}
+      LIMIT ?
+    `).all(...params) as unknown as MemoryRow[];
+    const query = request.queries.join(" | ") || "time range scan";
+    const hits = rows.map((row, index) => ({
+      record: rowToRecord(row),
+      query,
+      retriever: "pimem-time-range" as const,
+      rank: index + 1,
+      score: 1 / (61 + index),
+      preview: episodicPreview(row.content),
+    }));
+    return finalizeSearchHits(hits, request, limit);
   }
 
   read(

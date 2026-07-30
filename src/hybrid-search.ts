@@ -54,7 +54,7 @@ function compareFinal(left: RankedHybridHit, right: RankedHybridHit): number {
   return left.record.memoryId.localeCompare(right.record.memoryId);
 }
 
-function candidateText(candidate: StoredEmbeddingRecord): string {
+function candidateText(candidate: Pick<StoredEmbeddingRecord, "record">): string {
   return `${candidate.record.role}: ${candidate.record.content}`;
 }
 
@@ -145,34 +145,67 @@ export class HybridMemoryStore {
               );
         })
         .slice(0, headroom);
+      const {
+        maxPerSession: _ignoredMaxPerSession,
+        order: _ignoredOrder,
+        ...lexicalBase
+      } = request;
+      const lexicalHits = this.rawStore.search(scopeId, {
+        ...lexicalBase,
+        queries: [query],
+        limit: Math.min(100, headroom),
+        order: "relevance",
+      });
       this.denseCandidateCount += denseCandidates.length;
-      this.rerankCandidateCount += denseCandidates.length;
 
+      const union = new Map<string, Pick<StoredEmbeddingRecord, "record">>();
+      for (const { candidate } of denseCandidates) {
+        union.set(candidate.record.memoryId, candidate);
+      }
+      for (const hit of lexicalHits) {
+        if (!union.has(hit.record.memoryId)) {
+          union.set(hit.record.memoryId, { record: hit.record });
+        }
+      }
+      const candidates = [...union.values()];
+      this.rerankCandidateCount += candidates.length;
+      const indexes = new Map(
+        candidates.map((candidate, index) => [candidate.record.memoryId, index]),
+      );
+      const denseRanking = denseCandidates.map(({ candidate }) =>
+        indexes.get(candidate.record.memoryId)!
+      );
+      const lexicalRanking = lexicalHits.map((hit) =>
+        indexes.get(hit.record.memoryId)!
+      );
       const bm25 = bm25Scores(
         query,
-        denseCandidates.map(({ candidate }) => candidateText(candidate)),
+        candidates.map(candidateText),
         PIMEM_HYBRID_BM25_OPTIONS,
       );
-      const denseRanking = denseCandidates.map((_candidate, index) => index);
-      const bm25Ranking = [...denseRanking].sort((left, right) => {
-        const score = bm25[right]! - bm25[left]!;
-        if (score !== 0) return score;
-        return left - right;
-      });
+      const bm25Ranking = candidates
+        .map((_candidate, index) => index)
+        .sort((left, right) => {
+          const score = bm25[right]! - bm25[left]!;
+          return score !== 0 ? score : left - right;
+        });
       const fused = reciprocalRankFusion(
-        [denseRanking, bm25Ranking],
+        [denseRanking, lexicalRanking, bm25Ranking],
         60,
-        denseCandidates.length,
+        candidates.length,
       );
-      const queryHits: RankedHybridHit[] = denseCandidates
-        .map(({ candidate }, index) => ({
+      const denseRanks = new Map(
+        denseRanking.map((candidateIndex, index) => [candidateIndex, index + 1]),
+      );
+      const queryHits: RankedHybridHit[] = candidates
+        .map((candidate, index) => ({
           record: candidate.record,
           query,
           retriever: "pimem-hybrid" as const,
           rank: 0,
           score: fused[index]!,
           preview: episodicPreview(candidate.record.content),
-          denseRank: index + 1,
+          denseRank: denseRanks.get(index) ?? Number.MAX_SAFE_INTEGER,
           queryIndex,
         }))
         .sort(compareFinal)
@@ -204,6 +237,20 @@ export class HybridMemoryStore {
       if (!unique.has(hit.record.memoryId)) unique.set(hit.record.memoryId, hit);
     }
     return finalizeSearchHits([...unique.values()], request, limit);
+  }
+
+  searchLexical(
+    scopeId: string,
+    request: SearchRequest,
+  ): StoreSearchHit[] {
+    return this.rawStore.searchLexical(scopeId, request);
+  }
+
+  scanTimeRange(
+    scopeId: string,
+    request: SearchRequest,
+  ): StoreSearchHit[] {
+    return this.rawStore.scanTimeRange(scopeId, request);
   }
 
   expandEvidenceOperator(

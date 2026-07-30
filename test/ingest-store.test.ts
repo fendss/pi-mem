@@ -150,7 +150,7 @@ describe("deterministic ingest and source store", () => {
     }
   });
 
-  it("expands timeline and aggregate evidence from versioned database facts", async () => {
+  it("expands temporal and numeric evidence from versioned database facts", async () => {
     const { store } = await temporaryStore();
     const input: MemorySessionInput[] = [
       {
@@ -201,10 +201,10 @@ describe("deterministic ingest and source store", () => {
         "scope-1",
         { queries: ["kitchen appliance"], limit: 1 },
         {
-          operator: "timeline",
-          question: "What did I buy 10 days ago?",
-          questionDate: "2024/01/20 (Sat) 12:00",
-          targetDates: ["2024-01-10"],
+          operator: "temporal_facts",
+          dates: ["2024-01-10"],
+          units: [],
+          valueKinds: [],
           maxCandidates: 20,
         },
         seed,
@@ -212,16 +212,17 @@ describe("deterministic ingest and source store", () => {
       expect(timeline.map((hit) => hit.record.memoryId)).toContain(
         "m-100000000000000000000001",
       );
-      expect(timeline[0]?.retriever).toBe("pimem-timeline-db");
+      expect(timeline[0]?.retriever).toBe("pimem-temporal-facts-db");
       expect(timeline[0]?.record.memoryId).toBe("m-100000000000000000000001");
 
       const aggregate = store.expandEvidenceOperator(
         "scope-1",
         { queries: ["market sales"], limit: 1 },
         {
-          operator: "aggregate",
-          question: "What was the total from all market sales?",
-          targetDates: [],
+          operator: "numeric_facts",
+          dates: [],
+          units: ["USD"],
+          valueKinds: ["increment"],
           maxCandidates: 20,
         },
         seed,
@@ -232,10 +233,12 @@ describe("deterministic ingest and source store", () => {
           "m-100000000000000000000003",
         ]),
       );
-      expect(aggregate.map((hit) => hit.record.memoryId)).not.toContain(
+      // Low-level numeric_facts does not infer a hidden sales action from the
+      // question. It exposes every matching USD increment for Agent review.
+      expect(aggregate.map((hit) => hit.record.memoryId)).toContain(
         "m-100000000000000000000004",
       );
-      expect(aggregate.every((hit) => hit.retriever === "pimem-aggregate-db"))
+      expect(aggregate.every((hit) => hit.retriever === "pimem-numeric-facts-db"))
         .toBe(true);
 
       const firstStatus = store.ensureEvidenceFactIndex("scope-1");

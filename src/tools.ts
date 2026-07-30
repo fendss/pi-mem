@@ -12,29 +12,40 @@ import type { ReadOnlyBash } from "./bash-ro.js";
 import { MemoryLedger } from "./ledger.js";
 import type { MemoryStore, StoreSearchHit } from "./store.js";
 import { temporalAnnotation } from "./temporal.js";
-import {
-  buildTimelineOperatorResult,
-  resolveTemporalQuestion,
-  temporalAuxiliaryRequest,
-} from "./timeline-operator.js";
+import { buildTemporalFactsOperatorResult } from "./timeline-operator.js";
 import type {
-  EvidenceOperator,
   EvidenceOperatorResult,
   EvidenceOperatorSearchContext,
+  NumericDistinctBy,
+  NumericReduceOperation,
+  NumericValueKind,
   MemoryCandidate,
   MemoryRecord,
   PiMemSelection,
+  SearchOperator,
   SearchOrder,
   SearchRequest,
 } from "./types.js";
 
 export const SearchParameters = Type.Object({
-  queries: Type.Array(Type.String({ minLength: 1 }), {
+  operator: Type.Optional(Type.Union([
+    Type.Literal("relevance"),
+    Type.Literal("lexical"),
+    Type.Literal("time_range"),
+    Type.Literal("temporal_facts"),
+    Type.Literal("numeric_facts"),
+    Type.Literal("session_expand"),
+    Type.Literal("session_coverage"),
+  ], {
+    description:
+      "Agent-selected retrieval operator. Defaults to relevance; the harness never infers an operator from question keywords.",
+  })),
+  queries: Type.Optional(Type.Array(Type.String({ minLength: 1 }), {
     minItems: 1,
     maxItems: 8,
     description:
-      "One or more focused query variants. Compose and sequence queries adaptively based on the evidence needed and the results already observed.",
-  }),
+      "One or more focused query variants. Required by relevance, lexical, and session_coverage.",
+  })),
   limit: Type.Optional(Type.Integer({ minimum: 1, maximum: 100 })),
   withinCandidateRefs: Type.Optional(
     Type.Array(Type.Integer({ minimum: 1 }), {
@@ -52,14 +63,43 @@ export const SearchParameters = Type.Object({
     Type.Literal("reverse-chronological"),
   ])),
   maxPerSession: Type.Optional(Type.Integer({ minimum: 1, maximum: 10 })),
-  operator: Type.Optional(Type.Union([
-    Type.Literal("standard"),
-    Type.Literal("timeline"),
-    Type.Literal("aggregate"),
-  ], {
-    description:
-      "Optional evidence operator. Timeline resolves and organizes time evidence; aggregate extracts, classifies, and deduplicates numeric evidence. When omitted, the tool infers the operator from the question.",
+  roles: Type.Optional(Type.Array(Type.Union([
+    Type.Literal("user"),
+    Type.Literal("assistant"),
+    Type.Literal("system"),
+    Type.Literal("other"),
+  ]), { minItems: 1, maxItems: 4 })),
+  dates: Type.Optional(Type.Array(Type.String({ pattern: "^\\d{4}-\\d{2}-\\d{2}$" }), {
+    minItems: 1,
+    maxItems: 31,
+    description: "Explicit ISO dates for temporal_facts. The Agent derives these; the harness does not parse the question.",
   })),
+  units: Type.Optional(Type.Array(Type.String({ minLength: 1 }), {
+    minItems: 1,
+    maxItems: 16,
+  })),
+  valueKinds: Type.Optional(Type.Array(Type.Union([
+    Type.Literal("increment"),
+    Type.Literal("cumulative"),
+    Type.Literal("snapshot"),
+    Type.Literal("target"),
+    Type.Literal("unknown"),
+  ]), { minItems: 1, maxItems: 5 })),
+  reduce: Type.Optional(Type.Object({
+    operation: Type.Union([
+      Type.Literal("none"),
+      Type.Literal("count_distinct"),
+      Type.Literal("sum"),
+      Type.Literal("latest"),
+    ]),
+    distinctBy: Type.Optional(Type.Union([
+      Type.Literal("memory"),
+      Type.Literal("session"),
+      Type.Literal("session_unit_value"),
+    ])),
+  })),
+  contextBefore: Type.Optional(Type.Integer({ minimum: 0, maximum: 10 })),
+  contextAfter: Type.Optional(Type.Integer({ minimum: 0, maximum: 10 })),
 });
 
 export const ReadParameters = Type.Object({
@@ -113,12 +153,11 @@ export const BashRoParameters = Type.Object({
 export interface SearchToolDetails {
   kind: "search";
   request: SearchRequest;
-  auxiliaryRequest?: SearchRequest;
-  operator: EvidenceOperator;
+  operator: SearchOperator;
   operatorResult?: EvidenceOperatorResult;
   candidateReferences: Array<{ candidateRef: number; memoryId: string }>;
   candidates: MemoryCandidate[];
-  databaseOperatorApplied: boolean;
+  operatorApplied: boolean;
   repeatedQueries?: string[];
 }
 
@@ -169,6 +208,15 @@ export interface MemoryToolStore {
     contextBefore?: number,
     contextAfter?: number,
   ): MemoryRecord[];
+  searchLexical?(
+    scopeId: string,
+    request: SearchRequest,
+    signal?: AbortSignal,
+  ): StoreSearchHit[] | Promise<StoreSearchHit[]>;
+  scanTimeRange?(
+    scopeId: string,
+    request: SearchRequest,
+  ): StoreSearchHit[] | Promise<StoreSearchHit[]>;
   expandEvidenceOperator?(
     scopeId: string,
     request: SearchRequest,
@@ -294,9 +342,10 @@ function normalizeStrings(values: readonly string[], label: string): string[] {
 
 function makeSearchRequest(
   params: {
-    queries: string[];
+    queries?: string[];
     limit?: number;
     sessionIds?: string[];
+    roles?: MemoryRecord["role"][];
     after?: string;
     before?: string;
     order?: SearchOrder;
@@ -305,13 +354,16 @@ function makeSearchRequest(
   defaults: Pick<SearchRequest, "limit" | "order" | "maxPerSession"> = {},
 ): SearchRequest {
   const request: SearchRequest = {
-    queries: normalizeStrings(params.queries, "queries"),
+    queries: params.queries === undefined
+      ? []
+      : normalizeStrings(params.queries, "queries"),
     limit: params.limit ?? defaults.limit ?? 8,
     order: params.order ?? defaults.order ?? "relevance",
   };
   if (params.sessionIds !== undefined) {
     request.sessionIds = normalizeStrings(params.sessionIds, "sessionIds");
   }
+  if (params.roles !== undefined) request.roles = [...new Set(params.roles)];
   if (params.after !== undefined) request.after = params.after.trim();
   if (params.before !== undefined) request.before = params.before.trim();
   const maxPerSession = params.maxPerSession ?? defaults.maxPerSession;
@@ -326,23 +378,6 @@ function searchQueryFingerprint(query: string): string {
     .replace(/[\p{P}\p{S}]+/gu, " ")
     .replace(/\s+/gu, " ")
     .trim();
-}
-
-export function inferEvidenceOperator(question: string | undefined): EvidenceOperator {
-  if (!question) return "standard";
-  const normalized = question.normalize("NFKC").toLowerCase();
-  if (
-    /\b(?:how many|number of|total|sum|all|list|times did)\b/u.test(normalized) &&
-    !/\b(?:days?|weeks?|months?|years?|ago|before|after|between|order|first|latest|current|initial)\b/u.test(normalized)
-  ) {
-    return "aggregate";
-  }
-  if (
-    /\b(?:days?|weeks?|months?|years?|ago|yesterday|last (?:monday|tuesday|wednesday|thursday|friday|saturday|sunday)|before|after|between|order|happened first|earliest|latest|most recent|current|currently|initial|when|date)\b/u.test(normalized)
-  ) {
-    return "timeline";
-  }
-  return "standard";
 }
 
 function mergeOperatorHits(
@@ -371,19 +406,20 @@ function renderEvidenceOperator(
   ledger: MemoryLedger,
 ): string {
   if (!result) return "";
-  const heading = result.operator === "timeline"
-    ? "Timeline evidence table:"
-    : "Aggregate evidence table:";
+  const heading = `${result.operator} result:`;
   const rows = result.rows.slice(0, 16).map((row) => {
     const temporal = row.eventTime === undefined ? "" : ` | event_time=${row.eventTime}`;
     const mentions = row.mentionedDates === undefined
       ? ""
       : ` | mentioned_dates=${row.mentionedDates.join(",")}`;
+    const temporalFact = row.temporalExpression === undefined
+      ? ""
+      : ` | temporal_expression=${JSON.stringify(row.temporalExpression)} | temporal_basis=${row.temporalBasis ?? "unknown"}`;
     const numeric = row.value === undefined
       ? ""
       : ` | value=${String(row.value)} ${row.unit ?? ""} | value_kind=${row.valueKind ?? "unknown"} | occurrence_ref=candidate:${String(ledger.candidateRef(row.memoryId))}`;
     const candidateRef = ledger.candidateRef(row.memoryId);
-    return `- [candidate:${String(candidateRef ?? "unavailable")}] | slot=${JSON.stringify(row.slot)}${temporal}${mentions}${numeric} | ${row.quote}`;
+    return `- [candidate:${String(candidateRef ?? "unavailable")}] | slot=${JSON.stringify(row.slot)}${temporal}${mentions}${temporalFact}${numeric} | ${row.quote}`;
   });
   const plan = result.temporalPlan === undefined
     ? []
@@ -451,6 +487,40 @@ function renderMemories(
     .join("\n\n");
 }
 
+function sourceOperatorResult(
+  operator: SearchOperator,
+  hits: readonly StoreSearchHit[],
+  derived?: Record<string, unknown>,
+): EvidenceOperatorResult {
+  return {
+    version: "pimem-search-operators-v2",
+    operator,
+    rows: hits.map((hit) => ({
+      slot: hit.query,
+      quote: hit.preview,
+      memoryId: hit.record.memoryId,
+      sessionId: hit.record.sessionId,
+      turnIndex: hit.record.turnIndex,
+      role: hit.record.role,
+      ...(hit.record.timestamp === undefined
+        ? {}
+        : { eventTime: hit.record.timestamp.slice(0, 10) }),
+    })),
+    coverage: {
+      candidateCount: hits.length,
+      distinctSessions: new Set(hits.map((hit) => hit.record.sessionId)).size,
+      truncated: false,
+    },
+    ...(derived === undefined ? {} : { derived }),
+  };
+}
+
+function requireQueries(operator: SearchOperator, request: SearchRequest): void {
+  if (request.queries.length === 0) {
+    throw new Error(`${operator} requires at least one query`);
+  }
+}
+
 export function createSearchTool(
   options: CreatePiMemToolsOptions,
 ): PiMemTools["search"] {
@@ -459,20 +529,26 @@ export function createSearchTool(
     name: "search",
     label: "Search memory",
     description:
-      "Locate candidate memories with focused query variants. The harness automatically applies database-backed timeline or aggregate expansion when appropriate. Results use stable candidate numbers; pass those numbers to read and never construct internal memory IDs. Timeline resolves dates and orders source facts. Aggregate retrieves indexed numeric facts, classifies values, deduplicates occurrences, and reports a traceable derived value when unambiguous. Every discovered source remains in the internal provenance ledger; previews remain ephemeral.",
+      "Run one Agent-selected, parameterized retrieval operator through a unified interface. Use relevance for broad semantic and lexical recall; lexical for exact text; time_range for known source-time bounds; temporal_facts for resolved dates mentioned inside memories; numeric_facts for explicit numeric occurrences and optional typed reduction; session_expand for neighboring turns; and session_coverage for cross-session coverage. The harness never infers an operator from question keywords and never executes model-authored SQL. Results use stable candidate numbers; pass them to read and never construct internal memory IDs.",
     parameters: SearchParameters,
     async execute(_toolCallId, params, signal) {
-      const operator = params.operator ?? inferEvidenceOperator(options.question);
-      const sessionIds = params.withinCandidateRefs === undefined
+      const operator: SearchOperator = params.operator ?? "relevance";
+      const withinCandidateRefs = params.withinCandidateRefs === undefined
+        ? []
+        : normalizeHarnessRefs(params.withinCandidateRefs);
+      const withinMemoryIds = withinCandidateRefs.length === 0
+        ? []
+        : options.ledger.resolveCandidateRefs(withinCandidateRefs);
+      const withinCandidates = options.ledger.selectCandidates(withinMemoryIds);
+      const sessionIds = withinCandidates.length === 0
         ? undefined
-        : [...new Set(options.ledger.selectCandidates(
-            options.ledger.resolveCandidateRefs(params.withinCandidateRefs),
-          ).map((candidate) => candidate.sessionId))];
+        : [...new Set(withinCandidates.map((candidate) => candidate.sessionId))];
       const request = makeSearchRequest(
         {
-          queries: params.queries,
+          ...(params.queries === undefined ? {} : { queries: params.queries }),
           ...(params.limit === undefined ? {} : { limit: params.limit }),
           ...(sessionIds === undefined ? {} : { sessionIds }),
+          ...(params.roles === undefined ? {} : { roles: params.roles }),
           ...(params.after === undefined ? {} : { after: params.after }),
           ...(params.before === undefined ? {} : { before: params.before }),
           ...(params.order === undefined ? {} : { order: params.order }),
@@ -480,68 +556,139 @@ export function createSearchTool(
         },
         options.searchDefaults,
       );
+      if (operator === "time_range" && params.order === undefined) {
+        request.order = "chronological";
+      }
+      if (operator === "relevance" || operator === "lexical" || operator === "session_coverage") {
+        requireQueries(operator, request);
+      }
+      if (
+        operator === "time_range" &&
+        request.after === undefined &&
+        request.before === undefined &&
+        request.sessionIds === undefined
+      ) {
+        throw new Error("time_range requires after, before, or withinCandidateRefs");
+      }
+      if (operator === "session_expand" && withinMemoryIds.length === 0) {
+        throw new Error("session_expand requires withinCandidateRefs");
+      }
+      const dates = params.dates ?? [];
+      const units = params.units ?? [];
+      const valueKinds = (params.valueKinds ?? []) as NumericValueKind[];
+      if (operator === "temporal_facts" && dates.length === 0 && request.queries.length === 0) {
+        throw new Error("temporal_facts requires dates or queries");
+      }
+      if (operator === "numeric_facts" && units.length === 0 && request.queries.length === 0) {
+        throw new Error("numeric_facts requires units or queries");
+      }
       const repeatedQueries = request.queries.filter((query) =>
         seenQueryFingerprints.has(searchQueryFingerprint(query))
       );
       for (const query of request.queries) {
         seenQueryFingerprints.add(searchQueryFingerprint(query));
       }
-      const primaryHits = await options.store.search(options.scopeId, request, signal);
-      const question = options.question ?? request.queries.join(" ");
-      const temporalPlan = operator === "timeline"
-        ? resolveTemporalQuestion(question, options.questionDate)
-        : undefined;
-      const limit = request.limit ?? options.searchDefaults?.limit ?? 8;
-      const databaseContext: EvidenceOperatorSearchContext | undefined = operator === "standard"
-        ? undefined
-        : {
-            operator,
-            question,
-            ...(options.questionDate === undefined ? {} : { questionDate: options.questionDate }),
-            targetDates: temporalPlan?.targets.map((target) => target.date) ?? [],
-            maxCandidates: Math.min(100, Math.max(limit, operator === "aggregate" ? 80 : 60)),
-          };
-      const auxiliaryRequest = temporalPlan === undefined
-        ? undefined
-        : temporalAuxiliaryRequest(request, temporalPlan);
-      const auxiliaryHits = auxiliaryRequest === undefined
+      const referenceRecords = withinMemoryIds.length === 0
         ? []
-        : await options.store.search(options.scopeId, auxiliaryRequest, signal);
-      const operatorSeeds = auxiliaryHits.length === 0
-        ? primaryHits
-        : mergeOperatorHits(
-            auxiliaryHits,
-            primaryHits,
-            Math.min(100, auxiliaryHits.length + primaryHits.length),
-          );
-      const databaseHits = databaseContext === undefined || options.store.expandEvidenceOperator === undefined
-        ? []
-        : await options.store.expandEvidenceOperator(
-            options.scopeId,
-            request,
-            databaseContext,
-            operatorSeeds,
-          );
-      const databaseOperatorApplied = databaseContext !== undefined &&
-        options.store.expandEvidenceOperator !== undefined;
-      const preferredHits = databaseOperatorApplied ? databaseHits : auxiliaryHits;
-      const hitLimit = operator === "standard"
-        ? limit
-        : Math.min(100, Math.max(limit, preferredHits.length));
-      const hits = preferredHits.length === 0
-        ? primaryHits
-        : mergeOperatorHits(preferredHits, primaryHits, hitLimit);
+        : options.store.read(options.scopeId, withinMemoryIds, 0, 0);
+      const referenceHits: StoreSearchHit[] = referenceRecords.map((record, index) => ({
+        record,
+        query: "within candidate refs",
+        retriever: "pimem-session-expand",
+        rank: index + 1,
+        score: 1 / (61 + index),
+        preview: record.content,
+      }));
+      let hits: StoreSearchHit[] = [];
+      let operatorResult: EvidenceOperatorResult | undefined;
+      if (operator === "relevance") {
+        hits = await options.store.search(options.scopeId, request, signal);
+      } else if (operator === "lexical") {
+        hits = options.store.searchLexical === undefined
+          ? await options.store.search(options.scopeId, request, signal)
+          : await options.store.searchLexical(options.scopeId, request, signal);
+      } else if (operator === "time_range") {
+        hits = request.queries.length > 0
+          ? await options.store.search(options.scopeId, request, signal)
+          : options.store.scanTimeRange === undefined
+            ? []
+            : await options.store.scanTimeRange(options.scopeId, request);
+        operatorResult = sourceOperatorResult(operator, hits, {
+          after: request.after ?? null,
+          before: request.before ?? null,
+          order: request.order,
+        });
+      } else if (operator === "session_expand") {
+        const records = options.store.read(
+          options.scopeId,
+          withinMemoryIds,
+          params.contextBefore ?? 2,
+          params.contextAfter ?? 2,
+        );
+        hits = records.map((record, index) => ({
+          record,
+          query: "session expansion",
+          retriever: "pimem-session-expand" as const,
+          rank: index + 1,
+          score: 1 / (61 + index),
+          preview: record.content,
+        }));
+        operatorResult = sourceOperatorResult(operator, hits);
+      } else if (operator === "session_coverage") {
+        const coverageRequest: SearchRequest = {
+          ...request,
+          limit: Math.min(100, Math.max(request.limit ?? 20, 40)),
+          maxPerSession: 1,
+        };
+        hits = await options.store.search(options.scopeId, coverageRequest, signal);
+        operatorResult = sourceOperatorResult(operator, hits, {
+          distinctSessions: new Set(hits.map((hit) => hit.record.sessionId)).size,
+          complete: hits.length < (coverageRequest.limit ?? 40),
+        });
+      } else {
+        const primaryHits = request.queries.length === 0
+          ? []
+          : await options.store.search(options.scopeId, request, signal);
+        const seeds = mergeOperatorHits(
+          referenceHits,
+          primaryHits,
+          Math.min(100, referenceHits.length + primaryHits.length),
+        );
+        if (options.store.expandEvidenceOperator === undefined) {
+          throw new Error(`${operator} is unavailable for this memory store`);
+        }
+        const reduction = params.reduce === undefined
+          ? undefined
+          : {
+              operation: params.reduce.operation as NumericReduceOperation,
+              ...(params.reduce.distinctBy === undefined
+                ? {}
+                : { distinctBy: params.reduce.distinctBy as NumericDistinctBy }),
+            };
+        const databaseContext: EvidenceOperatorSearchContext = {
+          operator,
+          dates,
+          units,
+          valueKinds,
+          maxCandidates: Math.min(100, request.limit ?? 20),
+          ...(reduction === undefined ? {} : { reduction }),
+        };
+        const databaseHits = await options.store.expandEvidenceOperator(
+          options.scopeId,
+          request,
+          databaseContext,
+          seeds,
+        );
+        hits = mergeOperatorHits(
+          databaseHits,
+          seeds,
+          Math.min(100, databaseHits.length + seeds.length),
+        );
+        operatorResult = operator === "temporal_facts"
+          ? buildTemporalFactsOperatorResult(databaseHits, dates)
+          : buildAggregateOperatorResult(databaseHits, reduction);
+      }
       const candidates = options.ledger.recordSearchHits(hits);
-      const operatorResult = operator === "timeline"
-        ? buildTimelineOperatorResult(
-            hits,
-            question,
-            options.questionDate,
-            auxiliaryRequest,
-          )
-        : operator === "aggregate"
-          ? buildAggregateOperatorResult(hits)
-          : undefined;
       const candidateReferences = candidates.map((candidate) => ({
         candidateRef: options.ledger.candidateRef(candidate.memoryId)!,
         memoryId: candidate.memoryId,
@@ -549,12 +696,11 @@ export function createSearchTool(
       const details: SearchToolDetails = {
         kind: "search",
         request,
-        ...(auxiliaryRequest === undefined ? {} : { auxiliaryRequest }),
         operator,
         ...(operatorResult === undefined ? {} : { operatorResult }),
         candidateReferences,
         candidates,
-        databaseOperatorApplied,
+        operatorApplied: operator !== "relevance",
         ...(repeatedQueries.length === 0 ? {} : { repeatedQueries }),
       };
       const rendered = [

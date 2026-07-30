@@ -1,57 +1,63 @@
 ---
 name: pimem-retrieval
-description: Retrieve and organize episodic conversation evidence with focused search, temporal timelines, update-state resolution, count/list ledgers, preference constraints, and hard-negative entity checks. Use for personal-memory questions or benchmark adapters that need a compact cited evidence package.
+description: Retrieve and organize immutable episodic memory evidence by choosing safe relevance, lexical, time, temporal-fact, numeric-fact, session-expansion, and coverage operators through one search interface.
 allowed-tools: search read bash_ro finish
 ---
 
 # PiMem Retrieval
 
-## Parse The Evidence Contract
+Use the unified `search` tool as an operator manual. You choose every operator from the evidence need; the harness never infers one from question keywords and never accepts SQL text.
 
-Identify the target entities, requested attribute, question date, evidence slots, and operators such as `current`, `initial`, `previous`, `before`, `after`, `total`, `all`, or `how long`. Split count, list, comparison, and total questions into required subclaims before searching.
+## Evidence Contract
 
-## Search Flexibly By Observing Before Expanding
+Identify the exact entities, requested attributes, question date, and every evidence slot before searching. Preserve source roles, timestamps, exact names, values, and relations. Similar entities are hard negatives. Search previews and structured rows are navigation only; `read` every cited source memory.
 
-A strong starting point is one direct query based on the cleaned question, with `limit: 20`, `maxPerSession: 4`, and both user and assistant turns. Inspect what that result covers before deciding how to continue. The harness may highlight question-shaped evidence concerns such as temporal, update, aggregate, comparison, or preference coverage; these direct attention rather than impose a fixed procedure. Use multiple queries together, different limits, filters, ordering, or any number of additional searches whenever the evidence shape makes them useful.
+## Search Operators
 
-Keep additional searches semantically focused. Expand around a meaningful uncovered entity, attribute, event, date, state, occurrence, relation, or personal anchor instead of accumulating generic synonym variants. For multi-entity questions, separate queries can help cover each side without diluting the relation.
+### `relevance`
 
-Inspect source roles and prefer direct personal statements. Use chronological output for temporal event sequences and state updates, and reverse chronology when latest or current state is the focus. If a relevant preview may omit an adjacent value, date, question, reply, or relation, read enough neighboring turns to recover it.
+Use first for broad semantic and lexical recall. It fuses dense retrieval, full-text retrieval, and candidate-local BM25. Start with one or more focused query variants, `limit: 20`, and `maxPerSession: 4`. Use separate queries for separate entities or relations. Inspect the first result before expanding.
 
-Pay attention to the evidence type: recover every event and date needed for temporal reasoning; reconstruct the same entity and attribute across updates; distinguish aggregate totals from distinct occurrences; retrieve direct personal constraints for preference questions; and treat similar entities as hard negatives.
+### `lexical`
 
-Search previews are ephemeral navigation, not evidence. Read the exact memories needed to support the evidence package. The caller will preserve every candidate while presenting cited memories first, then other read evidence, then unread candidates; careful evidence selection therefore supplies an attention signal without changing provenance. Old search and `bash_ro` outputs expire from active context, while the full audit trace remains preserved.
+Use for exact names, titles, labels, numbers, or phrases, especially when relevance returns semantically similar but wrong entities. The harness constructs safe FTS5 queries; provide ordinary text, not query syntax.
 
-## Build Typed Evidence
+### `time_range`
 
-For each selected fact, track claim, exact entity, value, session timestamp, and memory ID. Never transfer a value between similar entities. Camera does not support film; iPhone does not support iPad; one doctor or location does not support another.
+Use when source-time bounds are known or can be derived confidently from the question date. Provide `after`/`before` and choose chronological order for event chains or reverse-chronological order for latest state. Source timestamp is metadata; it may differ from a date mentioned inside the memory.
 
-### Count And List
+### `temporal_facts`
 
-Inspect every candidate that may describe a distinct requested item or action, then create one evidence-ledger row per required item or occurrence, bind each row to source memory, and deduplicate. If the question joins actions with `or`, count distinct action-item obligations; a return and a pickup remain separate obligations even when they involve exchanged versions of one product. Do not confuse a nearby number such as team size with the requested item count. A cumulative scalar count such as `tried four restaurants so far` may be recorded as count evidence without fabricating four unnamed inventory rows. Never sum successive cumulative totals for the same metric; a later `so far` total supersedes an earlier total. If no source gives an explicit total and search coverage remains open, a focused `bash_ro` keyword scan can help discover omitted evidence before finishing. If any required component is unsupported, do not treat it as zero.
+Use when a memory may express an event date such as an explicit date, `yesterday`, a prior weekday, or N units ago. Provide ISO dates only when derivable with confidence. This operator searches the deterministic temporal sidecar and returns resolved dates with source candidates. Do not use it as a substitute for reading the source.
 
-### Temporal
+### `numeric_facts`
 
-Organize a timeline in the evidence summary:
+Use to enumerate explicit numeric occurrences. Filter by unit or value kind when useful. Value kinds are `increment`, `cumulative`, `snapshot`, `target`, and `unknown`. Do not sum targets or successive cumulative snapshots. Optional reducers are explicit and deterministic:
 
-```text
-event -> source timestamp -> normalized relative date -> requested operation
-```
+- `count_distinct` counts non-target rows using the requested distinct key;
+- `sum` adds increment rows only and refuses incompatible units;
+- `latest` selects the latest cumulative or snapshot row.
 
-Sort explicitly and preserve the source facts needed by the benchmark answerer.
+Always inspect and read the included candidate sources before trusting a reduction.
 
-### Knowledge Update
+### `session_expand`
 
-Reconstruct the ordered state chain for the same entity and attribute. Apply `current`, `initial`, `previous`, `before`, and `after` literally. A later explicit state supersedes an earlier one only for current-state questions. A later phrase such as `my personal best is X` states the active record even when it appears inside a future goal to beat X; label that supersession explicitly in the evidence summary.
+Use after finding a promising candidate when neighboring turns may contain the missing value, reply, date, or relation. Pass `withinCandidateRefs` and bounded `contextBefore`/`contextAfter`. It discovers candidates; `read` remains the evidence operation.
 
-### Preference
+### `session_coverage`
 
-Extract liked and disliked constraints as evidence. Cite direct preference statements only; generic recommendation lists are distractors unless the question specifically asks what was previously recommended.
+Use for multi-session lists, repeated occurrences, and bounded coverage checks. It returns at most one representative hit per session and reports whether the result was truncated. Coverage cannot prove absence when truncated or when the queries do not cover the requested concept.
 
-## Verify Sufficiency And Distractors
+## Evidence Playbooks
 
-Before finishing, check that every target entity and required evidence slot is supported. Treat near-entity memories as hard negatives, not evidence. Mark the package insufficient only after focused searches for the exact entity and attribute. Do not guess or synthesize the benchmark answer.
+For temporal questions, search the event semantically, then use `time_range` or `temporal_facts` only if their metadata operation is warranted. Read the required events and explicitly order them.
 
-## Finish With Evidence
+For counts and lists, search each requested action or item, use `session_coverage` to inspect cross-session breadth, use `numeric_facts` only for explicit numbers, then build one source-grounded inventory row per distinct occurrence. A cumulative scalar may support `count` without fabricated inventory rows.
 
-Read every cited memory. Call `finish` alone with `status`, a compact evidence summary, and evidence-grounded citations. Use `count` only for a source-grounded aggregate and `inventory` only for an explicitly enumerated supported list. The memory agent stops at this evidence package; benchmark-specific answer formatting belongs to the caller.
+For current or updated state, keep entity and attribute fixed, search chronological history, and distinguish initial, previous, and current literally. A later state supersedes an earlier one only when the question asks for current state.
+
+For preferences, retrieve direct personal statements and constraints. Distinguish liking or avoiding something from merely mentioning, buying, or receiving a recommendation. Check later statements before claiming a current preference.
+
+## Sufficiency And Finish
+
+Use additional focused searches only for uncovered evidence slots. Mark insufficient only after reasonable exact, temporal, numeric, session, or lexical checks; bounded retrieval alone does not prove absence. Call `finish` alone with concise `evidenceSummary` and source-grounded citations. Use `count` only for a supported scalar and `inventory` only for explicitly supported items. Do not answer the caller's question yourself.

@@ -18,12 +18,12 @@ caller-owned benchmark answer adapter
 
 PiMem stops at the cited evidence package. It does not own answer formatting or a universal answer prompt. Each benchmark adapter supplies its own answer protocol after retrieval. Ingest never invokes a generative model.
 
-## Version 0.1
+## Agent-directed search operators
 
 - deterministic TypeScript ingest;
 - immutable SQLite source store;
 - SQLite FTS5 lexical search as the default profile;
-- optional `text-embedding-v4` dense retrieval with candidate-local BM25 and RRF;
+- optional `text-embedding-v4` retrieval fused with FTS5 and candidate-local BM25 through RRF;
 - resumable Float32 derived embeddings that never modify raw memory;
 - exact `read` with neighboring source turns;
 - networkless, read-only Docker shell over one sanitized scope;
@@ -86,12 +86,23 @@ fts5:
 pimem-hybrid:
   query embedding -> scope/session/time filtered vectors
   -> cosine dense top max(20, 4 * limit)
-  -> identity rank + candidate-local BM25Okapi
-  -> RRF(k=60) -> candidates
+  + SQLite FTS5 top max(20, 4 * limit)
+  -> candidate-local BM25Okapi over the union
+  -> RRF(dense, FTS5, BM25, k=60) -> candidates
 ```
 
-Reranking is supported inside `pimem-hybrid`; it is not exposed as another
-Agent tool. The Agent still sees only `search`, `read`, `bash_ro`, and `finish`.
+The Agent chooses one safe operator through the same `search` tool:
+
+```text
+relevance | lexical | time_range | temporal_facts | numeric_facts |
+session_expand | session_coverage
+```
+
+The harness never infers an operator from question keywords and never executes
+model-authored SQL. SQL-backed operators use fixed prepared statements,
+mandatory scope filters, bounded outputs, and source-grounded candidate refs.
+The retrieval skill documents when each operator is useful. The Agent still
+sees only `search`, `read`, `bash_ro`, and `finish`.
 Search results become candidates, `read` promotes exact raw records to evidence,
 and only read evidence may be cited by `finish`.
 
@@ -179,11 +190,12 @@ then 30 seconds. Every retry re-enters the global request gate; only explicit
 abort or invalid startup configuration terminates the loop.
 
 The hybrid profile embeds `{role}: {exact original content}`, retrieves dense
-`top max(20, 4 * limit)` after applying scope/session/time filters, and reranks
-only those candidates with identity order plus BM25Okapi through `RRF(k=60)`.
-The endpoint, key, Authorization header, vectors, and full API response are not
-written to runner output. A missing key, failed query embedding, or incomplete
-scope index is an error; hybrid never silently falls back to FTS5.
+and FTS5 candidates after applying scope/session/time filters, computes BM25 on
+the candidate union, and fuses all three rankings through `RRF(k=60)`. FTS5 is
+an explicit component of the profile, not a silent fallback. The endpoint, key,
+Authorization header, vectors, and full API response are not written to runner
+output. A missing key, failed query embedding, or incomplete scope index is an
+error.
 
 `longmemeval-suite` loads only mode-`0600`, runner-owned protected environment files. It passes API keys by environment-variable name and overrides the configured provider base URL from `OPENAI_API_BASE`, so rotating `answer.env` does not require rewriting `models.json`. It fails fast on `401`, `403`, or invalid-token errors, while `429`, timeout, transport, and transient upstream failures remain durably resumable. The command owns progress, retry waves, completeness/provenance audit, benchmark packaging, evaluator preparation, Judger v5, a gold-isolated frozen re-answer over the current run's exact `searchedMemories`, paired comparison, and evaluation packaging.
 

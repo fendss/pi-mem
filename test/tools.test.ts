@@ -5,7 +5,6 @@ import type { StoreSearchHit } from "../src/store.js";
 import {
   createFinishOnlyBeforeToolCall,
   createPiMemTools,
-  inferEvidenceOperator,
   validateFinishToolBatch,
   type MemoryToolStore,
 } from "../src/tools.js";
@@ -48,12 +47,6 @@ function createStore(
 }
 
 describe("PiMem tools", () => {
-  it("does not treat an unanchored previous reference as temporal", () => {
-    expect(inferEvidenceOperator("What was the previous value?")).toBe("standard");
-    expect(inferEvidenceOperator("How many previous items were there?")).toBe("aggregate");
-    expect(inferEvidenceOperator("How many items were there in the previous week?")).toBe("timeline");
-  });
-
   it("collects structured search and read candidates, including expansion", async () => {
     const searched = record("m1", 0);
     const expanded = record("m2", 1);
@@ -148,6 +141,151 @@ describe("PiMem tools", () => {
     expect(JSON.stringify(result.content)).toContain(
       "2 days before question",
     );
+  });
+
+  it("dispatches explicit lexical and time-range operators without routing", async () => {
+    const lexical = { ...record("m-lexical", 0), content: "Exact Product ZX-41" };
+    const timed = {
+      ...record("m-timed", 1),
+      timestamp: "2024-02-01T00:00:00",
+      content: "A source in the requested time range",
+    };
+    const calls: string[] = [];
+    const store: MemoryToolStore = {
+      search() {
+        calls.push("relevance");
+        return [];
+      },
+      searchLexical() {
+        calls.push("lexical");
+        return [{
+          record: lexical,
+          query: "Product ZX-41",
+          retriever: "fts5",
+          rank: 1,
+          score: 1,
+          preview: lexical.content,
+        }];
+      },
+      scanTimeRange() {
+        calls.push("time_range");
+        return [{
+          record: timed,
+          query: "time range scan",
+          retriever: "pimem-time-range",
+          rank: 1,
+          score: 1,
+          preview: timed.content,
+        }];
+      },
+      read(_scopeId, memoryIds) {
+        return [lexical, timed].filter((item) => memoryIds.includes(item.memoryId));
+      },
+    };
+    const tools = createPiMemTools({
+      store,
+      scopeId: "scope-1",
+      ledger: new MemoryLedger("scope-1"),
+      question: "When did I get Product ZX-41?",
+    });
+
+    const lexicalResult = await tools.search.execute("lexical", {
+      operator: "lexical",
+      queries: ["Product ZX-41"],
+    });
+    const timeResult = await tools.search.execute("time", {
+      operator: "time_range",
+      after: "2024-02-01T00:00:00",
+      before: "2024-02-02T00:00:00",
+    });
+
+    expect(calls).toEqual(["lexical", "time_range"]);
+    expect(lexicalResult.details.operator).toBe("lexical");
+    expect(timeResult.details.operator).toBe("time_range");
+    expect(timeResult.details.request.order).toBe("chronological");
+  });
+
+  it("passes explicit numeric-fact filters and reducers to the harness", async () => {
+    const numeric = {
+      ...record("m-numeric", 0),
+      timestamp: "2024-03-01T00:00:00",
+      content: "I earned $25 selling a book.",
+    };
+    let observedContext: Parameters<NonNullable<MemoryToolStore["expandEvidenceOperator"]>>[2] | undefined;
+    const store: MemoryToolStore = {
+      search(_scopeId, request) {
+        return [{
+          record: numeric,
+          query: request.queries[0] ?? "",
+          retriever: "pimem-hybrid",
+          rank: 1,
+          score: 1,
+          preview: numeric.content,
+        }];
+      },
+      expandEvidenceOperator(_scopeId, _request, context, seeds) {
+        observedContext = context;
+        return seeds.map((seed) => ({
+          ...seed,
+          retriever: "pimem-numeric-facts-db" as const,
+          operatorNumericFactIndexes: [0],
+        }));
+      },
+      read() {
+        return [numeric];
+      },
+    };
+    const tools = createPiMemTools({
+      store,
+      scopeId: "scope-1",
+      ledger: new MemoryLedger("scope-1"),
+    });
+
+    const result = await tools.search.execute("numeric", {
+      operator: "numeric_facts",
+      queries: ["book earnings"],
+      units: ["USD"],
+      valueKinds: ["increment"],
+      reduce: { operation: "sum", distinctBy: "memory" },
+    });
+
+    expect(observedContext).toMatchObject({
+      operator: "numeric_facts",
+      units: ["USD"],
+      valueKinds: ["increment"],
+      reduction: { operation: "sum", distinctBy: "memory" },
+    });
+    expect(result.details.operatorResult?.operator).toBe("numeric_facts");
+    expect(result.details.operatorResult?.derived).toMatchObject({
+      operation: "sum",
+      value: 25,
+      unit: "USD",
+    });
+  });
+
+  it("uses session_expand for candidate discovery without promoting evidence", async () => {
+    const first = record("m-session-1", 0);
+    const neighbor = record("m-session-2", 1);
+    const ledger = new MemoryLedger("scope-1");
+    const tools = createPiMemTools({
+      store: createStore(first, neighbor),
+      scopeId: "scope-1",
+      ledger,
+    });
+    await tools.search.execute("seed", { queries: ["source"] });
+    const result = await tools.search.execute("expand", {
+      operator: "session_expand",
+      withinCandidateRefs: [1],
+      contextBefore: 0,
+      contextAfter: 1,
+    });
+
+    expect(result.details.operator).toBe("session_expand");
+    expect(result.details.candidates.map((item) => item.memoryId)).toEqual([
+      "m-session-1",
+      "m-session-2",
+    ]);
+    expect(ledger.evidence).toEqual([]);
   });
 
   it("awaits asynchronous retrieval without changing the search schema", async () => {
@@ -302,7 +440,7 @@ describe("PiMem tools", () => {
     ]);
   });
 
-  it("automatically applies a temporal operator and prioritizes a resolved date window", async () => {
+  it("defaults to relevance without inferring an operator from the question", async () => {
     const generic = {
       ...record("m-generic", 0),
       timestamp: "2023-03-10T10:00:00",
@@ -345,16 +483,12 @@ describe("PiMem tools", () => {
       queries: ["kitchen appliance purchase"],
     });
 
-    expect(requests).toHaveLength(2);
-    expect(requests[1]).toMatchObject({
-      after: "2023-03-15T00:00:00",
-      before: "2023-03-15T23:59:59",
-      order: "chronological",
-    });
-    expect(result.details.operator).toBe("timeline");
-    expect(result.details.candidates[0]?.memoryId).toBe("m-target");
+    expect(requests).toHaveLength(1);
+    expect(result.details.operator).toBe("relevance");
+    expect(result.details.operatorApplied).toBe(false);
+    expect(result.details.candidates[0]?.memoryId).toBe("m-generic");
     expect(JSON.stringify(result.content)).toContain("candidate_refs");
-    expect(JSON.stringify(result.content)).toContain("temporal_plan");
+    expect(JSON.stringify(result.content)).not.toContain("temporal_plan");
   });
 
   it("keeps opaque memory IDs inside the harness and validates simple refs", async () => {

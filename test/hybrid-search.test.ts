@@ -110,7 +110,7 @@ describe("PiMem hybrid search", () => {
     }
   });
 
-  it("runs dense identity plus candidate-local BM25 through RRF k=60", async () => {
+  it("fuses dense, FTS5, and candidate-local BM25 through RRF k=60", async () => {
     const { raw, hybrid } = await createStore();
     try {
       const hits = await hybrid.search("scope-1", {
@@ -118,8 +118,8 @@ describe("PiMem hybrid search", () => {
         limit: 4,
       });
       expect(hits.map((hit) => hit.record.memoryId)).toEqual([
-        "m1",
         "m3",
+        "m1",
         "m2",
         "m4",
       ]);
@@ -128,8 +128,8 @@ describe("PiMem hybrid search", () => {
         rank: 1,
         query: "needle",
       });
-      expect(hits[0]?.score).toBeCloseTo(1 / 61 + 1 / 62);
-      expect(hits[1]?.score).toBeCloseTo(1 / 63 + 1 / 61);
+      expect(hits[0]?.score).toBeCloseTo(1 / 63 + 1 / 61 + 1 / 61);
+      expect(hits[1]?.score).toBeCloseTo(1 / 61 + 1 / 62);
       expect(hits.every((hit) => !("vector" in hit))).toBe(true);
     } finally {
       raw.close();

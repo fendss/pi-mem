@@ -78,7 +78,7 @@ describe("timeline evidence operator", () => {
       "Which event happened first?",
       "2023/03/25 (Sat) 18:26",
     );
-    expect(result.operator).toBe("timeline");
+    expect(result.operator).toBe("temporal_facts");
     expect(result.rows.map((row) => row.memoryId)).toEqual(["m-early", "m-late"]);
     expect(result.rows[0]).toMatchObject({ eventTime: "2023-03-01" });
   });
@@ -91,8 +91,8 @@ describe("aggregate evidence operator", () => {
       hit("m-jam", "I earned $225 selling jam.", "2023-05-08T10:00:00"),
       hit("m-plants", "I sold 20 potted plants for $7.5 each.", "2023-05-15T10:00:00"),
       hit("m-target", "I hope to earn $500 next time.", "2023-05-20T10:00:00"),
-    ]);
-    expect(result.operator).toBe("aggregate");
+    ], { operation: "sum", distinctBy: "memory" });
+    expect(result.operator).toBe("numeric_facts");
     expect(result.rows.map((row) => row.valueKind)).toEqual([
       "increment",
       "increment",
@@ -100,7 +100,8 @@ describe("aggregate evidence operator", () => {
       "target",
     ]);
     expect(result.derived).toMatchObject({
-      proposedTotal: 495,
+      operation: "sum",
+      value: 495,
       unit: "USD",
       excludedTargetCount: 1,
     });
@@ -110,12 +111,12 @@ describe("aggregate evidence operator", () => {
     const result = buildAggregateOperatorResult([
       hit("m-old", "I have earned $300 so far.", "2023-05-01T10:00:00"),
       hit("m-new", "I have earned $450 so far.", "2023-05-20T10:00:00"),
-    ]);
+    ], { operation: "latest", distinctBy: "memory" });
     expect(result.derived).toMatchObject({
-      latestCumulativeOrSnapshot: 450,
-      latestUnit: "USD",
+      operation: "latest",
+      value: 450,
+      unit: "USD",
       latestMemoryId: "m-new",
     });
-    expect(result.derived).not.toHaveProperty("proposedTotal");
   });
 });

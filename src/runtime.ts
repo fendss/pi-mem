@@ -8,7 +8,6 @@ import {
   PIMEM_RETRIEVAL_SKILL,
   PIMEM_RETRIEVAL_SKILL_VERSION,
 } from "./retrieval-skill.js";
-import { renderMemoryQuestionPlan } from "./retrieval-strategy.js";
 import type { MemoryStore } from "./store.js";
 import {
   createFinishOnlyBeforeToolCall,
@@ -108,9 +107,7 @@ function questionPrompt(question: string, questionDate?: string): string {
       ? []
       : ["", `Question date (source timezone unspecified): ${questionDate}`]),
     "",
-    renderMemoryQuestionPlan(question),
-    "",
-    "Search adaptively for direct source coverage, verify every required evidence slot, and call finish with the cited evidence package. Do not answer the question.",
+    "Choose search operators from the retrieval skill based on the evidence need. Search adaptively for direct source coverage, verify every required evidence slot, and call finish with the cited evidence package. Do not answer the question.",
   ].join("\n");
 }
 

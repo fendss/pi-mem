@@ -32,15 +32,14 @@ export type SearchOrder =
   | "chronological"
   | "reverse-chronological";
 
-export type EvidenceOperator = "standard" | "timeline" | "aggregate";
-
-export interface EvidenceOperatorSearchContext {
-  operator: Exclude<EvidenceOperator, "standard">;
-  question: string;
-  questionDate?: string;
-  targetDates: string[];
-  maxCandidates: number;
-}
+export type SearchOperator =
+  | "relevance"
+  | "lexical"
+  | "time_range"
+  | "temporal_facts"
+  | "numeric_facts"
+  | "session_expand"
+  | "session_coverage";
 
 export type NumericValueKind =
   | "increment"
@@ -48,6 +47,31 @@ export type NumericValueKind =
   | "snapshot"
   | "target"
   | "unknown";
+
+export type NumericReduceOperation =
+  | "none"
+  | "count_distinct"
+  | "sum"
+  | "latest";
+
+export type NumericDistinctBy =
+  | "memory"
+  | "session"
+  | "session_unit_value";
+
+export interface NumericReduction {
+  operation: NumericReduceOperation;
+  distinctBy?: NumericDistinctBy;
+}
+
+export interface EvidenceOperatorSearchContext {
+  operator: "temporal_facts" | "numeric_facts";
+  dates: string[];
+  units: string[];
+  valueKinds: NumericValueKind[];
+  maxCandidates: number;
+  reduction?: NumericReduction;
+}
 
 export interface EvidenceOperatorRow {
   slot: string;
@@ -58,6 +82,8 @@ export interface EvidenceOperatorRow {
   role: MemoryRole;
   eventTime?: string;
   mentionedDates?: string[];
+  temporalExpression?: string;
+  temporalBasis?: string;
   value?: number;
   unit?: string;
   valueKind?: NumericValueKind;
@@ -66,8 +92,8 @@ export interface EvidenceOperatorRow {
 }
 
 export interface EvidenceOperatorResult {
-  version: "pimem-evidence-operators-v1";
-  operator: EvidenceOperator;
+  version: "pimem-search-operators-v2";
+  operator: SearchOperator;
   rows: EvidenceOperatorRow[];
   coverage: {
     candidateCount: number;

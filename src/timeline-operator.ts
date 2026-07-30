@@ -335,6 +335,57 @@ export function extractTemporalFacts(
   );
 }
 
+export function buildTemporalFactsOperatorResult(
+  hits: readonly StoreSearchHit[],
+  requestedDates: readonly string[],
+): EvidenceOperatorResult {
+  const rows = hits.map((hit, sourceOrder) => {
+    const sessionTimestamp = parseSourceTimestamp(hit.record.timestamp);
+    const eventTime = sessionTimestamp === undefined
+      ? undefined
+      : isoDate(sessionTimestamp);
+    const facts = extractTemporalFacts(hit.record.content, hit.record.timestamp);
+    const mentionedDates = [...new Set([
+      ...(eventTime === undefined ? [] : [eventTime]),
+      ...facts.map((fact) => fact.resolvedDate),
+    ])].sort();
+    return {
+      sourceOrder,
+      row: {
+        slot: hit.query,
+        quote: hit.preview,
+        memoryId: hit.record.memoryId,
+        sessionId: hit.record.sessionId,
+        turnIndex: hit.record.turnIndex,
+        role: hit.record.role,
+        ...(eventTime === undefined ? {} : { eventTime }),
+        ...(mentionedDates.length === 0 ? {} : { mentionedDates }),
+        ...(facts[0] === undefined
+          ? {}
+          : {
+              temporalExpression: facts[0].expression,
+              temporalBasis: facts[0].basis,
+            }),
+      } satisfies EvidenceOperatorRow,
+    };
+  }).sort((left, right) => {
+    const time = (left.row.mentionedDates?.[0] ?? left.row.eventTime ?? "9999-99-99")
+      .localeCompare(right.row.mentionedDates?.[0] ?? right.row.eventTime ?? "9999-99-99");
+    return time !== 0 ? time : left.sourceOrder - right.sourceOrder;
+  }).map((item) => item.row);
+  return {
+    version: "pimem-search-operators-v2",
+    operator: "temporal_facts",
+    rows,
+    coverage: {
+      candidateCount: hits.length,
+      distinctSessions: new Set(hits.map((hit) => hit.record.sessionId)).size,
+      truncated: false,
+    },
+    derived: { requestedDates: [...requestedDates] },
+  };
+}
+
 export function buildTimelineOperatorResult(
   hits: readonly StoreSearchHit[],
   question: string,
@@ -369,8 +420,8 @@ export function buildTimelineOperatorResult(
     return time !== 0 ? time : left.sourceOrder - right.sourceOrder;
   }).map((item) => item.row);
   return {
-    version: "pimem-evidence-operators-v1",
-    operator: "timeline",
+    version: "pimem-search-operators-v2",
+    operator: "temporal_facts",
     rows,
     coverage: {
       candidateCount: hits.length,

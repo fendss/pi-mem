@@ -2,6 +2,7 @@ import type { StoreSearchHit } from "./store.js";
 import type {
   EvidenceOperatorResult,
   EvidenceOperatorRow,
+  NumericReduction,
   NumericValueKind,
 } from "./types.js";
 
@@ -127,6 +128,7 @@ function rowKey(hit: StoreSearchHit, mention: NumericFact): string {
 
 export function buildAggregateOperatorResult(
   hits: readonly StoreSearchHit[],
+  reduction: NumericReduction = { operation: "none" },
 ): EvidenceOperatorResult {
   const rows: EvidenceOperatorRow[] = [];
   for (const hit of hits) {
@@ -164,47 +166,83 @@ export function buildAggregateOperatorResult(
 
   const directRows = rows.filter((row) => row.role === "user");
   const sourceRows = directRows.length > 0 ? directRows : rows;
+  const distinctBy = reduction.distinctBy ?? "memory";
+  const reductionKey = (row: EvidenceOperatorRow): string => {
+    if (distinctBy === "session") return row.sessionId;
+    if (distinctBy === "session_unit_value") {
+      return `${row.sessionId}|${row.unit ?? ""}|${String(row.value)}`;
+    }
+    return row.memoryId;
+  };
   const unique = new Map<string, EvidenceOperatorRow>();
   for (const row of sourceRows) {
-    if (row.dedupeKey !== undefined && !unique.has(row.dedupeKey)) {
-      unique.set(row.dedupeKey, row);
-    }
+    const key = reductionKey(row);
+    if (!unique.has(key)) unique.set(key, row);
   }
-  const additive = [...unique.values()].filter((row) => row.valueKind === "increment");
-  const units = new Set(additive.map((row) => row.unit).filter(Boolean));
-  const proposedTotal = additive.length > 1 && units.size === 1
-    ? additive.reduce((total, row) => total + (row.value ?? 0), 0)
-    : undefined;
-  const cumulative = [...unique.values()]
-    .filter((row) => row.valueKind === "cumulative" || row.valueKind === "snapshot")
-    .sort((left, right) => (left.eventTime ?? "").localeCompare(right.eventTime ?? ""));
-  const latest = cumulative.at(-1);
+  const nonTargets = [...unique.values()].filter((row) =>
+    row.valueKind !== "target"
+  );
+  let derived: Record<string, unknown> | undefined;
+  if (reduction.operation === "count_distinct") {
+    derived = {
+      operation: reduction.operation,
+      distinctBy,
+      value: nonTargets.length,
+      includedMemoryIds: nonTargets.map((row) => row.memoryId),
+      excludedTargetCount: [...unique.values()].length - nonTargets.length,
+    };
+  } else if (reduction.operation === "sum") {
+    const additive = nonTargets.filter((row) => row.valueKind === "increment");
+    const units = new Set(additive.map((row) => row.unit).filter(Boolean));
+    derived = additive.length > 0 && units.size === 1
+      ? {
+          operation: reduction.operation,
+          distinctBy,
+          value: additive.reduce((total, row) => total + (row.value ?? 0), 0),
+          unit: additive[0]?.unit,
+          includedMemoryIds: additive.map((row) => row.memoryId),
+          excludedTargetCount: [...unique.values()].length - nonTargets.length,
+        }
+      : {
+          operation: reduction.operation,
+          distinctBy,
+          applicable: false,
+          reason: additive.length === 0
+            ? "no increment rows"
+            : "numeric rows have incompatible units",
+        };
+  } else if (reduction.operation === "latest") {
+    const latest = nonTargets
+      .filter((row) => row.valueKind === "cumulative" || row.valueKind === "snapshot")
+      .sort((left, right) =>
+        (left.eventTime ?? "").localeCompare(right.eventTime ?? "")
+      )
+      .at(-1);
+    derived = latest === undefined
+      ? {
+          operation: reduction.operation,
+          distinctBy,
+          applicable: false,
+          reason: "no cumulative or snapshot rows",
+        }
+      : {
+          operation: reduction.operation,
+          distinctBy,
+          value: latest.value,
+          unit: latest.unit,
+          latestMemoryId: latest.memoryId,
+        };
+  }
 
   return {
-    version: "pimem-evidence-operators-v1",
-    operator: "aggregate",
+    version: "pimem-search-operators-v2",
+    operator: "numeric_facts",
     rows: rows.slice(0, 40),
     coverage: {
       candidateCount: hits.length,
       distinctSessions: new Set(hits.map((hit) => hit.record.sessionId)).size,
       truncated: rows.length > 40,
     },
-    derived: {
-      ...(proposedTotal === undefined
-        ? {}
-        : {
-            proposedTotal,
-            unit: additive[0]?.unit,
-            includedDedupeKeys: additive.map((row) => row.dedupeKey),
-          }),
-      ...(latest === undefined
-        ? {}
-        : {
-            latestCumulativeOrSnapshot: latest.value,
-            latestUnit: latest.unit,
-            latestMemoryId: latest.memoryId,
-          }),
-      excludedTargetCount: [...unique.values()].filter((row) => row.valueKind === "target").length,
-    },
+    ...(derived === undefined ? {} : { derived }),
   };
 }
