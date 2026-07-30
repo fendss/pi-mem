@@ -672,7 +672,7 @@ export async function startLeaderboardServer(): Promise<void> {
     maxConcurrentSearches: positiveEnvironmentInteger(
       "PIMEM_MAX_CONCURRENT_SEARCHES",
       4,
-      64,
+      128,
     ),
     maxRunMs: positiveEnvironmentInteger("PIMEM_MAX_RUN_MS", 120_000, 600_000),
     searchAttempts: positiveEnvironmentInteger("PIMEM_SEARCH_ATTEMPTS", 1, 5),
