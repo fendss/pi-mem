@@ -177,6 +177,43 @@ curl -X POST https://memory.example.com/v1/memories/search \
   -d '{"query":"What should be remembered?","user_id":"eval:user-1","top_k":100}'
 ```
 
+### Local retrieval-only benchmark exports
+
+`scripts/leaderboard_local_search_eval.py` reads the benchmark registry from a
+MemMachine checkout, sends only conversations to Add and only questions/options
+to Search, and writes the exact ordered Search products as JSONL. It never runs
+an Answer model, Judge, or scorer, and its artifacts exclude gold answers,
+rubrics, supporting facts, existing answers, and evaluation labels.
+
+`scripts/run_leaderboard_local_search_suite.sh` runs all 14 registered sources
+sequentially. Every benchmark receives a distinct Docker volume containing its
+own `/data/memory.sqlite`; records inside that database remain isolated by
+`user_id`. The runner is idempotent and resumes completed ingest records and
+Search rows.
+
+```bash
+# One-record, one-question smoke with a physically isolated database.
+PIMEM_LOCAL_EVAL_BENCHMARKS=clbench_locomo_0_4k \
+PIMEM_LOCAL_EVAL_MAX_RECORDS=1 \
+PIMEM_LOCAL_EVAL_MAX_QUESTIONS_PER_RECORD=1 \
+PIMEM_LOCAL_EVAL_SEARCH_CONCURRENCY=1 \
+./scripts/run_leaderboard_local_search_suite.sh smoke-v1
+
+# Full registered suite. This is large: about 19.8k questions and 1.92m messages.
+./scripts/run_leaderboard_local_search_suite.sh full-v1
+```
+
+The only handoff required downstream is:
+
+```text
+/home/zhaogangyi/pi-mem-local-eval/<run-id>/<benchmark>/search-results.jsonl
+```
+
+Each row contains question identity, the exact query/options sent to Search,
+latency/status, and the returned `data` array (evidence capsule followed by raw
+memories). `database.json` records the benchmark-specific volume, while
+`search-summary.json` reports only completion/error counts.
+
 ## Commands
 
 Node 22.19 or newer is required. The full benchmark suite also requires
