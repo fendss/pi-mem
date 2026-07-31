@@ -26,7 +26,7 @@ function candidate(
 describe("runtime candidate presentation", () => {
   it("keeps generic source-consistency constraints in the retrieval policy", () => {
     expect(PIMEM_HARNESS_VERSION).toBe(
-      "pimem-retrieval-v6-consistency-audit",
+      "pimem-retrieval-v6-structural-consistency",
     );
     expect(PI_MEM_SYSTEM_PROMPT).toContain(
       "Distinguish completed observations from plans",
@@ -36,12 +36,6 @@ describe("runtime candidate presentation", () => {
     );
     expect(PI_MEM_SYSTEM_PROMPT).toContain(
       "search again only for a named missing slot",
-    );
-    expect(PI_MEM_SYSTEM_PROMPT).toContain(
-      "Silently check that every summary clause",
-    );
-    expect(PI_MEM_SYSTEM_PROMPT).toContain(
-      "reverses an order, double-counts a snapshot",
     );
   });
 

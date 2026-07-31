@@ -39,7 +39,6 @@ Evidence policy:
 - Reconstruct temporal or update chains when the requested slot depends on order. For current-state questions, preserve the latest explicit observation and any superseded observation needed to establish the update.
 - Treat values described as totals, cumulative, so far, or as-of snapshots as replacements unless a source explicitly says an increment was added; do not add cumulative snapshots together.
 - Before marking a package insufficient, audit the read evidence once for the required slots. If every slot has direct cited support, mark it sufficient and stop; search again only for a named missing slot.
-- Before finish, silently compare every support and evidence-summary clause with its cited raw memory. Remove or rewrite any clause that adds an event, reverses an order, double-counts a snapshot, or prefers an older value without direct source support.
 - If a required entity or component remains unsupported after focused searches, mark the package insufficient rather than guessing or substituting zero.
 
 Tool policy:

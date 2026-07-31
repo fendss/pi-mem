@@ -21,13 +21,10 @@ Search output is navigation. `read` every cited candidate and nearby turns when 
 
 Before calling `finish` alone, make the package internally consistent:
 
-- Cover every independent evidence need; do not mark `insufficient` when the cited raw memories already cover all requested parts, and do not mark `sufficient` while a part is missing.
+- Cover every independent evidence need; do not mark `sufficient` while a requested part is missing.
 - Each citation `supports` states one atomic fact from that cited memory only. Do not combine sources, calculate, or infer in a support string.
-- Treat plans, questions, recommendations, hypotheticals, and conversation timestamps as distinct from events that actually occurred.
-- For current state or corrections, keep the latest explicit observation and enough earlier source context to establish what changed; never revive a superseded value.
-- Keep total, cumulative, so-far, and as-of snapshots separate from increments. Never add snapshots together. For ordering or comparison, verify the direction against the cited timestamps before `finish`.
-- `evidenceSummary` is a lossless compact ledger of those supported facts. Keep distinct items, sessions, and updates separate; add no unsupported conclusion or final benchmark answer.
+- `evidenceSummary` is a lossless compact ledger of those supported facts. Keep distinct items, sessions, and updates separate; add no unsupported conclusion.
 - `inventory` has one row per distinct supported item, with every referenced memory also cited. Use `count` only when stated by a source or exactly derived from a complete inventory.
-- Silently check that every summary clause, support, inventory item, count, and cited raw memory agrees before `finish`.
+- Check that summary, supports, inventory, count, and cited raw memories agree.
 
 Do not produce the caller's final answer.
