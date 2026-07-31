@@ -1,9 +1,9 @@
-import type { AfterToolCallContext } from "@earendil-works/pi-agent-core";
+import type { BeforeToolCallContext } from "@earendil-works/pi-agent-core";
 import { describe, expect, it } from "vitest";
 import { MemoryLedger } from "../src/ledger.js";
 import type { StoreSearchHit } from "../src/store.js";
 import {
-  createFinishBatchTerminationAfterToolCall,
+  createFinishAloneBeforeToolCall,
   createPiMemTools,
   type MemoryToolStore,
 } from "../src/tools.js";
@@ -192,7 +192,7 @@ describe("PiMem tools", () => {
     expect(observedSignal).toBe(controller.signal);
   });
 
-  it("auto-reads exact cited candidates before accepting finish", async () => {
+  it("requires cited candidates to be read before accepting finish", async () => {
     const searched = record("m1", 0);
     const expanded = record("m2", 1);
     const ledger = new MemoryLedger("scope-1");
@@ -203,16 +203,20 @@ describe("PiMem tools", () => {
     });
 
     await tools.search.execute("search-1", { queries: ["source"] });
-    const result = await tools.finish.execute("finish-1", {
+    await expect(tools.finish.execute("finish-unread", {
+      status: "sufficient",
+      citations: [{ candidateRef: 1, supports: "The source states it." }],
+      evidenceSummary: "The exact selected candidate supplies the evidence.",
+    })).rejects.toThrow(/read in this run/u);
+
+    await tools.read.execute("read-1", { candidateRefs: [1] });
+    const result = await tools.finish.execute("finish-read", {
       status: "sufficient",
       citations: [{ candidateRef: 1, supports: "The source states it." }],
       evidenceSummary: "The exact selected candidate supplies the evidence.",
     });
-
-    expect(result.details.autoReadCandidateRefs).toEqual([1]);
-    expect(result.details.autoReadMemoryIds).toEqual(["m1"]);
+    expect(result.details.selection.citations[0]?.memoryId).toBe("m1");
     expect(ledger.evidence.map((item) => item.memoryId)).toEqual(["m1", "m2"]);
-    expect(ledger.selection?.citations[0]?.memoryId).toBe("m1");
   });
 
   it("lets an operator block finish before the ledger accepts it", async () => {
@@ -392,32 +396,34 @@ describe("PiMem tools", () => {
     ).rejects.toThrow(/Valid candidate range is 1-2/u);
   });
 
-  it("terminates a fully successful tool batch that contains finish", async () => {
-    const hook = createFinishBatchTerminationAfterToolCall();
-    const context = {
+  it("defers finish until it follows observed navigation results", async () => {
+    const hook = createFinishAloneBeforeToolCall();
+    const mixedContext = {
       assistantMessage: {
         content: [
-          { type: "toolCall", id: "1", name: "finish", arguments: {} },
-          { type: "toolCall", id: "2", name: "search", arguments: {} },
+          { type: "toolCall", id: "1", name: "search", arguments: {} },
+          { type: "toolCall", id: "2", name: "finish", arguments: {} },
         ],
       },
-      toolCall: { type: "toolCall", id: "2", name: "search", arguments: {} },
+      toolCall: { type: "toolCall", id: "2", name: "finish", arguments: {} },
       args: {},
-      result: { content: [], details: {} },
-      isError: false,
       context: { systemPrompt: "", messages: [], tools: [] },
-    } as unknown as AfterToolCallContext;
+    } as unknown as BeforeToolCallContext;
 
-    await expect(hook(context)).resolves.toEqual({ terminate: true });
+    await expect(hook(mixedContext)).resolves.toEqual({
+      block: true,
+      reason:
+        "finish must be called alone after observing all Search and Read results",
+    });
     await expect(hook({
-      ...context,
+      ...mixedContext,
       assistantMessage: {
-        content: [{ type: "toolCall", id: "2", name: "search", arguments: {} }],
+        content: [{ type: "toolCall", id: "2", name: "finish", arguments: {} }],
       },
-    } as unknown as AfterToolCallContext)).resolves.toBeUndefined();
+    } as unknown as BeforeToolCallContext)).resolves.toBeUndefined();
     await expect(hook({
-      ...context,
-      isError: true,
-    } as unknown as AfterToolCallContext)).resolves.toBeUndefined();
+      ...mixedContext,
+      toolCall: { type: "toolCall", id: "1", name: "search", arguments: {} },
+    } as unknown as BeforeToolCallContext)).resolves.toBeUndefined();
   });
 });

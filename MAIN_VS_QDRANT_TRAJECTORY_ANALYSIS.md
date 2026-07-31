@@ -82,7 +82,7 @@ The v8 experiment therefore:
 
 1. accepts multiple atomic citation supports from the same immutable memory;
 2. removes duplicate-inventory rejection;
-3. replaces Finish-order rejection with batch-aware deterministic termination: if a batch contains a valid Finish and every call succeeds, all results opt into termination;
+3. keeps the necessary completion gates: Finish must be called alone after the Agent has observed every Search/Read result, and every cited candidate must already have been explicitly read; Finish no longer auto-reads unseen sources;
 4. returns the first protocol-valid Retrieval result, including `insufficient`, instead of rerolling it and selecting a later result;
 5. retries only provider/protocol failures;
 6. restores public bounds to the main-era `64` turns, `80` tool calls, and `2` protocol nudges instead of `1024/4096/8`;

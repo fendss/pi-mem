@@ -11,7 +11,7 @@ import {
 import { renderMemoryQuestionPlan } from "./retrieval-strategy.js";
 import type { MemoryStore } from "./store.js";
 import {
-  createFinishBatchTerminationAfterToolCall,
+  createFinishAloneBeforeToolCall,
   createPiMemTools,
   type MemoryToolStore,
 } from "./tools.js";
@@ -242,7 +242,7 @@ export async function runPiMem(
     getApiKey: options.modelRuntime.getApiKey,
     onPayload: deterministicRetrievalPayload,
     transformContext: ephemeralContext.transformContext,
-    afterToolCall: createFinishBatchTerminationAfterToolCall(),
+    beforeToolCall: createFinishAloneBeforeToolCall(),
     toolExecution: "sequential",
     sessionId: runId,
   });
