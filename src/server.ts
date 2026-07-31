@@ -9,6 +9,7 @@ import {
 } from "node:http";
 import { join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
+import type { DenseRetriever } from "./dense-retriever.js";
 import { OpenAICompatibleEmbedder, type Embedder } from "./embedding.js";
 import { indexScopeEmbeddings } from "./embedding-index.js";
 import { HybridMemoryStore } from "./hybrid-search.js";
@@ -87,6 +88,7 @@ export interface PiMemLeaderboardBackendOptions {
   rawStore: MemoryStore;
   embedder: Embedder;
   modelRuntime: PiModelRuntime;
+  denseRetriever?: DenseRetriever;
   maxConcurrentAdds?: number;
   maxConcurrentSearches?: number;
   maxRunMs?: number;
@@ -398,7 +400,11 @@ export class PiMemLeaderboardBackend implements LeaderboardApiBackend {
     this.rawStore = options.rawStore;
     this.embedder = options.embedder;
     this.modelRuntime = options.modelRuntime;
-    this.hybridStore = new HybridMemoryStore(options.rawStore, options.embedder);
+    this.hybridStore = new HybridMemoryStore(
+      options.rawStore,
+      options.embedder,
+      options.denseRetriever,
+    );
     this.addGate = new AsyncRequestGate(options.maxConcurrentAdds ?? 1, 1_000);
     this.searchGate = new AsyncRequestGate(
       options.maxConcurrentSearches ?? 4,

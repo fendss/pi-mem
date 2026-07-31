@@ -12,23 +12,30 @@ const generationId = "generation-a";
 const spec = {
   name: collection,
   dimensions: 4,
-  hnsw: { m: 32, efConstruct: 200, fullScanThreshold: 1_000 },
+  indexingThresholdKb: 10_000,
+  hnsw: { m: 32, efConstruct: 200, fullScanThresholdKb: 1_000 },
 };
 const pointA = {
   pointId: "00000000-0000-4000-8000-000000000001",
   vector: [1, 0, 0, 0],
   generationId,
   scopeId: "scope-a",
-  profileId: "profile-a",
-  contentHash: "hash-a",
+  memoryId: "memory-a",
+  sessionId: "session-a",
+  role: "user",
+  timestamp: "2024-01-01T00:00:00.000Z",
+  profileId: "profile-a",  contentHash: "hash-a",
 };
 const pointB = {
   pointId: "00000000-0000-4000-8000-000000000002",
   vector: [0, 1, 0, 0],
   generationId,
   scopeId: "scope-b",
-  profileId: "profile-a",
-  contentHash: "hash-b",
+  memoryId: "memory-b",
+  sessionId: "session-b",
+  role: "assistant",
+  timestamp: "2024-02-01T00:00:00.000Z",
+  profileId: "profile-a",  contentHash: "hash-b",
 };
 
 async function waitReady() {
@@ -53,6 +60,10 @@ async function assertIsolated(point, queryVector) {
     generationId,
     scopeId: point.scopeId,
     profileId: point.profileId,
+    sessionIds: [point.sessionId],
+    roles: [point.role],
+    after: point.timestamp,
+    before: point.timestamp,
     limit: 10,
     hnswEf: 256,
   });

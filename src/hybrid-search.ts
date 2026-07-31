@@ -57,7 +57,7 @@ export class HybridMemoryStore {
 
   getRetrievalMetadata(): RetrievalMetadata {
     return {
-      retrievalProfile: "pimem-hybrid",
+      retrievalProfile: this.denseRetriever.retrievalProfile,
       embeddingProfileId: this.embedder.profileId,
       embeddingModel: this.embedder.model,
       embeddingDimensions: this.embedder.dimensions,
@@ -100,7 +100,7 @@ export class HybridMemoryStore {
       throw new Error("Query embedding count does not match query count");
     }
     const headroom = Math.max(20, 4 * limit);
-    const denseRankings = await this.denseRetriever.search({
+    const densePromise = this.denseRetriever.search({
       scopeId,
       profile,
       queryVectors,
@@ -115,10 +115,29 @@ export class HybridMemoryStore {
       },
       ...(signal === undefined ? {} : { signal }),
     });
+    const {
+      maxPerSession: _ignoredMaxPerSession,
+      order: _ignoredOrder,
+      ...lexicalBase
+    } = request;
+    // Qdrant I/O starts before synchronous FTS5; stage 5 moves FTS5 itself to
+    // read-only workers so neither path blocks the Agent event loop.
+    const lexicalRankings = request.queries.map((query) =>
+      this.rawStore.search(scopeId, {
+        ...lexicalBase,
+        queries: [query],
+        limit: Math.min(100, headroom),
+        order: "relevance",
+      })
+    );
+    const denseRankings = await densePromise;
     if (denseRankings.length !== request.queries.length) {
       throw new Error("Dense ranking count does not match query count");
     }
-    if (denseRankings.every((ranking) => ranking.length === 0)) return [];
+    if (
+      denseRankings.every((ranking) => ranking.length === 0) &&
+      lexicalRankings.every((ranking) => ranking.length === 0)
+    ) return [];
 
     const perQueryLimit =
       request.maxPerSession === undefined ? limit : headroom;
@@ -129,17 +148,7 @@ export class HybridMemoryStore {
         candidate: { record: hit.record },
         cosine: hit.score,
       }));
-      const {
-        maxPerSession: _ignoredMaxPerSession,
-        order: _ignoredOrder,
-        ...lexicalBase
-      } = request;
-      const lexicalHits = this.rawStore.search(scopeId, {
-        ...lexicalBase,
-        queries: [query],
-        limit: Math.min(100, headroom),
-        order: "relevance",
-      });
+      const lexicalHits = lexicalRankings[queryIndex]!;
       this.denseCandidateCount += denseCandidates.length;
 
       const union = new Map<string, { record: MemoryRecord }>();

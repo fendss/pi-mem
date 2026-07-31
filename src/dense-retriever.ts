@@ -1,8 +1,17 @@
 import type {
+  QdrantSearchHit,
+  QdrantSearchRequest,
+} from "./qdrant.js";
+import type {
   EmbeddingProfile,
   MemoryStore,
 } from "./store.js";
-import type { MemoryRecord, SearchRequest } from "./types.js";
+import type {
+  MemoryRecord,
+  RetrievalProfile,
+  SearchRequest,
+} from "./types.js";
+import { deterministicQdrantPointId } from "./vector-sync.js";
 
 export interface DenseSearchHit {
   record: MemoryRecord;
@@ -21,7 +30,20 @@ export interface DenseSearchBatchRequest {
 
 /** Internal dense retrieval boundary. Agent-facing search schemas never expose it. */
 export interface DenseRetriever {
+  readonly retrievalProfile: RetrievalProfile;
   search(request: DenseSearchBatchRequest): Promise<DenseSearchHit[][]>;
+}
+
+export interface QdrantDenseSearchClient {
+  search(request: QdrantSearchRequest): Promise<QdrantSearchHit[]>;
+}
+
+export interface QdrantDenseRetrieverOptions {
+  store: MemoryStore;
+  client: QdrantDenseSearchClient;
+  generationId: string;
+  collectionName: string;
+  hnswEf?: number;
 }
 
 function cosineSimilarity(
@@ -50,6 +72,7 @@ function cosineSimilarity(
 
 /** The v1.0 exact implementation, retained as the default and regression oracle. */
 export class SqliteExactDenseRetriever implements DenseRetriever {
+  readonly retrievalProfile = "pimem-hybrid" as const;
   private readonly store: MemoryStore;
 
   constructor(store: MemoryStore) {
@@ -78,5 +101,112 @@ export class SqliteExactDenseRetriever implements DenseRetriever {
         .map((hit, index) => ({ ...hit, rank: index + 1 })),
     );
     return Promise.resolve(rankings);
+  }
+}
+
+/** Filtered HNSW retrieval whose returned IDs are revalidated against SQLite. */
+export class QdrantDenseRetriever implements DenseRetriever {
+  readonly retrievalProfile = "pimem-hybrid-qdrant-hnsw-v1" as const;
+  private readonly store: MemoryStore;
+  private readonly client: QdrantDenseSearchClient;
+  private readonly generationId: string;
+  private readonly collectionName: string;
+  private readonly hnswEf: number;
+
+  constructor(options: QdrantDenseRetrieverOptions) {
+    if (!options.generationId.trim() || !options.collectionName.trim()) {
+      throw new Error("Qdrant dense generation and collection must not be empty");
+    }
+    const hnswEf = options.hnswEf ?? 512;
+    if (!Number.isSafeInteger(hnswEf) || hnswEf <= 0 || hnswEf > 10_000) {
+      throw new Error("Qdrant dense hnswEf must be between 1 and 10000");
+    }
+    this.store = options.store;
+    this.client = options.client;
+    this.generationId = options.generationId;
+    this.collectionName = options.collectionName;
+    this.hnswEf = hnswEf;
+  }
+
+  private hydrate(
+    scopeId: string,
+    hits: readonly QdrantSearchHit[],
+    limit: number,
+  ): DenseSearchHit[] {
+    if (new Set(hits.map((hit) => hit.memoryId)).size !== hits.length) {
+      throw new Error("Qdrant dense results contain duplicate memory IDs");
+    }
+    const records = new Map(
+      this.store.getRecords(scopeId, hits.map((hit) => hit.memoryId))
+        .map((record) => [record.memoryId, record]),
+    );
+    return hits.map((hit) => {
+      const record = records.get(hit.memoryId);
+      if (!record) {
+        throw new Error(`Qdrant returned a missing scoped memory: ${hit.memoryId}`);
+      }
+      if (
+        hit.pointId !== deterministicQdrantPointId(
+          scopeId,
+          hit.memoryId,
+          hit.profileId,
+        ) ||
+        hit.contentHash !== record.contentHash ||
+        hit.sessionId !== record.sessionId ||
+        hit.role !== record.role ||
+        hit.timestamp !== record.timestamp
+      ) {
+        throw new Error(`Qdrant provenance mismatch for memory: ${hit.memoryId}`);
+      }
+      return { record, score: hit.score, rank: 0 };
+    }).sort((left, right) => {
+      const score = right.score - left.score;
+      return score !== 0
+        ? score
+        : left.record.memoryId.localeCompare(right.record.memoryId);
+    }).slice(0, limit).map((hit, index) => ({ ...hit, rank: index + 1 }));
+  }
+
+  async search(request: DenseSearchBatchRequest): Promise<DenseSearchHit[][]> {
+    const generation = this.store.assertVectorIndexGenerationReady(
+      this.generationId,
+    );
+    if (
+      generation.collectionName !== this.collectionName ||
+      generation.profile.profileId !== request.profile.profileId ||
+      generation.profile.model !== request.profile.model ||
+      generation.profile.dimensions !== request.profile.dimensions
+    ) {
+      throw new Error(`Qdrant dense generation mismatch: ${this.generationId}`);
+    }
+    for (const vector of request.queryVectors) {
+      if (
+        vector.length !== request.profile.dimensions ||
+        vector.some((value) => !Number.isFinite(value))
+      ) {
+        throw new Error("Qdrant query vector does not match the embedding profile");
+      }
+    }
+    const filters = request.filters;
+    const rankings = await Promise.all(request.queryVectors.map(async (vector) => {
+      const hits = await this.client.search({
+        collection: this.collectionName,
+        vector,
+        generationId: this.generationId,
+        scopeId: request.scopeId,
+        profileId: request.profile.profileId,
+        ...(filters?.sessionIds === undefined
+          ? {}
+          : { sessionIds: filters.sessionIds }),
+        ...(filters?.roles === undefined ? {} : { roles: filters.roles }),
+        ...(filters?.after === undefined ? {} : { after: filters.after }),
+        ...(filters?.before === undefined ? {} : { before: filters.before }),
+        limit: request.limit,
+        hnswEf: Math.min(10_000, Math.max(this.hnswEf, request.limit * 2)),
+        ...(request.signal === undefined ? {} : { signal: request.signal }),
+      });
+      return this.hydrate(request.scopeId, hits, request.limit);
+    }));
+    return rankings;
   }
 }

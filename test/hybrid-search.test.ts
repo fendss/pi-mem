@@ -119,6 +119,7 @@ describe("PiMem hybrid search", () => {
     const records = raw.listScopeRecords("scope-1");
     const requests: DenseSearchBatchRequest[] = [];
     const denseRetriever: DenseRetriever = {
+      retrievalProfile: "pimem-hybrid-qdrant-hnsw-v1",
       search(request): Promise<DenseSearchHit[][]> {
         requests.push(request);
         return Promise.resolve(request.queryVectors.map(() => [
@@ -147,6 +148,8 @@ describe("PiMem hybrid search", () => {
         },
       });
       expect(requests[0]?.queryVectors).toEqual([[1, 0]]);
+      expect(hybrid.getRetrievalMetadata().retrievalProfile)
+        .toBe("pimem-hybrid-qdrant-hnsw-v1");
     } finally {
       raw.close();
     }

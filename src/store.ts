@@ -63,6 +63,9 @@ interface VectorSyncRow {
   generation_id: string;
   scope_id: string;
   memory_id: string;
+  session_id: string;
+  role: MemoryRecord["role"];
+  timestamp: string | null;
   profile_id: string;
   content_hash: string;
   attempts: number;
@@ -123,6 +126,9 @@ export interface VectorSyncClaim {
   generationId: string;
   scopeId: string;
   memoryId: string;
+  sessionId: string;
+  role: MemoryRecord["role"];
+  timestamp?: string;
   profileId: string;
   contentHash: string;
   vector: Float32Array;
@@ -1396,9 +1402,11 @@ export class MemoryStore {
       }
       const getClaim = this.db.prepare(`
         SELECT o.sequence_id, o.generation_id, o.scope_id, o.memory_id,
+               m.session_id, m.role, m.timestamp,
                o.profile_id, o.content_hash, o.attempts,
                e.vector, e.dimensions
         FROM vector_sync_outbox AS o
+        JOIN memories AS m ON m.memory_id = o.memory_id
         JOIN memory_embeddings AS e
           ON e.memory_id = o.memory_id AND e.profile_id = o.profile_id
         WHERE o.generation_id = ? AND o.sequence_id = ? AND o.state = 'inflight'
@@ -1412,6 +1420,9 @@ export class MemoryStore {
         generationId: row.generation_id,
         scopeId: row.scope_id,
         memoryId: row.memory_id,
+        sessionId: row.session_id,
+        role: row.role,
+        ...(row.timestamp === null ? {} : { timestamp: row.timestamp }),
         profileId: row.profile_id,
         contentHash: row.content_hash,
         vector: decodeVector(row.vector, row.dimensions),

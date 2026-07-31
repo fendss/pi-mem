@@ -1,14 +1,17 @@
+import type { MemoryRole } from "./types.js";
+
 export const QDRANT_COLLECTION_SCHEMA_VERSION = 1;
 
 export interface QdrantHnswConfig {
   m: number;
   efConstruct: number;
-  fullScanThreshold: number;
+  fullScanThresholdKb: number;
 }
 
 export interface QdrantCollectionSpec {
   name: string;
   dimensions: number;
+  indexingThresholdKb: number;
   hnsw: QdrantHnswConfig;
 }
 
@@ -17,6 +20,10 @@ export interface QdrantVectorPoint {
   vector: readonly number[];
   generationId: string;
   scopeId: string;
+  memoryId: string;
+  sessionId: string;
+  role: MemoryRole;
+  timestamp?: string;
   profileId: string;
   contentHash: string;
 }
@@ -27,6 +34,10 @@ export interface QdrantSearchRequest {
   generationId: string;
   scopeId: string;
   profileId: string;
+  sessionIds?: string[];
+  roles?: MemoryRole[];
+  after?: string;
+  before?: string;
   limit: number;
   hnswEf: number;
   signal?: AbortSignal;
@@ -37,6 +48,10 @@ export interface QdrantSearchHit {
   score: number;
   generationId: string;
   scopeId: string;
+  memoryId: string;
+  sessionId: string;
+  role: MemoryRole;
+  timestamp?: string;
   profileId: string;
   contentHash: string;
 }
@@ -58,6 +73,7 @@ export interface QdrantCollectionInfo {
   pointsCount: number;
   indexedVectorsCount: number;
   dimensions: number;
+  indexingThresholdKb: number;
   distance: string;
   hnsw: QdrantHnswConfig;
 }
@@ -97,6 +113,13 @@ function nonNegativeInteger(value: number, label: string): number {
 function nonEmptyString(value: string, label: string): string {
   if (!value.trim()) throw new Error(`${label} must be a non-empty string`);
   return value;
+}
+
+function memoryRole(value: unknown, label: string): MemoryRole {
+  if (!new Set(["user", "assistant", "system", "other"]).has(value as string)) {
+    throw new Error(`${label} must be a supported memory role`);
+  }
+  return value as MemoryRole;
 }
 
 function collectionName(value: string): string {
@@ -170,6 +193,10 @@ function collectionInfo(value: unknown): QdrantCollectionInfo {
   const params = objectValue(config.params, "Qdrant collection parameters");
   const vectors = objectValue(params.vectors, "Qdrant vector parameters");
   const hnsw = objectValue(config.hnsw_config, "Qdrant HNSW parameters");
+  const optimizer = objectValue(
+    config.optimizer_config,
+    "Qdrant optimizer parameters",
+  );
   const status = nonEmptyString(String(result.status ?? ""), "Qdrant status");
   return {
     status,
@@ -183,6 +210,10 @@ function collectionInfo(value: unknown): QdrantCollectionInfo {
       "Qdrant indexed vector count",
     ),
     dimensions: positiveInteger(Number(vectors.size), "Qdrant vector size"),
+    indexingThresholdKb: positiveInteger(
+      Number(optimizer.indexing_threshold),
+      "Qdrant optimizer indexing threshold",
+    ),
     distance: nonEmptyString(String(vectors.distance ?? ""), "Qdrant distance"),
     hnsw: {
       m: positiveInteger(Number(hnsw.m), "Qdrant HNSW m"),
@@ -190,7 +221,7 @@ function collectionInfo(value: unknown): QdrantCollectionInfo {
         Number(hnsw.ef_construct),
         "Qdrant HNSW ef_construct",
       ),
-      fullScanThreshold: positiveInteger(
+      fullScanThresholdKb: positiveInteger(
         Number(hnsw.full_scan_threshold),
         "Qdrant HNSW full_scan_threshold",
       ),
@@ -276,8 +307,12 @@ export class QdrantClient {
     positiveInteger(spec.hnsw.m, "Qdrant HNSW m");
     positiveInteger(spec.hnsw.efConstruct, "Qdrant HNSW efConstruct");
     positiveInteger(
-      spec.hnsw.fullScanThreshold,
-      "Qdrant HNSW fullScanThreshold",
+      spec.hnsw.fullScanThresholdKb,
+      "Qdrant HNSW fullScanThresholdKb",
+    );
+    positiveInteger(
+      spec.indexingThresholdKb,
+      "Qdrant optimizer indexingThresholdKb",
     );
     let info = await this.getCollection(spec.name, signal);
     if (info === undefined) {
@@ -290,7 +325,10 @@ export class QdrantClient {
             hnsw_config: {
               m: spec.hnsw.m,
               ef_construct: spec.hnsw.efConstruct,
-              full_scan_threshold: spec.hnsw.fullScanThreshold,
+              full_scan_threshold: spec.hnsw.fullScanThresholdKb,
+            },
+            optimizers_config: {
+              indexing_threshold: spec.indexingThresholdKb,
             },
             on_disk_payload: false,
           },
@@ -307,7 +345,8 @@ export class QdrantClient {
       info.distance.toLowerCase() !== "cosine" ||
       info.hnsw.m !== spec.hnsw.m ||
       info.hnsw.efConstruct !== spec.hnsw.efConstruct ||
-      info.hnsw.fullScanThreshold !== spec.hnsw.fullScanThreshold
+      info.hnsw.fullScanThresholdKb !== spec.hnsw.fullScanThresholdKb ||
+      info.indexingThresholdKb !== spec.indexingThresholdKb
     ) {
       throw new Error(`Qdrant collection configuration mismatch: ${spec.name}`);
     }
@@ -327,6 +366,24 @@ export class QdrantClient {
       spec.name,
       "generation_id",
       { type: "keyword" },
+      signal,
+    );
+    await this.ensurePayloadIndex(
+      spec.name,
+      "session_id",
+      { type: "keyword" },
+      signal,
+    );
+    await this.ensurePayloadIndex(
+      spec.name,
+      "role",
+      { type: "keyword" },
+      signal,
+    );
+    await this.ensurePayloadIndex(
+      spec.name,
+      "timestamp",
+      { type: "datetime" },
       signal,
     );
   }
@@ -373,6 +430,12 @@ export class QdrantClient {
                 "Qdrant generation ID",
               ),
               scope_id: nonEmptyString(point.scopeId, "Qdrant scope ID"),
+              memory_id: nonEmptyString(point.memoryId, "Qdrant memory ID"),
+              session_id: nonEmptyString(point.sessionId, "Qdrant session ID"),
+              role: memoryRole(point.role, "Qdrant memory role"),
+              ...(point.timestamp === undefined
+                ? {}
+                : { timestamp: nonEmptyString(point.timestamp, "Qdrant timestamp") }),
               profile_id: nonEmptyString(point.profileId, "Qdrant profile ID"),
               content_hash: nonEmptyString(
                 point.contentHash,
@@ -424,40 +487,69 @@ export class QdrantClient {
     collectionName(request.collection);
     positiveInteger(request.limit, "Qdrant search limit");
     positiveInteger(request.hnswEf, "Qdrant search hnswEf");
+    const must: Array<Record<string, unknown>> = [
+      {
+        key: "generation_id",
+        match: {
+          value: nonEmptyString(request.generationId, "Qdrant generation ID"),
+        },
+      },
+      {
+        key: "scope_id",
+        match: { value: nonEmptyString(request.scopeId, "Qdrant scope ID") },
+      },
+      {
+        key: "profile_id",
+        match: { value: nonEmptyString(request.profileId, "Qdrant profile ID") },
+      },
+    ];
+    if (request.sessionIds && request.sessionIds.length > 0) {
+      must.push({
+        key: "session_id",
+        match: {
+          any: request.sessionIds.map((value) =>
+            nonEmptyString(value, "Qdrant session filter")
+          ),
+        },
+      });
+    }
+    if (request.roles && request.roles.length > 0) {
+      must.push({
+        key: "role",
+        match: {
+          any: request.roles.map((value) => memoryRole(value, "Qdrant role filter")),
+        },
+      });
+    }
+    if (request.after || request.before) {
+      must.push({
+        key: "timestamp",
+        range: {
+          ...(request.after === undefined
+            ? {}
+            : { gte: nonEmptyString(request.after, "Qdrant lower time bound") }),
+          ...(request.before === undefined
+            ? {}
+            : { lte: nonEmptyString(request.before, "Qdrant upper time bound") }),
+        },
+      });
+    }
     const response = await this.request(
       "POST",
       `/collections/${encodeURIComponent(request.collection)}/points/search`,
       {
         body: {
           vector: finiteVector(request.vector),
-          filter: {
-            must: [
-              {
-                key: "generation_id",
-                match: {
-                  value: nonEmptyString(
-                    request.generationId,
-                    "Qdrant generation ID",
-                  ),
-                },
-              },
-              {
-                key: "scope_id",
-                match: { value: nonEmptyString(request.scopeId, "Qdrant scope ID") },
-              },
-              {
-                key: "profile_id",
-                match: {
-                  value: nonEmptyString(request.profileId, "Qdrant profile ID"),
-                },
-              },
-            ],
-          },
+          filter: { must },
           params: { hnsw_ef: request.hnswEf, exact: false },
           limit: request.limit,
           with_payload: [
             "generation_id",
             "scope_id",
+            "memory_id",
+            "session_id",
+            "role",
+            "timestamp",
             "profile_id",
             "content_hash",
           ],
@@ -484,6 +576,18 @@ export class QdrantClient {
         String(payload.scope_id ?? ""),
         "Qdrant result scope ID",
       );
+      const memoryId = nonEmptyString(
+        String(payload.memory_id ?? ""),
+        "Qdrant result memory ID",
+      );
+      const sessionId = nonEmptyString(
+        String(payload.session_id ?? ""),
+        "Qdrant result session ID",
+      );
+      const role = memoryRole(payload.role, "Qdrant result memory role");
+      const timestamp = payload.timestamp === undefined
+        ? undefined
+        : nonEmptyString(String(payload.timestamp), "Qdrant result timestamp");
       const profileId = nonEmptyString(
         String(payload.profile_id ?? ""),
         "Qdrant result profile ID",
@@ -491,7 +595,15 @@ export class QdrantClient {
       if (
         generationId !== request.generationId ||
         scopeId !== request.scopeId ||
-        profileId !== request.profileId
+        profileId !== request.profileId ||
+        (request.sessionIds !== undefined && request.sessionIds.length > 0 &&
+          !request.sessionIds.includes(sessionId)) ||
+        (request.roles !== undefined && request.roles.length > 0 &&
+          !request.roles.includes(role)) ||
+        (request.after !== undefined &&
+          (timestamp === undefined || timestamp < request.after)) ||
+        (request.before !== undefined &&
+          (timestamp === undefined || timestamp > request.before))
       ) {
         throw new Error("Qdrant returned a result outside the mandatory scope filter");
       }
@@ -504,6 +616,10 @@ export class QdrantClient {
         score,
         generationId,
         scopeId,
+        memoryId,
+        sessionId,
+        role,
+        ...(timestamp === undefined ? {} : { timestamp }),
         profileId,
         contentHash: nonEmptyString(
           String(payload.content_hash ?? ""),

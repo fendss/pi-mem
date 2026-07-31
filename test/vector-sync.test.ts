@@ -29,7 +29,8 @@ const profile: EmbeddingProfile = {
 const collection: QdrantCollectionSpec = {
   name: "pimem_vectors_v1",
   dimensions: 2,
-  hnsw: { m: 32, efConstruct: 200, fullScanThreshold: 1_000 },
+  indexingThresholdKb: 10_000,
+  hnsw: { m: 32, efConstruct: 200, fullScanThresholdKb: 1_000 },
 };
 
 async function fixture(): Promise<{
@@ -84,8 +85,8 @@ class FakeQdrant implements QdrantVectorIndexClient {
       pointsCount: this.points.size,
       indexedVectorsCount: this.points.size,
       dimensions: collection.dimensions,
-      distance: "Cosine",
-      hnsw: collection.hnsw,
+      indexingThresholdKb: collection.indexingThresholdKb,
+      distance: "Cosine",      hnsw: collection.hnsw,
     };
   }
 

@@ -8,7 +8,8 @@ import {
 const SPEC: QdrantCollectionSpec = {
   name: "pimem_vectors_v1",
   dimensions: 2,
-  hnsw: { m: 32, efConstruct: 200, fullScanThreshold: 1_000 },
+  indexingThresholdKb: 10_000,
+  hnsw: { m: 32, efConstruct: 200, fullScanThresholdKb: 1_000 },
 };
 
 function jsonResponse(value: unknown, status = 200): Response {
@@ -39,7 +40,10 @@ function collectionResponse(overrides: {
         hnsw_config: {
           m: overrides.m ?? SPEC.hnsw.m,
           ef_construct: SPEC.hnsw.efConstruct,
-          full_scan_threshold: SPEC.hnsw.fullScanThreshold,
+          full_scan_threshold: SPEC.hnsw.fullScanThresholdKb,
+        },
+        optimizer_config: {
+          indexing_threshold: SPEC.indexingThresholdKb,
         },
       },
     },
@@ -76,12 +80,15 @@ describe("Qdrant server client", () => {
       jsonResponse({ result: { operation_id: 1 }, status: "ok" }),
       jsonResponse({ result: { operation_id: 2 }, status: "ok" }),
       jsonResponse({ result: { operation_id: 3 }, status: "ok" }),
+      jsonResponse({ result: { operation_id: 4 }, status: "ok" }),
+      jsonResponse({ result: { operation_id: 5 }, status: "ok" }),
+      jsonResponse({ result: { operation_id: 6 }, status: "ok" }),
     ];
     const fetchImpl = vi.fn<typeof fetch>(async () => responses.shift()!);
 
     await client(fetchImpl).ensureCollection(SPEC);
 
-    expect(fetchImpl).toHaveBeenCalledTimes(6);
+    expect(fetchImpl).toHaveBeenCalledTimes(9);
     const create = fetchImpl.mock.calls[1]!;
     expect(String(create[0])).toBe(
       "http://qdrant.internal:6333/collections/pimem_vectors_v1",
@@ -93,6 +100,7 @@ describe("Qdrant server client", () => {
         ef_construct: 200,
         full_scan_threshold: 1_000,
       },
+      optimizers_config: { indexing_threshold: 10_000 },
       on_disk_payload: false,
     });
     expect(JSON.parse(String(fetchImpl.mock.calls[3]?.[1]?.body))).toEqual({
@@ -107,6 +115,18 @@ describe("Qdrant server client", () => {
       field_name: "generation_id",
       field_schema: { type: "keyword" },
     });
+    expect(JSON.parse(String(fetchImpl.mock.calls[6]?.[1]?.body))).toEqual({
+      field_name: "session_id",
+      field_schema: { type: "keyword" },
+    });
+    expect(JSON.parse(String(fetchImpl.mock.calls[7]?.[1]?.body))).toEqual({
+      field_name: "role",
+      field_schema: { type: "keyword" },
+    });
+    expect(JSON.parse(String(fetchImpl.mock.calls[8]?.[1]?.body))).toEqual({
+      field_name: "timestamp",
+      field_schema: { type: "datetime" },
+    });
   });
 
   it("fails closed when an existing collection has incompatible vectors", async () => {
@@ -118,7 +138,7 @@ describe("Qdrant server client", () => {
     expect(fetchImpl).toHaveBeenCalledTimes(1);
   });
 
-  it("sends minimal provenance and mandatory scope filters", async () => {
+  it("sends minimal provenance and mandatory scope/filter constraints", async () => {
     const responses = [
       jsonResponse({ result: { operation_id: 1 }, status: "ok" }),
       jsonResponse({
@@ -128,6 +148,10 @@ describe("Qdrant server client", () => {
           payload: {
             generation_id: "generation-a",
             scope_id: "scope-a",
+            memory_id: "memory-a",
+            session_id: "session-a",
+            role: "user",
+            timestamp: "2024-01-01T00:00:00.000Z",
             profile_id: "profile-a",
             content_hash: "hash-a",
           },
@@ -143,6 +167,10 @@ describe("Qdrant server client", () => {
       vector: [1, 0],
       generationId: "generation-a",
       scopeId: "scope-a",
+      memoryId: "memory-a",
+      sessionId: "session-a",
+      role: "user",
+      timestamp: "2024-01-01T00:00:00.000Z",
       profileId: "profile-a",
       contentHash: "hash-a",
     }]);
@@ -152,6 +180,10 @@ describe("Qdrant server client", () => {
       generationId: "generation-a",
       scopeId: "scope-a",
       profileId: "profile-a",
+      sessionIds: ["session-a"],
+      roles: ["user"],
+      after: "2024-01-01T00:00:00.000Z",
+      before: "2024-01-02T00:00:00.000Z",
       limit: 20,
       hnswEf: 256,
     });
@@ -163,6 +195,10 @@ describe("Qdrant server client", () => {
       payload: {
         generation_id: "generation-a",
         scope_id: "scope-a",
+        memory_id: "memory-a",
+        session_id: "session-a",
+        role: "user",
+        timestamp: "2024-01-01T00:00:00.000Z",
         profile_id: "profile-a",
         content_hash: "hash-a",
         schema_version: 1,
@@ -175,12 +211,25 @@ describe("Qdrant server client", () => {
       { key: "generation_id", match: { value: "generation-a" } },
       { key: "scope_id", match: { value: "scope-a" } },
       { key: "profile_id", match: { value: "profile-a" } },
+      { key: "session_id", match: { any: ["session-a"] } },
+      { key: "role", match: { any: ["user"] } },
+      {
+        key: "timestamp",
+        range: {
+          gte: "2024-01-01T00:00:00.000Z",
+          lte: "2024-01-02T00:00:00.000Z",
+        },
+      },
     ]);
     expect(hits).toEqual([{
       pointId: "00000000-0000-4000-8000-000000000001",
       score: 0.91,
       generationId: "generation-a",
       scopeId: "scope-a",
+      memoryId: "memory-a",
+      sessionId: "session-a",
+      role: "user",
+      timestamp: "2024-01-01T00:00:00.000Z",
       profileId: "profile-a",
       contentHash: "hash-a",
     }]);
@@ -218,6 +267,9 @@ describe("Qdrant server client", () => {
         payload: {
           generation_id: "generation-a",
           scope_id: "scope-b",
+          memory_id: "memory-b",
+          session_id: "session-b",
+          role: "assistant",
           profile_id: "profile-a",
           content_hash: "hash-b",
         },

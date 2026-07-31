@@ -99,6 +99,10 @@ function pointFromClaim(claim: VectorSyncClaim): QdrantVectorPoint {
     vector: [...claim.vector],
     generationId: claim.generationId,
     scopeId: claim.scopeId,
+    memoryId: claim.memoryId,
+    sessionId: claim.sessionId,
+    role: claim.role,
+    ...(claim.timestamp === undefined ? {} : { timestamp: claim.timestamp }),
     profileId: claim.profileId,
     contentHash: claim.contentHash,
   };
@@ -256,8 +260,11 @@ export class QdrantVectorSynchronizer {
       if (!info) {
         throw new Error(`Qdrant collection disappeared: ${this.collection.name}`);
       }
+      const estimatedVectorSizeKb =
+        expectedVectorCount * this.collection.dimensions * Float32Array.BYTES_PER_ELEMENT /
+        1_024;
       const indexingRequired =
-        expectedVectorCount >= this.collection.hnsw.fullScanThreshold;
+        estimatedVectorSizeKb >= this.collection.indexingThresholdKb;
       if (
         info.status.toLowerCase() === "green" &&
         info.optimizerStatus.toLowerCase() === "ok" &&

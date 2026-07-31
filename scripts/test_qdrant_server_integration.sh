@@ -50,10 +50,21 @@ run_client() {
       "$script" "$phase" "http://${CONTAINER}:6333" "$@"
 }
 
+run_ann_client() {
+  docker run --rm \
+    --network "$NETWORK" \
+    --mount "type=bind,src=${ROOT},dst=/workspace,readonly" \
+    --workdir /workspace \
+    "$NODE_IMAGE" \
+    node scripts/qdrant_ann_recall_integration_client.mjs \
+      "http://${CONTAINER}:6333"
+}
+
 start_qdrant
 seed_result=$(run_client seed scripts/qdrant_integration_client.mjs)
 sync_seed_result=$(run_client \
   seed scripts/qdrant_vector_sync_integration_client.mjs /state/memory.sqlite)
+ann_result=$(run_ann_client)
 docker rm -f "$CONTAINER" >/dev/null
 start_qdrant
 verify_result=$(run_client verify scripts/qdrant_integration_client.mjs)
@@ -68,6 +79,7 @@ printf '  "pointUpsert": "idempotent",\n'
 printf '  "strictScopeIsolation": "ok",\n'
 printf '  "persistenceAfterRestart": "ok",\n'
 printf '  "asyncOutboxFinalize": "ok",\n'
+printf '  "annRecall": %s,\n' "$ann_result"
 printf '  "phases": [%s, %s, %s, %s]\n' \
   "$seed_result" "$sync_seed_result" "$verify_result" "$sync_verify_result"
 printf '}\n'

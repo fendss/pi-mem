@@ -1,5 +1,7 @@
 #!/usr/bin/env node
 import { rm } from "node:fs/promises";
+import { QdrantDenseRetriever } from "../dist/dense-retriever.js";
+import { HybridMemoryStore } from "../dist/hybrid-search.js";
 import { ingestMemorySessions } from "../dist/ingest.js";
 import { QdrantClient } from "../dist/qdrant.js";
 import { MemoryStore } from "../dist/store.js";
@@ -24,7 +26,8 @@ const profile = {
 const collection = {
   name: "pimem_vectors_sync_v1",
   dimensions: 4,
-  hnsw: { m: 32, efConstruct: 200, fullScanThreshold: 1_000 },
+  indexingThresholdKb: 10_000,
+  hnsw: { m: 32, efConstruct: 200, fullScanThresholdKb: 1_000 },
 };
 const client = new QdrantClient({ baseUrl, timeoutMs: 5_000 });
 
@@ -132,12 +135,45 @@ try {
   if (hits.length !== 2 || hits.some((hit) => !expected.has(hit.pointId))) {
     throw new Error(`Vector sync scope isolation mismatch: ${JSON.stringify(hits)}`);
   }
+
+  const embedder = {
+    profileId: profile.profileId,
+    model: profile.model,
+    dimensions: profile.dimensions,
+    maxInputLength: 2_048,
+    batchSize: 32,
+    embedDocuments: async (texts) => texts.map(() => [1, 0, 0, 0]),
+    embedQueries: async (texts) => texts.map(() => [1, 0, 0, 0]),
+    snapshotMetrics: () => ({ calls: 1, latencyMs: 0 }),
+  };
+  const denseRetriever = new QdrantDenseRetriever({
+    store,
+    client,
+    generationId,
+    collectionName: collection.name,
+    hnswEf: 256,
+  });
+  const hybrid = new HybridMemoryStore(store, embedder, denseRetriever);
+  const hybridHits = await hybrid.search("scope-sync-a", {
+    queries: ["alpha"],
+    limit: 2,
+  });
+  if (
+    hybrid.getRetrievalMetadata().retrievalProfile !==
+      "pimem-hybrid-qdrant-hnsw-v1" ||
+    hybridHits.length !== 2 ||
+    !hybridHits.some((hit) => hit.record.memoryId === "memory-sync-a")
+  ) {
+    throw new Error(`Qdrant hybrid retrieval mismatch: ${JSON.stringify(hybridHits)}`);
+  }
   process.stdout.write(`${JSON.stringify({
     phase,
     generationState: generation.state,
     expectedVectorCount: generation.expectedVectorCount,
     qdrantVectorCount: count,
     isolatedHits: hits.length,
+    hybridHits: hybridHits.length,
+    retrievalProfile: hybrid.getRetrievalMetadata().retrievalProfile,
   })}\n`);
 } finally {
   store.close();
