@@ -1,3 +1,7 @@
+import {
+  SqliteExactDenseRetriever,
+  type DenseRetriever,
+} from "./dense-retriever.js";
 import type { Embedder } from "./embedding.js";
 import { embeddingProfile } from "./embedding-index.js";
 import {
@@ -6,11 +10,7 @@ import {
   reciprocalRankFusion,
 } from "./ranking.js";
 import { finalizeSearchHits } from "./search-results.js";
-import type {
-  MemoryStore,
-  StoreSearchHit,
-  StoredEmbeddingRecord,
-} from "./store.js";
+import type { MemoryStore, StoreSearchHit } from "./store.js";
 import type {
   EvidenceOperatorSearchContext,
   MemoryRecord,
@@ -25,27 +25,6 @@ interface RankedHybridHit extends StoreSearchHit {
   queryIndex: number;
 }
 
-function cosineSimilarity(left: ArrayLike<number>, right: ArrayLike<number>): number {
-  if (left.length !== right.length) {
-    throw new Error("Cosine vectors must have the same dimensions");
-  }
-  let dot = 0;
-  let leftNorm = 0;
-  let rightNorm = 0;
-  for (let index = 0; index < left.length; index += 1) {
-    const leftValue = left[index]!;
-    const rightValue = right[index]!;
-    if (!Number.isFinite(leftValue) || !Number.isFinite(rightValue)) {
-      throw new Error("Cosine vectors must contain only finite values");
-    }
-    dot += leftValue * rightValue;
-    leftNorm += leftValue * leftValue;
-    rightNorm += rightValue * rightValue;
-  }
-  if (leftNorm === 0 || rightNorm === 0) return 0;
-  return dot / (Math.sqrt(leftNorm) * Math.sqrt(rightNorm));
-}
-
 function compareFinal(left: RankedHybridHit, right: RankedHybridHit): number {
   const score = right.score - left.score;
   if (score !== 0) return score;
@@ -54,20 +33,26 @@ function compareFinal(left: RankedHybridHit, right: RankedHybridHit): number {
   return left.record.memoryId.localeCompare(right.record.memoryId);
 }
 
-function candidateText(candidate: Pick<StoredEmbeddingRecord, "record">): string {
+function candidateText(candidate: { record: MemoryRecord }): string {
   return `${candidate.record.role}: ${candidate.record.content}`;
 }
 
 export class HybridMemoryStore {
   readonly rawStore: MemoryStore;
   readonly embedder: Embedder;
+  readonly denseRetriever: DenseRetriever;
 
   private denseCandidateCount = 0;
   private rerankCandidateCount = 0;
 
-  constructor(rawStore: MemoryStore, embedder: Embedder) {
+  constructor(
+    rawStore: MemoryStore,
+    embedder: Embedder,
+    denseRetriever: DenseRetriever = new SqliteExactDenseRetriever(rawStore),
+  ) {
     this.rawStore = rawStore;
     this.embedder = embedder;
+    this.denseRetriever = denseRetriever;
   }
 
   getRetrievalMetadata(): RetrievalMetadata {
@@ -114,37 +99,36 @@ export class HybridMemoryStore {
     if (queryVectors.length !== request.queries.length) {
       throw new Error("Query embedding count does not match query count");
     }
-    const records = this.rawStore.listStoredEmbeddings(scopeId, profile, {
-      ...(request.sessionIds === undefined
-        ? {}
-        : { sessionIds: request.sessionIds }),
-      ...(request.roles === undefined ? {} : { roles: request.roles }),
-      ...(request.after === undefined ? {} : { after: request.after }),
-      ...(request.before === undefined ? {} : { before: request.before }),
-    });
-    if (records.length === 0) return [];
-
     const headroom = Math.max(20, 4 * limit);
+    const denseRankings = await this.denseRetriever.search({
+      scopeId,
+      profile,
+      queryVectors,
+      limit: headroom,
+      filters: {
+        ...(request.sessionIds === undefined
+          ? {}
+          : { sessionIds: request.sessionIds }),
+        ...(request.roles === undefined ? {} : { roles: request.roles }),
+        ...(request.after === undefined ? {} : { after: request.after }),
+        ...(request.before === undefined ? {} : { before: request.before }),
+      },
+      ...(signal === undefined ? {} : { signal }),
+    });
+    if (denseRankings.length !== request.queries.length) {
+      throw new Error("Dense ranking count does not match query count");
+    }
+    if (denseRankings.every((ranking) => ranking.length === 0)) return [];
+
     const perQueryLimit =
       request.maxPerSession === undefined ? limit : headroom;
     const merged = new Map<string, RankedHybridHit>();
     const queryCoverageHits: RankedHybridHit[] = [];
     request.queries.forEach((query, queryIndex) => {
-      const queryVector = queryVectors[queryIndex]!;
-      const denseCandidates = records
-        .map((candidate) => ({
-          candidate,
-          cosine: cosineSimilarity(queryVector, candidate.vector),
-        }))
-        .sort((left, right) => {
-          const score = right.cosine - left.cosine;
-          return score !== 0
-            ? score
-            : left.candidate.record.memoryId.localeCompare(
-                right.candidate.record.memoryId,
-              );
-        })
-        .slice(0, headroom);
+      const denseCandidates = denseRankings[queryIndex]!.map((hit) => ({
+        candidate: { record: hit.record },
+        cosine: hit.score,
+      }));
       const {
         maxPerSession: _ignoredMaxPerSession,
         order: _ignoredOrder,
@@ -158,7 +142,7 @@ export class HybridMemoryStore {
       });
       this.denseCandidateCount += denseCandidates.length;
 
-      const union = new Map<string, Pick<StoredEmbeddingRecord, "record">>();
+      const union = new Map<string, { record: MemoryRecord }>();
       for (const { candidate } of denseCandidates) {
         union.set(candidate.record.memoryId, candidate);
       }

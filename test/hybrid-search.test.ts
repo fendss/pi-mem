@@ -2,6 +2,12 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
+import {
+  SqliteExactDenseRetriever,
+  type DenseSearchBatchRequest,
+  type DenseSearchHit,
+  type DenseRetriever,
+} from "../src/dense-retriever.js";
 import type {
   Embedder,
   EmbeddingMetrics,
@@ -99,6 +105,53 @@ afterEach(async () => {
 });
 
 describe("PiMem hybrid search", () => {
+  it("uses the v1.0 exact SQLite dense retriever by default", async () => {
+    const { raw, hybrid } = await createStore();
+    try {
+      expect(hybrid.denseRetriever).toBeInstanceOf(SqliteExactDenseRetriever);
+    } finally {
+      raw.close();
+    }
+  });
+
+  it("accepts an asynchronous dense retriever without changing the Agent API", async () => {
+    const { raw, embedder } = await createStore();
+    const records = raw.listScopeRecords("scope-1");
+    const requests: DenseSearchBatchRequest[] = [];
+    const denseRetriever: DenseRetriever = {
+      search(request): Promise<DenseSearchHit[][]> {
+        requests.push(request);
+        return Promise.resolve(request.queryVectors.map(() => [
+          { record: records[3]!, score: 0.9, rank: 1 },
+          { record: records[0]!, score: 0.8, rank: 2 },
+        ]));
+      },
+    };
+    const hybrid = new HybridMemoryStore(raw, embedder, denseRetriever);
+    try {
+      const hits = await hybrid.search("scope-1", {
+        queries: ["semantic-only-unmatched"],
+        roles: ["user"],
+        limit: 2,
+      });
+      expect(hits.map((hit) => hit.record.memoryId)).toEqual(["m4", "m1"]);
+      expect(requests).toHaveLength(1);
+      expect(requests[0]).toMatchObject({
+        scopeId: "scope-1",
+        limit: 20,
+        filters: { roles: ["user"] },
+        profile: {
+          profileId: embedder.profileId,
+          model: embedder.model,
+          dimensions: embedder.dimensions,
+        },
+      });
+      expect(requests[0]?.queryVectors).toEqual([[1, 0]]);
+    } finally {
+      raw.close();
+    }
+  });
+
   it("fails closed before embedding a query when the scope index is incomplete", async () => {
     const { raw, embedder, hybrid } = await createStore(false);
     try {
