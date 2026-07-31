@@ -30,6 +30,38 @@ export async function indexScopeEmbeddings(
   embedder: Embedder,
   signal?: AbortSignal,
 ): Promise<EmbeddingIndexResult> {
+  return indexScopeEmbeddingsInternal(store, scopeId, embedder, signal);
+}
+
+export async function indexScopeEmbeddingsForVectorGeneration(
+  store: MemoryStore,
+  scopeId: string,
+  embedder: Embedder,
+  generationId: string,
+  signal?: AbortSignal,
+): Promise<EmbeddingIndexResult> {
+  const result = await indexScopeEmbeddingsInternal(
+    store,
+    scopeId,
+    embedder,
+    signal,
+    generationId,
+  );
+  store.enqueueStoredScopeEmbeddingsForVectorGeneration(
+    generationId,
+    scopeId,
+    embeddingProfile(embedder),
+  );
+  return result;
+}
+
+async function indexScopeEmbeddingsInternal(
+  store: MemoryStore,
+  scopeId: string,
+  embedder: Embedder,
+  signal?: AbortSignal,
+  generationId?: string,
+): Promise<EmbeddingIndexResult> {
   const profile = embeddingProfile(embedder);
   const before = store.getEmbeddingIndexStatus(scopeId, profile);
   if (before.total === 0) {
@@ -47,7 +79,14 @@ export async function indexScopeEmbeddings(
       signal === undefined
         ? await embedder.embedDocuments(inputs)
         : await embedder.embedDocuments(inputs, { signal });
-    const stored = store.storeEmbeddingBatch(batch, profile, vectors);
+    const stored = generationId === undefined
+      ? store.storeEmbeddingBatch(batch, profile, vectors)
+      : store.storeEmbeddingBatchForVectorGeneration(
+          generationId,
+          batch,
+          profile,
+          vectors,
+        );
     indexedNow += stored.inserted;
     unchangedNow += stored.unchanged;
   }

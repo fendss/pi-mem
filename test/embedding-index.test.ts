@@ -10,6 +10,7 @@ import type {
 import {
   embeddingProfile,
   indexScopeEmbeddings,
+  indexScopeEmbeddingsForVectorGeneration,
 } from "../src/embedding-index.js";
 import { ingestMemorySessions } from "../src/ingest.js";
 import { MemoryStore } from "../src/store.js";
@@ -95,6 +96,36 @@ describe("derived embedding index", () => {
       expect(embedder.inputs).toEqual([]);
       expect(store.listScopeRecords("scope-1").map((record) => record.content))
         .toEqual(["alpha", "beta"]);
+    } finally {
+      store.close();
+    }
+  });
+
+  it("atomically queues new and pre-existing vectors for asynchronous indexing", async () => {
+    const store = await createStore();
+    const embedder = new FakeEmbedder();
+    try {
+      const records = store.listScopeRecords("scope-1");
+      const profile = embeddingProfile(embedder);
+      store.storeEmbeddingBatch([records[0]!], profile, [[5, 1]]);
+      store.beginVectorIndexGeneration({
+        generationId: "generation-a",
+        collectionName: "pimem_vectors_v1",
+        profile,
+      });
+
+      const result = await indexScopeEmbeddingsForVectorGeneration(
+        store,
+        "scope-1",
+        embedder,
+        "generation-a",
+      );
+      expect(result).toMatchObject({ indexedNow: 1, skipped: 1, missing: 0 });
+      expect(store.getVectorIndexGeneration("generation-a")).toMatchObject({
+        state: "ingesting",
+        pendingVectorCount: 2,
+      });
+      expect(embedder.inputs).toEqual(["assistant: beta"]);
     } finally {
       store.close();
     }

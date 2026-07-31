@@ -26,6 +26,9 @@ function collectionResponse(overrides: {
   return jsonResponse({
     result: {
       status: "green",
+      optimizer_status: "ok",
+      points_count: 0,
+      indexed_vectors_count: 0,
       config: {
         params: {
           vectors: {
@@ -72,12 +75,13 @@ describe("Qdrant server client", () => {
       collectionResponse(),
       jsonResponse({ result: { operation_id: 1 }, status: "ok" }),
       jsonResponse({ result: { operation_id: 2 }, status: "ok" }),
+      jsonResponse({ result: { operation_id: 3 }, status: "ok" }),
     ];
     const fetchImpl = vi.fn<typeof fetch>(async () => responses.shift()!);
 
     await client(fetchImpl).ensureCollection(SPEC);
 
-    expect(fetchImpl).toHaveBeenCalledTimes(5);
+    expect(fetchImpl).toHaveBeenCalledTimes(6);
     const create = fetchImpl.mock.calls[1]!;
     expect(String(create[0])).toBe(
       "http://qdrant.internal:6333/collections/pimem_vectors_v1",
@@ -99,6 +103,10 @@ describe("Qdrant server client", () => {
       field_name: "profile_id",
       field_schema: { type: "keyword" },
     });
+    expect(JSON.parse(String(fetchImpl.mock.calls[5]?.[1]?.body))).toEqual({
+      field_name: "generation_id",
+      field_schema: { type: "keyword" },
+    });
   });
 
   it("fails closed when an existing collection has incompatible vectors", async () => {
@@ -118,6 +126,7 @@ describe("Qdrant server client", () => {
           id: "00000000-0000-4000-8000-000000000001",
           score: 0.91,
           payload: {
+            generation_id: "generation-a",
             scope_id: "scope-a",
             profile_id: "profile-a",
             content_hash: "hash-a",
@@ -132,6 +141,7 @@ describe("Qdrant server client", () => {
     await qdrant.upsert(SPEC.name, 2, [{
       pointId: "00000000-0000-4000-8000-000000000001",
       vector: [1, 0],
+      generationId: "generation-a",
       scopeId: "scope-a",
       profileId: "profile-a",
       contentHash: "hash-a",
@@ -139,6 +149,7 @@ describe("Qdrant server client", () => {
     const hits = await qdrant.search({
       collection: SPEC.name,
       vector: [1, 0],
+      generationId: "generation-a",
       scopeId: "scope-a",
       profileId: "profile-a",
       limit: 20,
@@ -150,6 +161,7 @@ describe("Qdrant server client", () => {
       id: "00000000-0000-4000-8000-000000000001",
       vector: [1, 0],
       payload: {
+        generation_id: "generation-a",
         scope_id: "scope-a",
         profile_id: "profile-a",
         content_hash: "hash-a",
@@ -160,16 +172,42 @@ describe("Qdrant server client", () => {
 
     const search = JSON.parse(String(fetchImpl.mock.calls[1]?.[1]?.body));
     expect(search.filter.must).toEqual([
+      { key: "generation_id", match: { value: "generation-a" } },
       { key: "scope_id", match: { value: "scope-a" } },
       { key: "profile_id", match: { value: "profile-a" } },
     ]);
     expect(hits).toEqual([{
       pointId: "00000000-0000-4000-8000-000000000001",
       score: 0.91,
+      generationId: "generation-a",
       scopeId: "scope-a",
       profileId: "profile-a",
       contentHash: "hash-a",
     }]);
+  });
+
+  it("uses exact generation/profile/scope filters when counting points", async () => {
+    const fetchImpl = vi.fn<typeof fetch>(async () => jsonResponse({
+      result: { count: 7 },
+      status: "ok",
+    }));
+    const count = await client(fetchImpl).count({
+      collection: SPEC.name,
+      generationId: "generation-a",
+      profileId: "profile-a",
+      scopeId: "scope-a",
+    });
+    expect(count).toBe(7);
+    expect(JSON.parse(String(fetchImpl.mock.calls[0]?.[1]?.body))).toEqual({
+      filter: {
+        must: [
+          { key: "generation_id", match: { value: "generation-a" } },
+          { key: "profile_id", match: { value: "profile-a" } },
+          { key: "scope_id", match: { value: "scope-a" } },
+        ],
+      },
+      exact: true,
+    });
   });
 
   it("rejects a server result outside the requested scope", async () => {
@@ -178,6 +216,7 @@ describe("Qdrant server client", () => {
         id: "00000000-0000-4000-8000-000000000002",
         score: 0.9,
         payload: {
+          generation_id: "generation-a",
           scope_id: "scope-b",
           profile_id: "profile-a",
           content_hash: "hash-b",
@@ -188,6 +227,7 @@ describe("Qdrant server client", () => {
     await expect(client(fetchImpl).search({
       collection: SPEC.name,
       vector: [1, 0],
+      generationId: "generation-a",
       scopeId: "scope-a",
       profileId: "profile-a",
       limit: 20,

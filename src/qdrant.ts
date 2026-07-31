@@ -15,6 +15,7 @@ export interface QdrantCollectionSpec {
 export interface QdrantVectorPoint {
   pointId: string;
   vector: readonly number[];
+  generationId: string;
   scopeId: string;
   profileId: string;
   contentHash: string;
@@ -23,6 +24,7 @@ export interface QdrantVectorPoint {
 export interface QdrantSearchRequest {
   collection: string;
   vector: readonly number[];
+  generationId: string;
   scopeId: string;
   profileId: string;
   limit: number;
@@ -33,6 +35,7 @@ export interface QdrantSearchRequest {
 export interface QdrantSearchHit {
   pointId: string;
   score: number;
+  generationId: string;
   scopeId: string;
   profileId: string;
   contentHash: string;
@@ -49,11 +52,22 @@ interface QdrantEnvelope {
   status?: unknown;
 }
 
-interface QdrantCollectionInfo {
+export interface QdrantCollectionInfo {
   status: string;
+  optimizerStatus: string;
+  pointsCount: number;
+  indexedVectorsCount: number;
   dimensions: number;
   distance: string;
   hnsw: QdrantHnswConfig;
+}
+
+export interface QdrantCountRequest {
+  collection: string;
+  generationId: string;
+  profileId: string;
+  scopeId?: string;
+  signal?: AbortSignal;
 }
 
 export class QdrantHttpError extends Error {
@@ -69,6 +83,13 @@ export class QdrantHttpError extends Error {
 function positiveInteger(value: number, label: string): number {
   if (!Number.isSafeInteger(value) || value <= 0) {
     throw new Error(`${label} must be a positive integer`);
+  }
+  return value;
+}
+
+function nonNegativeInteger(value: number, label: string): number {
+  if (!Number.isSafeInteger(value) || value < 0) {
+    throw new Error(`${label} must be a non-negative integer`);
   }
   return value;
 }
@@ -136,6 +157,12 @@ function responseSignal(timeoutMs: number, signal?: AbortSignal): AbortSignal {
   return signal === undefined ? timeout : AbortSignal.any([signal, timeout]);
 }
 
+function optimizerStatus(value: unknown): string {
+  if (typeof value === "string") return nonEmptyString(value, "Qdrant optimizer status");
+  const status = objectValue(value, "Qdrant optimizer status");
+  return nonEmptyString(String(status.status ?? ""), "Qdrant optimizer status");
+}
+
 function collectionInfo(value: unknown): QdrantCollectionInfo {
   const envelope = objectValue(value, "Qdrant collection response");
   const result = objectValue(envelope.result, "Qdrant collection result");
@@ -146,6 +173,15 @@ function collectionInfo(value: unknown): QdrantCollectionInfo {
   const status = nonEmptyString(String(result.status ?? ""), "Qdrant status");
   return {
     status,
+    optimizerStatus: optimizerStatus(result.optimizer_status),
+    pointsCount: nonNegativeInteger(
+      Number(result.points_count),
+      "Qdrant point count",
+    ),
+    indexedVectorsCount: nonNegativeInteger(
+      Number(result.indexed_vectors_count),
+      "Qdrant indexed vector count",
+    ),
     dimensions: positiveInteger(Number(vectors.size), "Qdrant vector size"),
     distance: nonEmptyString(String(vectors.distance ?? ""), "Qdrant distance"),
     hnsw: {
@@ -287,6 +323,12 @@ export class QdrantClient {
       { type: "keyword" },
       signal,
     );
+    await this.ensurePayloadIndex(
+      spec.name,
+      "generation_id",
+      { type: "keyword" },
+      signal,
+    );
   }
 
   private async ensurePayloadIndex(
@@ -326,6 +368,10 @@ export class QdrantClient {
             id: nonEmptyString(point.pointId, "Qdrant point ID"),
             vector: finiteVector(point.vector, dimensions),
             payload: {
+              generation_id: nonEmptyString(
+                point.generationId,
+                "Qdrant generation ID",
+              ),
               scope_id: nonEmptyString(point.scopeId, "Qdrant scope ID"),
               profile_id: nonEmptyString(point.profileId, "Qdrant profile ID"),
               content_hash: nonEmptyString(
@@ -341,6 +387,39 @@ export class QdrantClient {
     );
   }
 
+  async count(request: QdrantCountRequest): Promise<number> {
+    collectionName(request.collection);
+    const must: Array<Record<string, unknown>> = [
+      {
+        key: "generation_id",
+        match: {
+          value: nonEmptyString(request.generationId, "Qdrant generation ID"),
+        },
+      },
+      {
+        key: "profile_id",
+        match: { value: nonEmptyString(request.profileId, "Qdrant profile ID") },
+      },
+    ];
+    if (request.scopeId !== undefined) {
+      must.push({
+        key: "scope_id",
+        match: { value: nonEmptyString(request.scopeId, "Qdrant scope ID") },
+      });
+    }
+    const response = await this.request(
+      "POST",
+      `/collections/${encodeURIComponent(request.collection)}/points/count`,
+      {
+        body: { filter: { must }, exact: true },
+        ...(request.signal === undefined ? {} : { signal: request.signal }),
+      },
+    );
+    const envelope = objectValue(response.value, "Qdrant count response");
+    const result = objectValue(envelope.result, "Qdrant count result");
+    return nonNegativeInteger(Number(result.count), "Qdrant filtered point count");
+  }
+
   async search(request: QdrantSearchRequest): Promise<QdrantSearchHit[]> {
     collectionName(request.collection);
     positiveInteger(request.limit, "Qdrant search limit");
@@ -353,6 +432,15 @@ export class QdrantClient {
           vector: finiteVector(request.vector),
           filter: {
             must: [
+              {
+                key: "generation_id",
+                match: {
+                  value: nonEmptyString(
+                    request.generationId,
+                    "Qdrant generation ID",
+                  ),
+                },
+              },
               {
                 key: "scope_id",
                 match: { value: nonEmptyString(request.scopeId, "Qdrant scope ID") },
@@ -367,7 +455,12 @@ export class QdrantClient {
           },
           params: { hnsw_ef: request.hnswEf, exact: false },
           limit: request.limit,
-          with_payload: ["scope_id", "profile_id", "content_hash"],
+          with_payload: [
+            "generation_id",
+            "scope_id",
+            "profile_id",
+            "content_hash",
+          ],
           with_vector: false,
         },
         ...(request.signal === undefined ? {} : { signal: request.signal }),
@@ -383,6 +476,10 @@ export class QdrantClient {
         hit.payload,
         `Qdrant search result ${index} payload`,
       );
+      const generationId = nonEmptyString(
+        String(payload.generation_id ?? ""),
+        "Qdrant result generation ID",
+      );
       const scopeId = nonEmptyString(
         String(payload.scope_id ?? ""),
         "Qdrant result scope ID",
@@ -391,7 +488,11 @@ export class QdrantClient {
         String(payload.profile_id ?? ""),
         "Qdrant result profile ID",
       );
-      if (scopeId !== request.scopeId || profileId !== request.profileId) {
+      if (
+        generationId !== request.generationId ||
+        scopeId !== request.scopeId ||
+        profileId !== request.profileId
+      ) {
         throw new Error("Qdrant returned a result outside the mandatory scope filter");
       }
       const score = Number(hit.score);
@@ -401,6 +502,7 @@ export class QdrantClient {
       return {
         pointId: nonEmptyString(String(hit.id ?? ""), "Qdrant result point ID"),
         score,
+        generationId,
         scopeId,
         profileId,
         contentHash: nonEmptyString(

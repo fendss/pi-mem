@@ -8,6 +8,7 @@ if (!new Set(["seed", "verify"]).has(phase) || !baseUrl) {
 
 const client = new QdrantClient({ baseUrl, timeoutMs: 5_000 });
 const collection = "pimem_vectors_v1";
+const generationId = "generation-a";
 const spec = {
   name: collection,
   dimensions: 4,
@@ -16,6 +17,7 @@ const spec = {
 const pointA = {
   pointId: "00000000-0000-4000-8000-000000000001",
   vector: [1, 0, 0, 0],
+  generationId,
   scopeId: "scope-a",
   profileId: "profile-a",
   contentHash: "hash-a",
@@ -23,6 +25,7 @@ const pointA = {
 const pointB = {
   pointId: "00000000-0000-4000-8000-000000000002",
   vector: [0, 1, 0, 0],
+  generationId,
   scopeId: "scope-b",
   profileId: "profile-a",
   contentHash: "hash-b",
@@ -47,6 +50,7 @@ async function assertIsolated(point, queryVector) {
   const hits = await client.search({
     collection,
     vector: queryVector,
+    generationId,
     scopeId: point.scopeId,
     profileId: point.profileId,
     limit: 10,
