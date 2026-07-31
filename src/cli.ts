@@ -28,6 +28,7 @@ import {
   runBenchmarkAnswer,
   type BenchmarkAnswerResult,
 } from "./benchmark-answer.js";
+import { QdrantDenseRetriever } from "./dense-retriever.js";
 import {
   type Embedder,
   OpenAICompatibleEmbedder,
@@ -50,6 +51,7 @@ import {
   requireEnvironmentVariable,
 } from "./protected-env.js";
 import { AsyncRequestGate } from "./request-gate.js";
+import { QdrantClient } from "./qdrant.js";
 import {
   parseRetrievalProfile,
 } from "./retrieval-profile.js";
@@ -60,6 +62,7 @@ import {
   runPiMem,
   type PiMemRuntimeStore,
 } from "./runtime.js";
+import { SqliteRetrievalWorkerPool } from "./sqlite-retrieval-pool.js";
 import { MemoryStore } from "./store.js";
 import type {
   PiMemResult,
@@ -204,6 +207,20 @@ function retrievalProfileFor(parsed: ParsedCommand): RetrievalProfile {
   return parseRetrievalProfile(optionalFlag(parsed, "retrieval-profile"));
 }
 
+function environmentPositiveInteger(
+  name: string,
+  fallback: number,
+  maximum: number,
+): number {
+  const raw = process.env[name]?.trim();
+  if (!raw) return fallback;
+  const value = Number(raw);
+  if (!Number.isSafeInteger(value) || value < 1 || value > maximum) {
+    throw new Error(`${name} must be an integer between 1 and ${maximum}`);
+  }
+  return value;
+}
+
 interface RetrievalContext {
   store: PiMemRuntimeStore;
   metadata: RetrievalMetadata;
@@ -217,6 +234,11 @@ function createRetrievalContext(
 ): RetrievalContext {
   if (profile === "fts5") {
     return { store: rawStore, metadata: { retrievalProfile: "fts5" } };
+  }
+  if (profile === "pimem-hybrid-qdrant-hnsw-v1") {
+    throw new Error(
+      "Qdrant retrieval requires benchmark-longmemeval worker initialization",
+    );
   }
   const selectedEmbedder =
     embedder ?? OpenAICompatibleEmbedder.fromEnvironment();
@@ -850,6 +872,7 @@ async function benchmarkLongMemEval(parsed: ParsedCommand): Promise<void> {
   const completed = new Set([...legacyCompleted, ...records.keys()]);
   const pending = selected.filter((question) => !completed.has(question.questionId));
   const rawStore = await MemoryStore.create(paths.database);
+  let retrievalPool: SqliteRetrievalWorkerPool | undefined;
   let succeededNow = 0;
   let failedNow = 0;
   let notStarted = 0;
@@ -859,12 +882,61 @@ async function benchmarkLongMemEval(parsed: ParsedCommand): Promise<void> {
   try {
     const modelRuntime = await loadPiModelRuntime(modelOptionsFor(parsed));
     const contextCount = Math.max(1, Math.min(slots, Math.max(1, pending.length)));
-    const retrievalContexts = Array.from({ length: contextCount }, () =>
-      createRetrievalContext(rawStore, retrievalProfile),
-    );
+    let retrievalContexts: RetrievalContext[];
+    if (retrievalProfile === "pimem-hybrid-qdrant-hnsw-v1") {
+      retrievalPool = await SqliteRetrievalWorkerPool.create({
+        databasePath: rawStore.databasePath,
+        size: environmentPositiveInteger(
+          "PIMEM_SQLITE_RETRIEVAL_WORKERS",
+          128,
+          128,
+        ),
+      });
+      const denseRetriever = new QdrantDenseRetriever({
+        store: retrievalPool,
+        client: new QdrantClient({
+          baseUrl: requireEnvironmentVariable(process.env, "PIMEM_QDRANT_URL"),
+          timeoutMs: environmentPositiveInteger(
+            "PIMEM_QDRANT_TIMEOUT_MS",
+            120_000,
+            600_000,
+          ),
+        }),
+        generationId: requireEnvironmentVariable(
+          process.env,
+          "PIMEM_VECTOR_GENERATION_ID",
+        ),
+        collectionName: requireEnvironmentVariable(
+          process.env,
+          "PIMEM_QDRANT_COLLECTION",
+        ),
+        hnswEf: environmentPositiveInteger(
+          "PIMEM_QDRANT_HNSW_EF",
+          800,
+          10_000,
+        ),
+      });
+      retrievalContexts = Array.from({ length: contextCount }, () => {
+        const embedder = OpenAICompatibleEmbedder.fromEnvironment();
+        const store = new HybridMemoryStore(
+          retrievalPool!,
+          embedder,
+          denseRetriever,
+        );
+        return {
+          store,
+          metadata: store.getRetrievalMetadata(),
+          embedder,
+        };
+      });
+    } else {
+      retrievalContexts = Array.from({ length: contextCount }, () =>
+        createRetrievalContext(rawStore, retrievalProfile),
+      );
+    }
     retrieval = retrievalContexts[0]!.metadata;
 
-    if (retrievalProfile === "pimem-hybrid") {
+    if (retrievalProfile !== "fts5") {
       const profile = embeddingProfile(retrievalContexts[0]!.embedder!);
       let total = 0;
       let indexed = 0;
@@ -1001,6 +1073,7 @@ async function benchmarkLongMemEval(parsed: ParsedCommand): Promise<void> {
       notStarted += pending.length - canaryCount;
     }
   } finally {
+    await retrievalPool?.close();
     rawStore.close();
   }
 
@@ -1882,7 +1955,7 @@ function printHelp(): void {
 Commands:
   ingest-longmemeval --source FILE --data-dir DIR [--question-id ID ...] [--retrieval-profile fts5|pimem-hybrid] [--embedding-slots N] [--embedding-rps N]
   run-longmemeval    --data-dir DIR --question-id ID [--retrieval-profile fts5|pimem-hybrid] [--model ID]
-  benchmark-longmemeval --data-dir DIR --output-dir DIR [--question-id ID ...] [--retrieval-profile fts5|pimem-hybrid] [--model ID] [--slots N]
+  benchmark-longmemeval --data-dir DIR --output-dir DIR [--question-id ID ...] [--retrieval-profile fts5|pimem-hybrid|pimem-hybrid-qdrant-hnsw-v1] [--model ID] [--slots N]
   longmemeval-suite --source FILE --data-dir DIR --output-dir DIR --embedding-env FILE --answer-env FILE --judge-env FILE --agent-dir DIR --provider ID --model ID --archive FILE.tar.gz --evaluation-archive FILE.tar.gz [--slots N] [--frozen-slots N] [--judge-slots N]
   prepare-longmemeval-eval --source FILE --predictions FILE --output FILE
   package-benchmark   --output-dir DIR --archive FILE.tar.gz

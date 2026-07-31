@@ -319,6 +319,16 @@ npm run cli -- package-benchmark \
 Repeat `--question-id` to ingest more than one scope. Omitting it ingests the
 full LongMemEval-S split.
 
+A pre-embedded LongMemEval database can be copied to isolated storage and
+registered as a disposable Qdrant generation with
+`scripts/prepare_longmemeval_qdrant_index.mjs`. Once that generation is READY,
+`benchmark-longmemeval` and `longmemeval-suite` accept
+`--retrieval-profile pimem-hybrid-qdrant-hnsw-v1`; they require
+`PIMEM_QDRANT_URL`, `PIMEM_VECTOR_GENERATION_ID`, and
+`PIMEM_QDRANT_COLLECTION`. This mode shares one filtered Qdrant retriever and
+one 128-connection read-only SQLite worker pool across independent per-slot
+hybrid wrappers. Raw memories and embeddings remain in SQLite.
+
 All ingest/run commands default to `--retrieval-profile fts5`. To build and use
 the PiMem hybrid profile, set the embedding environment without putting
 secrets on the command line, then pass `--retrieval-profile
