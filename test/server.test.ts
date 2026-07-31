@@ -151,7 +151,8 @@ describe("leaderboard API contract", () => {
     });
     expect(result.status).toBe("sufficient");
     expect(budgets).toHaveLength(3);
-    expect(budgets.every((budget) => budget > 0 && budget <= 600_000)).toBe(true);
+    expect(budgets[0]).toBe(200_000);
+    expect(budgets.every((budget) => budget > 0 && budget <= 200_000)).toBe(true);
   });
 
   it("stops retries immediately when the caller aborts", async () => {

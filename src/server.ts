@@ -462,7 +462,11 @@ export async function runSearchWithRetries<T extends RetryableSearchResult>(
     const elapsed = Date.now() - startedAt;
     const remainingMs = options.maxRunMs - elapsed;
     if (remainingMs < 1) break;
-    const attemptRunMs = remainingMs;
+    const perAttemptCapMs = Math.max(
+      1,
+      Math.floor(options.maxRunMs / options.maxAttempts),
+    );
+    const attemptRunMs = Math.min(remainingMs, perAttemptCapMs);
     try {
       const result = await options.run(attemptRunMs, attempt);
       if (
