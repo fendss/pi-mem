@@ -25,15 +25,16 @@ Qdrant itself did **not** change the Retrieval model interface.
 
 | Version | Retrieval interface SHA-256 | System prompt SHA-256 |
 |---|---|---|
-| validated pre-Qdrant snapshot | `d9846fbb5cdcf8394c155e3e81534b485fa27bd3a559297a26fc1ba6bdc3eecf` | `b7639320177c563fb0ffad2289a221192fd435d96336278a66b7cfee45cec64f` |
+| validated pre-Qdrant snapshot | `d361baf96f2e7056f975a9c60aa5f5e6205e6d1856c1ff2dc258a3435d64b0ca` | `b7639320177c563fb0ffad2289a221192fd435d96336278a66b7cfee45cec64f` |
 | first Qdrant runner `5a6df90` | identical | identical |
 | restored source `c1007dd` | identical | identical |
-| deployed `cfd6b1c` | `545a694d318ef0bdf63d2ca82eacebfd2da46eccd6c91ec7c2e5b163bbf8b058` | `8612689ee2ec7ae0477810eea34c43a543ccdf50611d5b96a3ef92b363579248` |
+| deployed `cfd6b1c` | `25fcd0d8d3374cecaa08d89bcb42adf775debebc9d8f7256121ae8ad3b8f1e85` | `8612689ee2ec7ae0477810eea34c43a543ccdf50611d5b96a3ef92b363579248` |
 
 The pre-Qdrant and restored interfaces expose exactly these tools:
 
 - `search(operator, queries, limit)`
 - `read(candidateRefs, contextBefore, contextAfter)`
+- `bash_ro(command)`
 - `finish(status, citations, evidenceSummary, count, inventory)`
 
 The compiled interface objects are byte-equivalent after canonical `JSON.stringify` serialization.

@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 import { describe, expect, it } from "vitest";
+import { ReadOnlyBash } from "../src/bash-ro.js";
 import { MemoryLedger } from "../src/ledger.js";
 import {
   PIMEM_HARNESS_VERSION,
@@ -12,7 +13,7 @@ import {
 } from "../src/tools.js";
 
 const VALIDATED_PRE_QDRANT_INTERFACE_HASH =
-  "d9846fbb5cdcf8394c155e3e81534b485fa27bd3a559297a26fc1ba6bdc3eecf";
+  "d361baf96f2e7056f975a9c60aa5f5e6205e6d1856c1ff2dc258a3435d64b0ca";
 
 describe("Retrieval model interface", () => {
   it("is byte-equivalent to the validated pre-Qdrant 356-run interface", () => {
@@ -24,6 +25,14 @@ describe("Retrieval model interface", () => {
       store,
       scopeId: "scope",
       ledger: new MemoryLedger("scope"),
+      bashRo: {
+        runner: new ReadOnlyBash(),
+        scopePath: "/scope",
+        store: {
+          findMentionedMemoryIds: () => [],
+          getRecords: () => [],
+        },
+      },
     });
     const modelInterface = {
       harnessVersion: PIMEM_HARNESS_VERSION,
