@@ -1,0 +1,413 @@
+export const QDRANT_COLLECTION_SCHEMA_VERSION = 1;
+
+export interface QdrantHnswConfig {
+  m: number;
+  efConstruct: number;
+  fullScanThreshold: number;
+}
+
+export interface QdrantCollectionSpec {
+  name: string;
+  dimensions: number;
+  hnsw: QdrantHnswConfig;
+}
+
+export interface QdrantVectorPoint {
+  pointId: string;
+  vector: readonly number[];
+  scopeId: string;
+  profileId: string;
+  contentHash: string;
+}
+
+export interface QdrantSearchRequest {
+  collection: string;
+  vector: readonly number[];
+  scopeId: string;
+  profileId: string;
+  limit: number;
+  hnswEf: number;
+  signal?: AbortSignal;
+}
+
+export interface QdrantSearchHit {
+  pointId: string;
+  score: number;
+  scopeId: string;
+  profileId: string;
+  contentHash: string;
+}
+
+export interface QdrantClientOptions {
+  baseUrl: string;
+  timeoutMs?: number;
+  fetchImpl?: typeof fetch;
+}
+
+interface QdrantEnvelope {
+  result?: unknown;
+  status?: unknown;
+}
+
+interface QdrantCollectionInfo {
+  status: string;
+  dimensions: number;
+  distance: string;
+  hnsw: QdrantHnswConfig;
+}
+
+export class QdrantHttpError extends Error {
+  readonly status: number;
+
+  constructor(status: number, message: string) {
+    super(message);
+    this.name = "QdrantHttpError";
+    this.status = status;
+  }
+}
+
+function positiveInteger(value: number, label: string): number {
+  if (!Number.isSafeInteger(value) || value <= 0) {
+    throw new Error(`${label} must be a positive integer`);
+  }
+  return value;
+}
+
+function nonEmptyString(value: string, label: string): string {
+  if (!value.trim()) throw new Error(`${label} must be a non-empty string`);
+  return value;
+}
+
+function collectionName(value: string): string {
+  if (!/^[A-Za-z0-9_-]{1,255}$/u.test(value)) {
+    throw new Error(
+      "Qdrant collection name must contain only letters, digits, underscores, or hyphens",
+    );
+  }
+  return value;
+}
+
+function qdrantBaseUrl(value: string): string {
+  let parsed: URL;
+  try {
+    parsed = new URL(value);
+  } catch {
+    throw new Error("Qdrant base URL must be a valid URL");
+  }
+  if (!new Set(["http:", "https:"]).has(parsed.protocol)) {
+    throw new Error("Qdrant base URL must use HTTP or HTTPS");
+  }
+  if (parsed.username || parsed.password) {
+    throw new Error("Qdrant base URL must not contain credentials");
+  }
+  if (parsed.search || parsed.hash) {
+    throw new Error("Qdrant base URL must not contain a query or fragment");
+  }
+  parsed.pathname = parsed.pathname.replace(/\/+$/u, "");
+  return parsed.toString().replace(/\/$/u, "");
+}
+
+function objectValue(value: unknown, label: string): Record<string, unknown> {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) {
+    throw new Error(`${label} must be an object`);
+  }
+  return value as Record<string, unknown>;
+}
+
+function finiteVector(vector: readonly number[], dimensions?: number): number[] {
+  if (dimensions !== undefined && vector.length !== dimensions) {
+    throw new Error(`Qdrant vector must contain ${dimensions} dimensions`);
+  }
+  if (vector.length === 0 || vector.some((value) => !Number.isFinite(value))) {
+    throw new Error("Qdrant vector must be non-empty and finite");
+  }
+  return [...vector];
+}
+
+function responseMessage(status: number, body: string): string {
+  const compact = body.replace(/\s+/gu, " ").trim().slice(0, 500);
+  return compact
+    ? `Qdrant returned HTTP ${status}: ${compact}`
+    : `Qdrant returned HTTP ${status}`;
+}
+
+function responseSignal(timeoutMs: number, signal?: AbortSignal): AbortSignal {
+  const timeout = AbortSignal.timeout(timeoutMs);
+  return signal === undefined ? timeout : AbortSignal.any([signal, timeout]);
+}
+
+function collectionInfo(value: unknown): QdrantCollectionInfo {
+  const envelope = objectValue(value, "Qdrant collection response");
+  const result = objectValue(envelope.result, "Qdrant collection result");
+  const config = objectValue(result.config, "Qdrant collection config");
+  const params = objectValue(config.params, "Qdrant collection parameters");
+  const vectors = objectValue(params.vectors, "Qdrant vector parameters");
+  const hnsw = objectValue(config.hnsw_config, "Qdrant HNSW parameters");
+  const status = nonEmptyString(String(result.status ?? ""), "Qdrant status");
+  return {
+    status,
+    dimensions: positiveInteger(Number(vectors.size), "Qdrant vector size"),
+    distance: nonEmptyString(String(vectors.distance ?? ""), "Qdrant distance"),
+    hnsw: {
+      m: positiveInteger(Number(hnsw.m), "Qdrant HNSW m"),
+      efConstruct: positiveInteger(
+        Number(hnsw.ef_construct),
+        "Qdrant HNSW ef_construct",
+      ),
+      fullScanThreshold: positiveInteger(
+        Number(hnsw.full_scan_threshold),
+        "Qdrant HNSW full_scan_threshold",
+      ),
+    },
+  };
+}
+
+export class QdrantClient {
+  private readonly baseUrl: string;
+  private readonly timeoutMs: number;
+  private readonly fetchImpl: typeof fetch;
+
+  constructor(options: QdrantClientOptions) {
+    this.baseUrl = qdrantBaseUrl(options.baseUrl);
+    this.timeoutMs = positiveInteger(options.timeoutMs ?? 30_000, "Qdrant timeout");
+    this.fetchImpl = options.fetchImpl ?? fetch;
+  }
+
+  private endpoint(path: string): string {
+    return `${this.baseUrl}${path}`;
+  }
+
+  private async request(
+    method: string,
+    path: string,
+    options: {
+      body?: unknown;
+      signal?: AbortSignal;
+      acceptedStatuses?: readonly number[];
+    } = {},
+  ): Promise<{ status: number; value: unknown }> {
+    const response = await this.fetchImpl(this.endpoint(path), {
+      method,
+      headers: options.body === undefined
+        ? { accept: "application/json" }
+        : { accept: "application/json", "content-type": "application/json" },
+      ...(options.body === undefined ? {} : { body: JSON.stringify(options.body) }),
+      signal: responseSignal(this.timeoutMs, options.signal),
+    });
+    const body = await response.text();
+    const accepted = options.acceptedStatuses ?? [200];
+    if (!accepted.includes(response.status)) {
+      throw new QdrantHttpError(
+        response.status,
+        responseMessage(response.status, body),
+      );
+    }
+    if (!body.trim()) return { status: response.status, value: undefined };
+    try {
+      return { status: response.status, value: JSON.parse(body) as unknown };
+    } catch {
+      return { status: response.status, value: body };
+    }
+  }
+
+  async health(signal?: AbortSignal): Promise<void> {
+    await this.request("GET", "/readyz", {
+      ...(signal === undefined ? {} : { signal }),
+    });
+  }
+
+  async getCollection(
+    name: string,
+    signal?: AbortSignal,
+  ): Promise<QdrantCollectionInfo | undefined> {
+    const result = await this.request(
+      "GET",
+      `/collections/${encodeURIComponent(collectionName(name))}`,
+      {
+        acceptedStatuses: [200, 404],
+        ...(signal === undefined ? {} : { signal }),
+      },
+    );
+    return result.status === 404 ? undefined : collectionInfo(result.value);
+  }
+
+  async ensureCollection(
+    spec: QdrantCollectionSpec,
+    signal?: AbortSignal,
+  ): Promise<void> {
+    collectionName(spec.name);
+    positiveInteger(spec.dimensions, "Qdrant collection dimensions");
+    positiveInteger(spec.hnsw.m, "Qdrant HNSW m");
+    positiveInteger(spec.hnsw.efConstruct, "Qdrant HNSW efConstruct");
+    positiveInteger(
+      spec.hnsw.fullScanThreshold,
+      "Qdrant HNSW fullScanThreshold",
+    );
+    let info = await this.getCollection(spec.name, signal);
+    if (info === undefined) {
+      await this.request(
+        "PUT",
+        `/collections/${encodeURIComponent(spec.name)}`,
+        {
+          body: {
+            vectors: { size: spec.dimensions, distance: "Cosine" },
+            hnsw_config: {
+              m: spec.hnsw.m,
+              ef_construct: spec.hnsw.efConstruct,
+              full_scan_threshold: spec.hnsw.fullScanThreshold,
+            },
+            on_disk_payload: false,
+          },
+          ...(signal === undefined ? {} : { signal }),
+        },
+      );
+      info = await this.getCollection(spec.name, signal);
+      if (info === undefined) {
+        throw new Error(`Qdrant collection was not created: ${spec.name}`);
+      }
+    }
+    if (
+      info.dimensions !== spec.dimensions ||
+      info.distance.toLowerCase() !== "cosine" ||
+      info.hnsw.m !== spec.hnsw.m ||
+      info.hnsw.efConstruct !== spec.hnsw.efConstruct ||
+      info.hnsw.fullScanThreshold !== spec.hnsw.fullScanThreshold
+    ) {
+      throw new Error(`Qdrant collection configuration mismatch: ${spec.name}`);
+    }
+    await this.ensurePayloadIndex(
+      spec.name,
+      "scope_id",
+      { type: "keyword", is_tenant: true },
+      signal,
+    );
+    await this.ensurePayloadIndex(
+      spec.name,
+      "profile_id",
+      { type: "keyword" },
+      signal,
+    );
+  }
+
+  private async ensurePayloadIndex(
+    collection: string,
+    fieldName: string,
+    fieldSchema: Record<string, unknown>,
+    signal?: AbortSignal,
+  ): Promise<void> {
+    await this.request(
+      "PUT",
+      `/collections/${encodeURIComponent(collectionName(collection))}/index?wait=true`,
+      {
+        body: { field_name: fieldName, field_schema: fieldSchema },
+        ...(signal === undefined ? {} : { signal }),
+      },
+    );
+  }
+
+  async upsert(
+    collection: string,
+    dimensions: number,
+    points: readonly QdrantVectorPoint[],
+    signal?: AbortSignal,
+  ): Promise<void> {
+    collectionName(collection);
+    positiveInteger(dimensions, "Qdrant vector dimensions");
+    if (points.length === 0) return;
+    if (new Set(points.map((point) => point.pointId)).size !== points.length) {
+      throw new Error("Qdrant upsert batch contains duplicate point IDs");
+    }
+    await this.request(
+      "PUT",
+      `/collections/${encodeURIComponent(collection)}/points?wait=true`,
+      {
+        body: {
+          points: points.map((point) => ({
+            id: nonEmptyString(point.pointId, "Qdrant point ID"),
+            vector: finiteVector(point.vector, dimensions),
+            payload: {
+              scope_id: nonEmptyString(point.scopeId, "Qdrant scope ID"),
+              profile_id: nonEmptyString(point.profileId, "Qdrant profile ID"),
+              content_hash: nonEmptyString(
+                point.contentHash,
+                "Qdrant content hash",
+              ),
+              schema_version: QDRANT_COLLECTION_SCHEMA_VERSION,
+            },
+          })),
+        },
+        ...(signal === undefined ? {} : { signal }),
+      },
+    );
+  }
+
+  async search(request: QdrantSearchRequest): Promise<QdrantSearchHit[]> {
+    collectionName(request.collection);
+    positiveInteger(request.limit, "Qdrant search limit");
+    positiveInteger(request.hnswEf, "Qdrant search hnswEf");
+    const response = await this.request(
+      "POST",
+      `/collections/${encodeURIComponent(request.collection)}/points/search`,
+      {
+        body: {
+          vector: finiteVector(request.vector),
+          filter: {
+            must: [
+              {
+                key: "scope_id",
+                match: { value: nonEmptyString(request.scopeId, "Qdrant scope ID") },
+              },
+              {
+                key: "profile_id",
+                match: {
+                  value: nonEmptyString(request.profileId, "Qdrant profile ID"),
+                },
+              },
+            ],
+          },
+          params: { hnsw_ef: request.hnswEf, exact: false },
+          limit: request.limit,
+          with_payload: ["scope_id", "profile_id", "content_hash"],
+          with_vector: false,
+        },
+        ...(request.signal === undefined ? {} : { signal: request.signal }),
+      },
+    );
+    const envelope = objectValue(response.value, "Qdrant search response");
+    if (!Array.isArray(envelope.result)) {
+      throw new Error("Qdrant search result must be an array");
+    }
+    return envelope.result.map((raw, index) => {
+      const hit = objectValue(raw, `Qdrant search result ${index}`);
+      const payload = objectValue(
+        hit.payload,
+        `Qdrant search result ${index} payload`,
+      );
+      const scopeId = nonEmptyString(
+        String(payload.scope_id ?? ""),
+        "Qdrant result scope ID",
+      );
+      const profileId = nonEmptyString(
+        String(payload.profile_id ?? ""),
+        "Qdrant result profile ID",
+      );
+      if (scopeId !== request.scopeId || profileId !== request.profileId) {
+        throw new Error("Qdrant returned a result outside the mandatory scope filter");
+      }
+      const score = Number(hit.score);
+      if (!Number.isFinite(score)) {
+        throw new Error("Qdrant search score must be finite");
+      }
+      return {
+        pointId: nonEmptyString(String(hit.id ?? ""), "Qdrant result point ID"),
+        score,
+        scopeId,
+        profileId,
+        contentHash: nonEmptyString(
+          String(payload.content_hash ?? ""),
+          "Qdrant result content hash",
+        ),
+      };
+    });
+  }
+}
