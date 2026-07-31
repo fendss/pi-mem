@@ -226,17 +226,12 @@ export class MemoryLedger {
       throw new Error("evidenceSummary must not be empty");
     }
 
-    const citedMemoryIds = new Set<string>();
     const citations = input.citations.map((citation) => {
       const memoryId = citation.memoryId.trim();
       const supports = citation.supports.trim();
       if (!memoryId) {
         throw new Error("Citation memoryId must not be empty");
       }
-      if (citedMemoryIds.has(memoryId)) {
-        throw new Error(`Duplicate citation memory: ${memoryId}`);
-      }
-      citedMemoryIds.add(memoryId);
       if (!supports) {
         throw new Error(`Citation supports must not be empty: ${memoryId}`);
       }
@@ -254,18 +249,15 @@ export class MemoryLedger {
       return { memoryId, supports };
     });
 
-    const inventoryItems = new Set<string>();
+    const citedMemoryIds = new Set(
+      citations.map((citation) => citation.memoryId),
+    );
     const inventory = input.inventory?.map((entry) => {
       const item = entry.item.trim();
       const memoryIds = [
         ...new Set(entry.memoryIds.map((memoryId) => memoryId.trim())),
       ].filter(Boolean);
       if (!item) throw new Error("Inventory item must not be empty");
-      const itemFingerprint = item.normalize("NFKC").toLocaleLowerCase();
-      if (inventoryItems.has(itemFingerprint)) {
-        throw new Error(`Duplicate inventory item: ${item}`);
-      }
-      inventoryItems.add(itemFingerprint);
       if (memoryIds.length === 0) {
         throw new Error(`Inventory item must cite read memory: ${item}`);
       }

@@ -3,9 +3,9 @@ import {
   type AssistantMessage,
 } from "@earendil-works/pi-ai";
 import type {
+  AfterToolCallContext,
+  AfterToolCallResult,
   AgentTool,
-  BeforeToolCallContext,
-  BeforeToolCallResult,
 } from "@earendil-works/pi-agent-core";
 import { buildAggregateOperatorResult } from "./aggregate-operator.js";
 import type { ReadOnlyBash } from "./bash-ro.js";
@@ -135,6 +135,7 @@ export interface ReadToolDetails {
   }>;
   expandedMemoryIds: string[];
   candidates: MemoryCandidate[];
+  repeatedRequest?: boolean;
 }
 
 export interface FinishToolDetails {
@@ -594,6 +595,12 @@ export function createSearchTool(
         ...(repeatedQueries.length === 0 ? {} : { repeatedQueries }),
       };
       const rendered = [
+        repeatedQueries.length === 0
+          ? ""
+          : "No-progress notice: this Search repeats a query already executed " +
+            "in this run, so its candidate references are unchanged. Do not " +
+            "repeat it again; read a new candidate, search only for a materially " +
+            "different missing evidence slot, or finish.",
         renderEvidenceOperator(operatorResult, options.ledger),
         renderCandidates(candidates, options.ledger, options.questionDate),
       ].filter(Boolean).join("\n");
@@ -613,6 +620,7 @@ export function createSearchTool(
 export function createReadTool(
   options: CreatePiMemToolsOptions,
 ): PiMemTools["read"] {
+  const seenReadRequests = new Set<string>();
   return {
     name: "read",
     label: "Read memory",
@@ -640,6 +648,13 @@ export function createReadTool(
       const memoryIds = options.ledger.resolveCandidateRefs(candidateRefs);
       const contextBefore = params.contextBefore ?? 0;
       const contextAfter = params.contextAfter ?? 0;
+      const requestFingerprint = JSON.stringify({
+        memoryIds: [...memoryIds].sort(),
+        contextBefore,
+        contextAfter,
+      });
+      const repeatedRequest = seenReadRequests.has(requestFingerprint);
+      seenReadRequests.add(requestFingerprint);
       const memories = await options.store.read(
         options.scopeId,
         memoryIds,
@@ -670,11 +685,22 @@ export function createReadTool(
         evidenceReferences,
         expandedMemoryIds,
         candidates,
+        ...(repeatedRequest ? { repeatedRequest: true } : {}),
       };
+      const rendered = renderMemories(
+        recorded,
+        options.ledger,
+        options.questionDate,
+      );
       return {
         content: [{
           type: "text",
-          text: renderMemories(recorded, options.ledger, options.questionDate),
+          text: repeatedRequest
+            ? "No-progress notice: this exact Read request was already completed " +
+              "and adds no new evidence. Do not repeat it again; use a different " +
+              "context window only when needed, search for a missing slot, or finish.\n" +
+              rendered
+            : rendered,
         }],
         details,
       };
@@ -781,56 +807,28 @@ export function createPiMemTools(
 }
 
 /**
- * Returns an error message when finish occurs in a multi-tool assistant turn.
+ * Pi Agent terminates a tool batch only when every result opts into
+ * termination. If a valid finish shares a turn with navigation calls, mark the
+ * other successful calls as terminating too. This accepts the model's package
+ * without forcing a corrective turn, while any failed call still keeps the
+ * Agent alive to repair the batch.
  */
-export function validateFinishToolBatch(
-  toolNames: readonly string[],
-  finishToolName = "finish",
-): string | undefined {
-  if (!toolNames.includes(finishToolName)) return undefined;
-  if (toolNames.length === 1 && toolNames[0] === finishToolName) {
-    return undefined;
-  }
-  return `${finishToolName} must be the only tool call in its turn`;
-}
-
-/**
- * Core-compatible beforeToolCall hook. A sequential batch may read/search and
- * then finish as its final call; the harness safely applies those side effects
- * in order. If finish appears earlier, only finish is deferred while the other
- * navigation calls remain usable.
- */
-export function createFinishOnlyBeforeToolCall(
+export function createFinishBatchTerminationAfterToolCall(
   finishToolName = "finish",
 ): (
-  context: BeforeToolCallContext,
+  context: AfterToolCallContext,
   signal?: AbortSignal,
-) => Promise<BeforeToolCallResult | undefined> {
+) => Promise<AfterToolCallResult | undefined> {
   return async (context) => {
-    const toolNames = context.assistantMessage.content
-      .filter(
-        (
-          block,
-        ): block is Extract<
-          AssistantMessage["content"][number],
-          { type: "toolCall" }
-        > => block.type === "toolCall",
-      )
-      .map((call) => call.name);
-    const finishIndexes = toolNames
-      .map((name, index) => name === finishToolName ? index : -1)
-      .filter((index) => index >= 0);
-    if (finishIndexes.length === 0) return undefined;
-    if (
-      finishIndexes.length === 1 &&
-      finishIndexes[0] === toolNames.length - 1
-    ) {
-      return undefined;
-    }
-    if (context.toolCall.name !== finishToolName) return undefined;
-    return {
-      block: true,
-      reason: `${finishToolName} must be the final tool call in its turn`,
-    };
+    if (context.isError) return undefined;
+    const hasFinish = context.assistantMessage.content.some(
+      (
+        block,
+      ): block is Extract<
+        AssistantMessage["content"][number],
+        { type: "toolCall" }
+      > => block.type === "toolCall" && block.name === finishToolName,
+    );
+    return hasFinish ? { terminate: true } : undefined;
   };
 }

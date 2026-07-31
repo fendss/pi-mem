@@ -455,7 +455,6 @@ export async function runSearchWithRetries<T extends RetryableSearchResult>(
   },
 ): Promise<T> {
   const startedAt = Date.now();
-  let best: T | undefined;
   let lastError: unknown;
   for (let attempt = 1; attempt <= options.maxAttempts; attempt += 1) {
     if (options.signal?.aborted) throw new Error("Leaderboard search aborted");
@@ -468,23 +467,7 @@ export async function runSearchWithRetries<T extends RetryableSearchResult>(
     );
     const attemptRunMs = Math.min(remainingMs, perAttemptCapMs);
     try {
-      const result = await options.run(attemptRunMs, attempt);
-      if (
-        best === undefined ||
-        Number(result.status === "sufficient") >
-          Number(best.status === "sufficient") ||
-        (
-          result.status === best.status &&
-          (result.citations.length > best.citations.length ||
-            (
-              result.citations.length === best.citations.length &&
-              result.evidence.length > best.evidence.length
-            ))
-        )
-      ) {
-        best = result;
-      }
-      if (result.status === "sufficient") return result;
+      return await options.run(attemptRunMs, attempt);
     } catch (error) {
       if (options.signal?.aborted) throw new Error("Leaderboard search aborted");
       lastError = error;
@@ -511,7 +494,6 @@ export async function runSearchWithRetries<T extends RetryableSearchResult>(
       }
     }
   }
-  if (best !== undefined) return best;
   if (lastError !== undefined) throw lastError;
   throw new Error(`PiMem exceeded the ${options.maxRunMs}ms search limit`);
 }
@@ -660,9 +642,9 @@ export class PiMemLeaderboardBackend implements LeaderboardApiBackend {
             modelRuntime: this.modelRuntime,
             scopeId,
             question: retrievalQuestion(request),
-            maxTurns: 1_024,
-            maxToolCalls: 4_096,
-            maxProtocolNudges: 8,
+            maxTurns: 64,
+            maxToolCalls: 80,
+            maxProtocolNudges: 2,
             maxRunMs: attemptRunMs,
             ...(signal === undefined ? {} : { signal }),
           }),

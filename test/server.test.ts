@@ -130,7 +130,22 @@ function retrievalFixture(): PiMemResult {
 }
 
 describe("leaderboard API contract", () => {
-  it("retries failed or insufficient searches within one bounded budget", async () => {
+  it("returns the first protocol-valid result without rerolling insufficiency", async () => {
+    const budgets: number[] = [];
+    const result = await runSearchWithRetries({
+      maxRunMs: 600_000,
+      maxAttempts: 3,
+      retryDelayMs: 0,
+      async run(attemptRunMs) {
+        budgets.push(attemptRunMs);
+        return { status: "insufficient" as const, citations: [], evidence: [] };
+      },
+    });
+    expect(result.status).toBe("insufficient");
+    expect(budgets).toEqual([200_000]);
+  });
+
+  it("retries only failed rollouts within the bounded budget", async () => {
     const budgets: number[] = [];
     const result = await runSearchWithRetries({
       maxRunMs: 600_000,
@@ -138,10 +153,7 @@ describe("leaderboard API contract", () => {
       retryDelayMs: 0,
       async run(attemptRunMs, attempt) {
         budgets.push(attemptRunMs);
-        if (attempt === 1) {
-          return { status: "insufficient" as const, citations: [], evidence: [] };
-        }
-        if (attempt === 2) throw new Error("transient provider failure");
+        if (attempt < 3) throw new Error("transient provider failure");
         return {
           status: "sufficient" as const,
           citations: [{}],
@@ -151,7 +163,6 @@ describe("leaderboard API contract", () => {
     });
     expect(result.status).toBe("sufficient");
     expect(budgets).toHaveLength(3);
-    expect(budgets[0]).toBe(200_000);
     expect(budgets.every((budget) => budget > 0 && budget <= 200_000)).toBe(true);
   });
 

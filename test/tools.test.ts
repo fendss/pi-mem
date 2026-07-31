@@ -1,11 +1,10 @@
-import type { BeforeToolCallContext } from "@earendil-works/pi-agent-core";
+import type { AfterToolCallContext } from "@earendil-works/pi-agent-core";
 import { describe, expect, it } from "vitest";
 import { MemoryLedger } from "../src/ledger.js";
 import type { StoreSearchHit } from "../src/store.js";
 import {
-  createFinishOnlyBeforeToolCall,
+  createFinishBatchTerminationAfterToolCall,
   createPiMemTools,
-  validateFinishToolBatch,
   type MemoryToolStore,
 } from "../src/tools.js";
 import type { MemoryRecord, SearchRequest } from "../src/types.js";
@@ -70,6 +69,12 @@ describe("PiMem tools", () => {
     expect(searchResult.details.candidates).toEqual([
       expect.objectContaining({ memoryId: "m1", read: false }),
     ]);
+    const repeatedSearch = await tools.search.execute("search-repeat", {
+      queries: ["source"],
+      limit: 10,
+    });
+    expect(repeatedSearch.details.repeatedQueries).toEqual(["source"]);
+    expect(JSON.stringify(repeatedSearch.content)).toContain("No-progress notice");
 
     const readResult = await tools.read.execute("read-1", {
       candidateRefs: [1],
@@ -86,6 +91,13 @@ describe("PiMem tools", () => {
     expect(
       ledger.candidates.find((item) => item.memoryId === "m2")?.discoveries,
     ).toEqual([expect.objectContaining({ tool: "read_expansion" })]);
+    const repeatedRead = await tools.read.execute("read-repeat", {
+      candidateRefs: [1],
+      contextBefore: 0,
+      contextAfter: 1,
+    });
+    expect(repeatedRead.details.repeatedRequest).toBe(true);
+    expect(JSON.stringify(repeatedRead.content)).toContain("No-progress notice");
 
     const finishResult = await tools.finish.execute("finish-1", {
       status: "sufficient",
@@ -380,41 +392,32 @@ describe("PiMem tools", () => {
     ).rejects.toThrow(/Valid candidate range is 1-2/u);
   });
 
-  it("validates that finish is the only tool call in a turn", async () => {
-    expect(validateFinishToolBatch(["finish"])).toBeUndefined();
-    expect(validateFinishToolBatch(["search"])).toBeUndefined();
-    expect(validateFinishToolBatch(["search", "finish"])).toMatch(
-      /only tool call/u,
-    );
-
-    const hook = createFinishOnlyBeforeToolCall();
-    const mixedContext = {
+  it("terminates a fully successful tool batch that contains finish", async () => {
+    const hook = createFinishBatchTerminationAfterToolCall();
+    const context = {
       assistantMessage: {
         content: [
-          { type: "toolCall", id: "1", name: "search", arguments: {} },
-          { type: "toolCall", id: "2", name: "finish", arguments: {} },
+          { type: "toolCall", id: "1", name: "finish", arguments: {} },
+          { type: "toolCall", id: "2", name: "search", arguments: {} },
         ],
       },
-      toolCall: { type: "toolCall", id: "1", name: "search", arguments: {} },
+      toolCall: { type: "toolCall", id: "2", name: "search", arguments: {} },
       args: {},
+      result: { content: [], details: {} },
+      isError: false,
       context: { systemPrompt: "", messages: [], tools: [] },
-    } as unknown as BeforeToolCallContext;
+    } as unknown as AfterToolCallContext;
 
-    await expect(hook(mixedContext)).resolves.toBeUndefined();
-
-    const unsafeContext = {
-      ...mixedContext,
+    await expect(hook(context)).resolves.toEqual({ terminate: true });
+    await expect(hook({
+      ...context,
       assistantMessage: {
-        content: [
-          { type: "toolCall", id: "2", name: "finish", arguments: {} },
-          { type: "toolCall", id: "1", name: "search", arguments: {} },
-        ],
+        content: [{ type: "toolCall", id: "2", name: "search", arguments: {} }],
       },
-      toolCall: { type: "toolCall", id: "2", name: "finish", arguments: {} },
-    } as unknown as BeforeToolCallContext;
-    await expect(hook(unsafeContext)).resolves.toEqual({
-      block: true,
-      reason: "finish must be the final tool call in its turn",
-    });
+    } as unknown as AfterToolCallContext)).resolves.toBeUndefined();
+    await expect(hook({
+      ...context,
+      isError: true,
+    } as unknown as AfterToolCallContext)).resolves.toBeUndefined();
   });
 });

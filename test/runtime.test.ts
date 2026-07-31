@@ -27,9 +27,7 @@ function candidate(
 
 describe("runtime candidate presentation", () => {
   it("keeps generic source-consistency constraints in the retrieval policy", () => {
-    expect(PIMEM_HARNESS_VERSION).toBe(
-      "pimem-retrieval-v7-deterministic-sampling",
-    );
+    expect(PIMEM_HARNESS_VERSION).toBe("pimem-retrieval-v8-low-churn");
     expect(PI_MEM_SYSTEM_PROMPT).toContain(
       "Distinguish completed observations from plans",
     );

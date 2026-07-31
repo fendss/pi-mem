@@ -117,22 +117,26 @@ describe("MemoryLedger", () => {
     ).toThrow(/read in this run/u);
   });
 
-  it("rejects duplicate citations and empty cited raw memories", () => {
+  it("allows separate atomic supports from one memory", () => {
     const ledger = new MemoryLedger("scope-1");
     const candidate = record("m1", 0);
     ledger.recordRead([candidate]);
 
-    expect(() =>
-      ledger.acceptSelection({
-        status: "sufficient",
-        citations: [
-          { memoryId: "m1", supports: "First support." },
-          { memoryId: "m1", supports: "Repeated support." },
-        ],
-        evidenceSummary: "Repeated source.",
-      }),
-    ).toThrow(/Duplicate citation memory/u);
+    expect(ledger.acceptSelection({
+      status: "sufficient",
+      citations: [
+        { memoryId: "m1", supports: "First supported fact." },
+        { memoryId: "m1", supports: "Second supported fact." },
+      ],
+      evidenceSummary: "Two atomic facts from one source.",
+    }).citations).toEqual([
+      { memoryId: "m1", supports: "First supported fact." },
+      { memoryId: "m1", supports: "Second supported fact." },
+    ]);
+  });
 
+  it("rejects cited memories with empty raw content", () => {
+    const candidate = record("m1", 0);
     const emptyLedger = new MemoryLedger("scope-1");
     emptyLedger.recordRead([{ ...candidate, content: "" }]);
     expect(() =>
@@ -202,24 +206,6 @@ describe("MemoryLedger", () => {
         inventory: [{ item: "second", memoryIds: ["m2"] }],
       }),
     ).toThrow(/must reference a cited memory/u);
-  });
-
-  it("rejects duplicate normalized inventory items", () => {
-    const ledger = new MemoryLedger("scope-1");
-    const first = record("m1", 0);
-    ledger.recordRead([first]);
-
-    expect(() =>
-      ledger.acceptSelection({
-        status: "sufficient",
-        citations: [{ memoryId: "m1", supports: "First item." }],
-        evidenceSummary: "Duplicate inventory labels.",
-        inventory: [
-          { item: "First", memoryIds: ["m1"] },
-          { item: " first ", memoryIds: ["m1"] },
-        ],
-      }),
-    ).toThrow(/Duplicate inventory item/u);
   });
 
   it("rejects inventory entries backed only by unread memory", () => {
