@@ -163,6 +163,37 @@ into the image. Optional capacity controls are
 public reverse proxy, keep `/health` unauthenticated, and delete evaluation data
 from the persistent volume within the leaderboard retention window.
 
+### Qdrant HNSW retrieval mode
+
+The opt-in `qdrant-hnsw` backend preserves SQLite as the immutable source of
+truth and FTS5 lexical retriever. Embeddings and a transactional outbox are
+committed together; background batches idempotently populate an internal
+Qdrant Server. The first Search seals the Add generation, drains the outbox,
+verifies exact generation/scope counts, and opens the READY barrier. Qdrant is
+a rebuildable ANN sidecar and stores no raw conversation content.
+
+```text
+PIMEM_DENSE_BACKEND=qdrant-hnsw
+PIMEM_QDRANT_URL=http://qdrant:6333
+PIMEM_QDRANT_COLLECTION=pimem_vectors_v1
+PIMEM_VECTOR_GENERATION_ID=<stable run generation>
+PIMEM_SQLITE_RETRIEVAL_WORKERS=128
+PIMEM_QDRANT_HNSW_M=32
+PIMEM_QDRANT_EF_CONSTRUCT=200
+PIMEM_QDRANT_HNSW_EF=800
+PIMEM_QDRANT_INDEXING_THRESHOLD_KB=10000
+PIMEM_QDRANT_FULL_SCAN_THRESHOLD_KB=1000
+PIMEM_QDRANT_SYNC_BATCH_SIZE=512
+PIMEM_QDRANT_SYNC_CONCURRENCY=4
+```
+
+Run Qdrant in Server Mode on the same private container network; do not expose
+ports 6333/6334 publicly and do not use multiple local-mode clients against one
+storage directory. In this mode FTS5, raw reads, fact operators, generation
+checks, and Qdrant-result hydration run through independent read-only SQLite
+worker connections instead of the Agent event loop. Client disconnects abort
+Agent/tool work and retire an active SQLite worker before replacing it.
+
 Contract examples:
 
 ```bash

@@ -196,7 +196,7 @@ export class QdrantVectorSynchronizer {
     try {
       await this.client.ensureCollection(this.collection, signal);
     } catch (error) {
-      if (permanentQdrantFailure(error)) {
+      if (permanentQdrantFailure(error) && status.state !== "ready") {
         this.store.failVectorIndexGeneration(this.generationId, error);
       }
       throw error;
@@ -313,9 +313,12 @@ export class QdrantVectorSynchronizer {
   }
 
   async finalize(signal?: AbortSignal): Promise<VectorIndexGenerationStatus> {
-    let status = this.store.getVectorIndexGeneration(this.generationId);
-    this.assertConfiguration(status);
-    if (status.state === "ready") return status;
+    let status = await this.initialize(signal);
+    if (status.state === "ready") {
+      await this.waitForCollectionIndex(status.expectedVectorCount, signal);
+      await this.verifyCounts(status, signal);
+      return status;
+    }
     if (status.state === "failed") {
       throw new Error(`Cannot finalize failed vector generation: ${this.generationId}`);
     }

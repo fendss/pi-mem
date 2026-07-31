@@ -9,9 +9,16 @@ import {
 } from "node:http";
 import { join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
-import type { DenseRetriever } from "./dense-retriever.js";
+import {
+  QdrantDenseRetriever,
+  type DenseRetriever,
+} from "./dense-retriever.js";
 import { OpenAICompatibleEmbedder, type Embedder } from "./embedding.js";
-import { indexScopeEmbeddings } from "./embedding-index.js";
+import {
+  embeddingProfile,
+  indexScopeEmbeddings,
+  indexScopeEmbeddingsForVectorGeneration,
+} from "./embedding-index.js";
 import {
   HybridMemoryStore,
   type HybridRawStore,
@@ -26,7 +33,10 @@ import {
   MemoryStore,
   type AppendMemoryMessage,
 } from "./store.js";
+import { QdrantClient, type QdrantCollectionSpec } from "./qdrant.js";
+import { SqliteRetrievalWorkerPool } from "./sqlite-retrieval-pool.js";
 import type { MemoryRecord, PiMemResult } from "./types.js";
+import { QdrantVectorSynchronizer } from "./vector-sync.js";
 import { sha256 } from "./util.js";
 
 const MAX_REQUEST_BYTES = 2 * 1024 * 1024;
@@ -96,6 +106,8 @@ export interface PiMemLeaderboardBackendOptions {
   modelRuntime: PiModelRuntime;
   retrievalStore?: HybridRawStore;
   denseRetriever?: DenseRetriever;
+  vectorSynchronizer?: QdrantVectorSynchronizer;
+  vectorGenerationId?: string;
   maxConcurrentAdds?: number;
   maxConcurrentSearches?: number;
   maxRunMs?: number;
@@ -335,6 +347,28 @@ export function buildLeaderboardSearchResponse(
   return { data: [capsuleItem, ...rawItems].slice(0, topK) };
 }
 
+async function awaitWithSignal<T>(
+  promise: Promise<T>,
+  signal?: AbortSignal,
+): Promise<T> {
+  if (!signal) return promise;
+  if (signal.aborted) throw new Error("Leaderboard search aborted");
+  return new Promise<T>((resolve, reject) => {
+    const abort = (): void => reject(new Error("Leaderboard search aborted"));
+    signal.addEventListener("abort", abort, { once: true });
+    void promise.then(
+      (value) => {
+        signal.removeEventListener("abort", abort);
+        resolve(value);
+      },
+      (error: unknown) => {
+        signal.removeEventListener("abort", abort);
+        reject(error);
+      },
+    );
+  });
+}
+
 interface RetryableSearchResult {
   status: "sufficient" | "insufficient";
   citations: readonly unknown[];
@@ -418,6 +452,10 @@ export class PiMemLeaderboardBackend implements LeaderboardApiBackend {
   private readonly searchGate: AsyncRequestGate;
   private readonly maxRunMs: number;
   private readonly searchAttempts: number;
+  private readonly vectorSynchronizer: QdrantVectorSynchronizer | undefined;
+  private readonly vectorGenerationId: string | undefined;
+  private vectorSyncTail: Promise<void> = Promise.resolve();
+  private vectorFinalizePromise: Promise<void> | undefined;
 
   constructor(options: PiMemLeaderboardBackendOptions) {
     this.rawStore = options.rawStore;
@@ -436,6 +474,39 @@ export class PiMemLeaderboardBackend implements LeaderboardApiBackend {
     );
     this.maxRunMs = options.maxRunMs ?? 120_000;
     this.searchAttempts = options.searchAttempts ?? 1;
+    this.vectorSynchronizer = options.vectorSynchronizer;
+    this.vectorGenerationId = options.vectorGenerationId;
+    if ((this.vectorSynchronizer === undefined) !== (this.vectorGenerationId === undefined)) {
+      throw new Error("Vector synchronizer and generation ID must be configured together");
+    }
+  }
+
+  private scheduleVectorSync(): void {
+    if (!this.vectorSynchronizer) return;
+    const synchronize = this.vectorSyncTail.then(async () => {
+      await this.vectorSynchronizer!.synchronizeAvailable();
+    });
+    // The durable outbox retains failures; Finalize retries transient work.
+    this.vectorSyncTail = synchronize.catch(() => undefined);
+  }
+
+  private async ensureVectorReady(signal?: AbortSignal): Promise<void> {
+    if (!this.vectorSynchronizer) return;
+    if (!this.vectorFinalizePromise) {
+      this.vectorFinalizePromise = (async () => {
+        await this.vectorSyncTail;
+        await this.vectorSynchronizer!.finalize();
+      })();
+    }
+    const finalize = this.vectorFinalizePromise;
+    try {
+      await awaitWithSignal(finalize, signal);
+    } catch (error) {
+      if (!signal?.aborted && this.vectorFinalizePromise === finalize) {
+        this.vectorFinalizePromise = undefined;
+      }
+      throw error;
+    }
   }
 
   add(request: LeaderboardAddRequest): Promise<LeaderboardAddResponse> {
@@ -465,9 +536,19 @@ export class PiMemLeaderboardBackend implements LeaderboardApiBackend {
         throw error;
       }
       if (appended.status !== "complete") {
-        await indexScopeEmbeddings(this.rawStore, scopeId, this.embedder);
+        if (this.vectorGenerationId === undefined) {
+          await indexScopeEmbeddings(this.rawStore, scopeId, this.embedder);
+        } else {
+          await indexScopeEmbeddingsForVectorGeneration(
+            this.rawStore,
+            scopeId,
+            this.embedder,
+            this.vectorGenerationId,
+          );
+        }
         this.rawStore.ensureEvidenceFactIndex(scopeId);
         this.rawStore.markAppendRequestComplete(request.request_id, requestHash);
+        this.scheduleVectorSync();
       }
       return {
         success: true,
@@ -484,6 +565,7 @@ export class PiMemLeaderboardBackend implements LeaderboardApiBackend {
   ): Promise<LeaderboardSearchResponse> {
     return this.searchGate.run(async () => {
       if (signal?.aborted) throw new Error("Leaderboard search aborted");
+      await this.ensureVectorReady(signal);
       const scopeId = leaderboardScopeId(request.user_id);
       if (this.rawStore.hasPendingAppendRequests(scopeId)) {
         throw new ApiError(503, "Memory ingestion is incomplete for this user_id");
@@ -516,6 +598,7 @@ export class PiMemLeaderboardBackend implements LeaderboardApiBackend {
   }
 
   async close(): Promise<void> {
+    await this.vectorSyncTail;
     if (this.retrievalStore !== this.rawStore) {
       await this.retrievalStore.close?.();
     }
@@ -713,10 +796,96 @@ export async function startLeaderboardServer(): Promise<void> {
   const rawStore = await MemoryStore.create(join(dataDir, "memory.sqlite"));
   const embedder = OpenAICompatibleEmbedder.fromEnvironment();
   const modelRuntime = modelRuntimeFromEnvironment();
+  const denseBackend = process.env.PIMEM_DENSE_BACKEND?.trim() || "sqlite-exact";
+  if (!new Set(["sqlite-exact", "qdrant-hnsw"]).has(denseBackend)) {
+    throw new Error("PIMEM_DENSE_BACKEND must be sqlite-exact or qdrant-hnsw");
+  }
+  let retrievalStore: HybridRawStore | undefined;
+  let denseRetriever: DenseRetriever | undefined;
+  let vectorSynchronizer: QdrantVectorSynchronizer | undefined;
+  let vectorGenerationId: string | undefined;
+  if (denseBackend === "qdrant-hnsw") {
+    vectorGenerationId = requiredEnvironment("PIMEM_VECTOR_GENERATION_ID");
+    const collection: QdrantCollectionSpec = {
+      name: process.env.PIMEM_QDRANT_COLLECTION?.trim() || "pimem_vectors_v1",
+      dimensions: embedder.dimensions,
+      indexingThresholdKb: positiveEnvironmentInteger(
+        "PIMEM_QDRANT_INDEXING_THRESHOLD_KB",
+        10_000,
+        1_000_000_000,
+      ),
+      hnsw: {
+        m: positiveEnvironmentInteger("PIMEM_QDRANT_HNSW_M", 32, 256),
+        efConstruct: positiveEnvironmentInteger(
+          "PIMEM_QDRANT_EF_CONSTRUCT",
+          200,
+          10_000,
+        ),
+        fullScanThresholdKb: positiveEnvironmentInteger(
+          "PIMEM_QDRANT_FULL_SCAN_THRESHOLD_KB",
+          1_000,
+          1_000_000_000,
+        ),
+      },
+    };
+    const generation = rawStore.beginVectorIndexGeneration({
+      generationId: vectorGenerationId,
+      collectionName: collection.name,
+      profile: embeddingProfile(embedder),
+    });
+    if (generation.state === "failed") {
+      throw new Error(`Vector generation is failed: ${vectorGenerationId}`);
+    }
+    const qdrant = new QdrantClient({
+      baseUrl: requiredEnvironment("PIMEM_QDRANT_URL"),
+      timeoutMs: positiveEnvironmentInteger(
+        "PIMEM_QDRANT_TIMEOUT_MS",
+        120_000,
+        600_000,
+      ),
+    });
+    vectorSynchronizer = new QdrantVectorSynchronizer({
+      store: rawStore,
+      client: qdrant,
+      generationId: vectorGenerationId,
+      collection,
+      batchSize: positiveEnvironmentInteger(
+        "PIMEM_QDRANT_SYNC_BATCH_SIZE",
+        512,
+        10_000,
+      ),
+      concurrentBatches: positiveEnvironmentInteger(
+        "PIMEM_QDRANT_SYNC_CONCURRENCY",
+        4,
+        64,
+      ),
+    });
+    await vectorSynchronizer.initialize();
+    const sqliteRetrievalStore = await SqliteRetrievalWorkerPool.create({
+      databasePath: rawStore.databasePath,
+      size: positiveEnvironmentInteger(
+        "PIMEM_SQLITE_RETRIEVAL_WORKERS",
+        128,
+        128,
+      ),
+    });
+    retrievalStore = sqliteRetrievalStore;
+    denseRetriever = new QdrantDenseRetriever({
+      store: sqliteRetrievalStore,
+      client: qdrant,
+      generationId: vectorGenerationId,
+      collectionName: collection.name,
+      hnswEf: positiveEnvironmentInteger("PIMEM_QDRANT_HNSW_EF", 800, 10_000),
+    });
+  }
   const backend = new PiMemLeaderboardBackend({
     rawStore,
     embedder,
     modelRuntime,
+    ...(retrievalStore === undefined ? {} : { retrievalStore }),
+    ...(denseRetriever === undefined ? {} : { denseRetriever }),
+    ...(vectorSynchronizer === undefined ? {} : { vectorSynchronizer }),
+    ...(vectorGenerationId === undefined ? {} : { vectorGenerationId }),
     maxConcurrentAdds: positiveEnvironmentInteger(
       "PIMEM_MAX_CONCURRENT_ADDS",
       1,
