@@ -17,6 +17,7 @@ import {
 import type { MemoryRecord } from "../src/types.js";
 import {
   deterministicQdrantPointId,
+  qdrantCollectionIndexReady,
   QdrantVectorSynchronizer,
   type QdrantVectorIndexClient,
 } from "../src/vector-sync.js";
@@ -164,6 +165,27 @@ afterEach(async () => {
 });
 
 describe("durable vector synchronization", () => {
+  it("accepts Qdrant's bounded exact-scan tail below indexing_threshold", () => {
+    expect(qdrantCollectionIndexReady(
+      { status: "green", optimizerStatus: "ok", indexedVectorsCount: 8_094 },
+      8_103,
+      1_024,
+      100,
+    )).toBe(true);
+    expect(qdrantCollectionIndexReady(
+      { status: "green", optimizerStatus: "ok", indexedVectorsCount: 8_000 },
+      8_103,
+      1_024,
+      100,
+    )).toBe(false);
+    expect(qdrantCollectionIndexReady(
+      { status: "yellow", optimizerStatus: "ok", indexedVectorsCount: 8_103 },
+      8_103,
+      1_024,
+      100,
+    )).toBe(false);
+  });
+
   it("atomically records embeddings and idempotent outbox rows", async () => {
     const { store, records } = await fixture();
     try {

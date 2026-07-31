@@ -120,6 +120,23 @@ function terminalVerificationFailure(error: unknown): boolean {
     (error instanceof Error && /count mismatch/u.test(error.message));
 }
 
+export function qdrantCollectionIndexReady(
+  info: Pick<QdrantCollectionInfo, "status" | "optimizerStatus" | "indexedVectorsCount">,
+  expectedVectorCount: number,
+  dimensions: number,
+  indexingThresholdKb: number,
+): boolean {
+  const unindexedVectorCount = Math.max(
+    0,
+    expectedVectorCount - info.indexedVectorsCount,
+  );
+  const unindexedVectorSizeKb =
+    unindexedVectorCount * dimensions * Float32Array.BYTES_PER_ELEMENT / 1_024;
+  return info.status.toLowerCase() === "green" &&
+    info.optimizerStatus.toLowerCase() === "ok" &&
+    unindexedVectorSizeKb < indexingThresholdKb;
+}
+
 async function wait(delayMs: number, signal?: AbortSignal): Promise<void> {
   if (signal?.aborted) throw new Error("Vector synchronization aborted");
   await new Promise<void>((resolve, reject) => {
@@ -260,16 +277,15 @@ export class QdrantVectorSynchronizer {
       if (!info) {
         throw new Error(`Qdrant collection disappeared: ${this.collection.name}`);
       }
-      const estimatedVectorSizeKb =
-        expectedVectorCount * this.collection.dimensions * Float32Array.BYTES_PER_ELEMENT /
-        1_024;
-      const indexingRequired =
-        estimatedVectorSizeKb >= this.collection.indexingThresholdKb;
-      if (
-        info.status.toLowerCase() === "green" &&
-        info.optimizerStatus.toLowerCase() === "ok" &&
-        (!indexingRequired || info.indexedVectorsCount >= expectedVectorCount)
-      ) {
+      // Qdrant intentionally leaves a final segment below indexing_threshold
+      // unindexed and searches that bounded tail exactly. Requiring every point
+      // to appear in indexed_vectors_count can therefore deadlock READY forever.
+      if (qdrantCollectionIndexReady(
+        info,
+        expectedVectorCount,
+        this.collection.dimensions,
+        this.collection.indexingThresholdKb,
+      )) {
         return;
       }
       if (Date.now() >= deadline) {

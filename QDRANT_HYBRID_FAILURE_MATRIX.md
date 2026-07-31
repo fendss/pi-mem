@@ -10,6 +10,7 @@ Qdrant readiness, scope, generation, or provenance cannot be verified.
 | Qdrant `401`/`403` | Fail immediately and mark the generation `failed` | Permanent authorization failure test |
 | Transient verification `5xx` | Keep the sealed generation in `verifying`; permit a later finalize retry | Verification resume test |
 | Missing Qdrant points | Reject finalization and mark the generation `failed` | Exact generation/scope count tests |
+| Final segment is below Qdrant `indexing_threshold` | Accept READY only when collection/optimizer are healthy, exact generation/scope point counts match, and the exact-scan tail is strictly smaller than the threshold | Bounded exact-scan-tail readiness test and 8,103-vector ScriptMem recovery |
 | Incomplete or unsealed generation | Reject ANN Search before contacting Qdrant | Dense readiness-barrier test |
 | Stale generation result | Reject the result even when scope/profile otherwise match | Qdrant stale-generation test |
 | Cross-scope result | Reject the entire result set | Qdrant client and 128-scope worker tests |
