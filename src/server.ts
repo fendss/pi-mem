@@ -279,22 +279,22 @@ function retrievalQuestion(request: LeaderboardSearchRequest): string {
   ].join("\n");
 }
 
-function uniqueRawMemories(result: PiMemResult): MemoryRecord[] {
-  const orderedIds = [
-    ...result.citations.map((citation) => citation.memoryId),
-    ...result.evidence.map((memory) => memory.memoryId),
-    ...result.searchedMemories.map((memory) => memory.memoryId),
-  ];
-  const records = new Map<string, MemoryRecord>(
-    result.searchedMemories.map((memory) => [memory.memoryId, memory]),
+function uniqueCitedRawMemories(result: PiMemResult): MemoryRecord[] {
+  const evidence = new Map(
+    result.evidence.map((memory) => [memory.memoryId, memory]),
   );
-  for (const memory of result.evidence) records.set(memory.memoryId, memory);
   const unique = new Map<string, MemoryRecord>();
-  for (const memoryId of orderedIds) {
-    const memory = records.get(memoryId);
-    if (memory && memory.content.length > 0 && !unique.has(memoryId)) {
-      unique.set(memoryId, memory);
+  for (const citation of result.citations) {
+    const memory = evidence.get(citation.memoryId);
+    if (!memory || memory.scopeId !== result.scopeId) {
+      throw new Error(
+        `Cited memory is not present in scoped read evidence: ${citation.memoryId}`,
+      );
     }
+    if (memory.content.length === 0) {
+      throw new Error(`Cited memory has empty raw content: ${citation.memoryId}`);
+    }
+    if (!unique.has(memory.memoryId)) unique.set(memory.memoryId, memory);
   }
   return [...unique.values()];
 }
@@ -305,7 +305,10 @@ export function buildLeaderboardSearchResponse(
   topK: number,
 ): LeaderboardSearchResponse {
   const rawLimit = Math.max(0, topK - 1);
-  const rawMemories = uniqueRawMemories(result).slice(0, rawLimit);
+  // Match the strongest validated Direct adapter: the Answer model receives
+  // the compact package and only its cited immutable sources. Uncited reads
+  // and navigation candidates remain auditable internally but add prompt noise.
+  const rawMemories = uniqueCitedRawMemories(result).slice(0, rawLimit);
   const includedIds = new Set(rawMemories.map((memory) => memory.memoryId));
   const capsule = {
     type: "pimem_evidence_package_v1",

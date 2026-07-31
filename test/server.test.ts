@@ -57,6 +57,26 @@ function retrievalFixture(): PiMemResult {
     contentHash: "hash-second",
     metadata: {},
   };
+  const uncitedRead = {
+    memoryId: "m-uncited-read",
+    scopeId: "scope-1",
+    sessionId: "session-3",
+    turnIndex: 0,
+    role: "user" as const,
+    content: "Relevant-looking but uncited read evidence.",
+    contentHash: "hash-uncited-read",
+    metadata: {},
+  };
+  const remainingCandidate = {
+    memoryId: "m-remaining-candidate",
+    scopeId: "scope-1",
+    sessionId: "session-4",
+    turnIndex: 0,
+    role: "assistant" as const,
+    content: "A remaining navigation candidate.",
+    contentHash: "hash-remaining-candidate",
+    metadata: {},
+  };
   return {
     runId: "run-1",
     scopeId: "scope-1",
@@ -76,15 +96,22 @@ function retrievalFixture(): PiMemResult {
     searchedMemories: [
       { ...first, discoveries: [], read: true, cited: true },
       { ...second, discoveries: [], read: true, cited: true },
+      { ...uncitedRead, discoveries: [], read: true, cited: false },
+      {
+        ...remainingCandidate,
+        discoveries: [],
+        read: false,
+        cited: false,
+      },
     ],
-    evidence: [first, second],
+    evidence: [first, second, uncitedRead],
     trace: [],
     metrics: {
       searchCalls: 1,
       readCalls: 1,
       bashCalls: 0,
-      candidateCount: 2,
-      evidenceCount: 2,
+      candidateCount: 4,
+      evidenceCount: 3,
       citedCount: 2,
       retrievalProfile: "pimem-hybrid",
       embeddingCalls: 1,
@@ -191,6 +218,18 @@ describe("leaderboard API contract", () => {
     expect(JSON.stringify(capsule)).toContain("The first fact.");
     expect(first.data[1]?.content).toBe("The first immutable source fact.");
     expect(first.data).toHaveLength(3);
+    expect(JSON.stringify(first.data)).not.toContain("uncited read evidence");
+    expect(JSON.stringify(first.data)).not.toContain("navigation candidate");
+  });
+
+  it("fails closed when a citation is absent from scoped read evidence", () => {
+    const result = retrievalFixture();
+    result.citations = [
+      ...result.citations,
+      { memoryId: "m-not-read", supports: "Unsupported source." },
+    ];
+    expect(() => buildLeaderboardSearchResponse(result, "question", 100))
+      .toThrow(/not present in scoped read evidence/u);
   });
 
   it("writes a private self-contained Agent artifact without changing Search", async () => {

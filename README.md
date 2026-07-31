@@ -116,9 +116,7 @@ normal PiMem Agent and returns at most `top_k` items in this order:
 
 ```text
 deterministic source-grounded evidence capsule
-cited immutable raw memories
-other read evidence
-remaining candidates
+cited immutable raw memories only
 ```
 
 The capsule is a JSON string in the first result's `content`. It preserves
