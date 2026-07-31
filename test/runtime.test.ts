@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { orderCandidatesForEvidenceAttention } from "../src/runtime.js";
+import {
+  orderCandidatesForEvidenceAttention,
+  PI_MEM_SYSTEM_PROMPT,
+} from "../src/runtime.js";
 import type { MemoryCandidate } from "../src/types.js";
 
 function candidate(
@@ -20,6 +23,18 @@ function candidate(
 }
 
 describe("runtime candidate presentation", () => {
+  it("keeps generic source-consistency constraints in the retrieval policy", () => {
+    expect(PI_MEM_SYSTEM_PROMPT).toContain(
+      "Distinguish completed observations from plans",
+    );
+    expect(PI_MEM_SYSTEM_PROMPT).toContain(
+      "do not add cumulative snapshots together",
+    );
+    expect(PI_MEM_SYSTEM_PROMPT).toContain(
+      "search again only for a named missing slot",
+    );
+  });
+
   it("presents cited and read evidence first without dropping or mutating candidates", () => {
     const input = [
       candidate("unread-a"),

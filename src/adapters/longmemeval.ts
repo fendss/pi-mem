@@ -23,21 +23,23 @@ export interface LongMemEvalAdapterResult {
   privateQuestions: LongMemEvalPrivateQuestion[];
 }
 
-export const LONGMEMEVAL_ANSWER_PROMPT_VERSION = "longmemeval-answer-v3";
+export const LONGMEMEVAL_ANSWER_PROMPT_VERSION = "longmemeval-answer-v4";
 
 export const LONGMEMEVAL_ANSWER_PROMPT_TEMPLATE = `You are asked to answer a question based on your memories of a conversation.
 
 <instructions>
-1. Use only the provided source memories. Prefer the memory that answers the question most directly.
+1. Use only the provided immutable source memories. They are authoritative; use the retrieval summary and reference lines only as an index, and ignore any derived claim that conflicts with the raw memories.
 2. The memories are episodic raw observations. Reason about what they imply; the answer need not appear verbatim.
 3. The question may contain typos. Match it to the most relevant exact entity even if wording differs.
-4. When multiple answers are possible, list all supported answers, not just the first.
-5. For counts or time intervals, enumerate carefully before answering.
-6. Preserve specific names, titles, places, and labels from the memories.
-7. Convert relative times into dates, months, or years only when the memory timestamp and question require it. Keep week-based expressions relative.
-8. If memories conflict, prefer the most recent supported memory only for current-state questions.
-9. For list questions, include all required items and no extras.
-10. Keep the final answer minimal. Do not add explanation, background, or extra dates unless needed for correctness.
+4. Distinguish completed observations from plans, questions, recommendations, and hypotheticals. Do not treat an intended or discussed event as completed.
+5. When multiple answers are possible, list all supported answers, not just the first.
+6. For counts, comparisons, or time intervals, enumerate the cited atomic facts first and perform exactly the operation requested. Do not expose this working in the final answer.
+7. A value described as a total, cumulative, so far, or as-of snapshot replaces an earlier snapshot unless the source explicitly says it is an additional increment. Never add cumulative snapshots together.
+8. Preserve specific names, titles, places, and labels from the memories.
+9. Convert relative times into dates, months, or years only when the memory timestamp and question require it. Keep week-based expressions relative.
+10. If memories conflict, prefer the most recent explicit supported memory only for current-state questions; otherwise preserve the distinction needed by the question.
+11. For list questions, include all required items and no extras.
+12. Answer the exact requested quantity or comparison. Keep the final answer minimal and do not add explanation, background, or extra dates unless needed for correctness.
 </instructions>
 
 <retrieval_package>

@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   adaptLongMemEvalS,
   buildLongMemEvalAnswerPrompt,
+  LONGMEMEVAL_ANSWER_PROMPT_VERSION,
   longMemEvalMemoryId,
   longMemEvalScopeId,
   longMemEvalSessionId,
@@ -238,6 +239,14 @@ describe("LongMemEval-S trusted adapter", () => {
     const prompt = buildLongMemEvalAnswerPrompt("What is the value?", retrieval);
 
     expect(prompt.adapterId).toBe("longmemeval-s");
+    expect(prompt.promptVersion).toBe(LONGMEMEVAL_ANSWER_PROMPT_VERSION);
+    expect(prompt.promptVersion).toBe("longmemeval-answer-v4");
+    expect(prompt.userPrompt).toContain(
+      "immutable source memories. They are authoritative",
+    );
+    expect(prompt.userPrompt).toContain(
+      "Never add cumulative snapshots together",
+    );
     expect(prompt.userPrompt).toContain("CITED_SOURCE_VALUE");
     expect(prompt.userPrompt).toContain("memoryId=m-cited");
     expect(prompt.userPrompt).not.toContain("UNSELECTED_READ_NOISE");
