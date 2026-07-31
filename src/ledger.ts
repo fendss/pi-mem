@@ -226,31 +226,46 @@ export class MemoryLedger {
       throw new Error("evidenceSummary must not be empty");
     }
 
+    const citedMemoryIds = new Set<string>();
     const citations = input.citations.map((citation) => {
       const memoryId = citation.memoryId.trim();
       const supports = citation.supports.trim();
       if (!memoryId) {
         throw new Error("Citation memoryId must not be empty");
       }
+      if (citedMemoryIds.has(memoryId)) {
+        throw new Error(`Duplicate citation memory: ${memoryId}`);
+      }
+      citedMemoryIds.add(memoryId);
       if (!supports) {
         throw new Error(`Citation supports must not be empty: ${memoryId}`);
       }
-      if (!this.evidenceById.has(memoryId)) {
+      const evidence = this.evidenceById.get(memoryId);
+      if (!evidence) {
         throw new Error(
           `Finish rejected: citation must reference memory read in this run: ` +
             `${memoryId}. Do not repeat this call; call read for that memory ` +
             `before citing it, or remove the citation.`,
         );
       }
+      if (!evidence.content.trim()) {
+        throw new Error(`Cited memory has empty raw content: ${memoryId}`);
+      }
       return { memoryId, supports };
     });
 
+    const inventoryItems = new Set<string>();
     const inventory = input.inventory?.map((entry) => {
       const item = entry.item.trim();
       const memoryIds = [
         ...new Set(entry.memoryIds.map((memoryId) => memoryId.trim())),
       ].filter(Boolean);
       if (!item) throw new Error("Inventory item must not be empty");
+      const itemFingerprint = item.normalize("NFKC").toLocaleLowerCase();
+      if (inventoryItems.has(itemFingerprint)) {
+        throw new Error(`Duplicate inventory item: ${item}`);
+      }
+      inventoryItems.add(itemFingerprint);
       if (memoryIds.length === 0) {
         throw new Error(`Inventory item must cite read memory: ${item}`);
       }
@@ -258,6 +273,11 @@ export class MemoryLedger {
         if (!this.evidenceById.has(memoryId)) {
           throw new Error(
             `Inventory item must reference memory read in this run: ${memoryId}`,
+          );
+        }
+        if (!citedMemoryIds.has(memoryId)) {
+          throw new Error(
+            `Inventory item must reference a cited memory: ${memoryId}`,
           );
         }
       }

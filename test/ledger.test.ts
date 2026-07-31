@@ -117,6 +117,33 @@ describe("MemoryLedger", () => {
     ).toThrow(/read in this run/u);
   });
 
+  it("rejects duplicate citations and empty cited raw memories", () => {
+    const ledger = new MemoryLedger("scope-1");
+    const candidate = record("m1", 0);
+    ledger.recordRead([candidate]);
+
+    expect(() =>
+      ledger.acceptSelection({
+        status: "sufficient",
+        citations: [
+          { memoryId: "m1", supports: "First support." },
+          { memoryId: "m1", supports: "Repeated support." },
+        ],
+        evidenceSummary: "Repeated source.",
+      }),
+    ).toThrow(/Duplicate citation memory/u);
+
+    const emptyLedger = new MemoryLedger("scope-1");
+    emptyLedger.recordRead([{ ...candidate, content: "" }]);
+    expect(() =>
+      emptyLedger.acceptSelection({
+        status: "sufficient",
+        citations: [{ memoryId: "m1", supports: "Unsupported text." }],
+        evidenceSummary: "Empty source.",
+      }),
+    ).toThrow(/empty raw content/u);
+  });
+
   it("allows an insufficient selection with no citations", () => {
     const ledger = new MemoryLedger("scope-1");
     expect(
@@ -159,6 +186,40 @@ describe("MemoryLedger", () => {
         { item: "second", memoryIds: ["m2"] },
       ],
     });
+  });
+
+  it("rejects inventory sources that are read but not cited", () => {
+    const ledger = new MemoryLedger("scope-1");
+    const first = record("m1", 0);
+    const second = record("m2", 1);
+    ledger.recordRead([first, second]);
+
+    expect(() =>
+      ledger.acceptSelection({
+        status: "sufficient",
+        citations: [{ memoryId: "m1", supports: "First item." }],
+        evidenceSummary: "Inventory includes an uncited source.",
+        inventory: [{ item: "second", memoryIds: ["m2"] }],
+      }),
+    ).toThrow(/must reference a cited memory/u);
+  });
+
+  it("rejects duplicate normalized inventory items", () => {
+    const ledger = new MemoryLedger("scope-1");
+    const first = record("m1", 0);
+    ledger.recordRead([first]);
+
+    expect(() =>
+      ledger.acceptSelection({
+        status: "sufficient",
+        citations: [{ memoryId: "m1", supports: "First item." }],
+        evidenceSummary: "Duplicate inventory labels.",
+        inventory: [
+          { item: "First", memoryIds: ["m1"] },
+          { item: " first ", memoryIds: ["m1"] },
+        ],
+      }),
+    ).toThrow(/Duplicate inventory item/u);
   });
 
   it("rejects inventory entries backed only by unread memory", () => {
