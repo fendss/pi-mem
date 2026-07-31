@@ -245,6 +245,25 @@ latency/status, and the returned `data` array (evidence capsule followed by raw
 memories). `database.json` records the benchmark-specific volume, while
 `search-summary.json` reports only completion/error counts.
 
+For ScriptMem infrastructure checks, `scripts/run_scriptmem_qdrant_eval.sh`
+runs the four registered sources with 128 Search slots, 128 SQLite workers, and
+physically separate SQLite/Qdrant storage under
+`/data/zhaogangyi/pi-mem-eval/<run>/<benchmark>/`. It also sets the optional
+`PIMEM_SEARCH_ARTIFACT_DIR`. This does not change the leaderboard Search
+response: each successful request additionally receives a mode-`0600` private
+Agent sidecar containing the selected package, candidate and read memories,
+returned raw memories, retrieval metadata, and the Agent's auditable decision
+trace (`search`, `read`, and `finish` arguments/results). The sidecar contains
+no gold answer, rubric, Judge output, or generated benchmark answer.
+
+```bash
+./scripts/run_scriptmem_qdrant_eval.sh pimem-scriptmem-qdrant-128-v1
+```
+
+`agent-artifact-index.jsonl` joins every successful Search package ID to its
+self-contained Agent artifact. `search-results.jsonl` and that index are the
+handoff products; Answer/Judge execution remains downstream and separate.
+
 ## Commands
 
 Node 22.19 or newer is required. The full benchmark suite also requires

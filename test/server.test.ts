@@ -1,4 +1,4 @@
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp, readFile, rm, stat } from "node:fs/promises";
 import type { AddressInfo } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -11,6 +11,7 @@ import {
   parseLeaderboardSearchRequest,
   PiMemLeaderboardBackend,
   runSearchWithRetries,
+  writeSearchAgentArtifact,
   type LeaderboardApiBackend,
 } from "../src/server.js";
 import { embeddingProfile } from "../src/embedding-index.js";
@@ -190,6 +191,37 @@ describe("leaderboard API contract", () => {
     expect(JSON.stringify(capsule)).toContain("The first fact.");
     expect(first.data[1]?.content).toBe("The first immutable source fact.");
     expect(first.data).toHaveLength(3);
+  });
+
+  it("writes a private self-contained Agent artifact without changing Search", async () => {
+    const root = await mkdtemp(join(tmpdir(), "pimem-agent-artifact-"));
+    temporaryPaths.push(root);
+    const result = retrievalFixture();
+    const request = {
+      query: "question",
+      user_id: "user-1",
+      top_k: 100,
+    };
+    const response = buildLeaderboardSearchResponse(result, request.query, request.top_k);
+
+    await writeSearchAgentArtifact(root, request, result, response);
+
+    const path = join(root, "run-1.json");
+    const artifact = JSON.parse(await readFile(path, "utf8")) as Record<string, any>;
+    expect((await stat(path)).mode & 0o777).toBe(0o600);
+    expect(artifact).toMatchObject({
+      schema_version: "pimem-agent-search-artifact/v1",
+      status: "ok",
+      search: { package_id: response.data[0]?.id },
+      agent: {
+        run_id: "run-1",
+        selection: { status: "sufficient" },
+        memory: { returned_items: response.data },
+      },
+    });
+    expect(artifact.agent.memory.read_evidence).toContainEqual(
+      expect.objectContaining({ memoryId: "m-first" }),
+    );
   });
 
   it("appends immutable chunks idempotently within one user session", async () => {

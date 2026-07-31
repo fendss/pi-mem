@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 import { timingSafeEqual } from "node:crypto";
-import { mkdir } from "node:fs/promises";
+import { mkdir, rename, writeFile } from "node:fs/promises";
 import {
   createServer,
   type IncomingMessage,
@@ -28,7 +28,7 @@ import {
   type PiModelRuntime,
 } from "./model.js";
 import { AsyncRequestGate } from "./request-gate.js";
-import { runPiMem } from "./runtime.js";
+import { PiMemRunError, runPiMem } from "./runtime.js";
 import {
   MemoryStore,
   type AppendMemoryMessage,
@@ -37,7 +37,7 @@ import { QdrantClient, type QdrantCollectionSpec } from "./qdrant.js";
 import { SqliteRetrievalWorkerPool } from "./sqlite-retrieval-pool.js";
 import type { MemoryRecord, PiMemResult } from "./types.js";
 import { QdrantVectorSynchronizer } from "./vector-sync.js";
-import { sha256 } from "./util.js";
+import { newRunId, sha256 } from "./util.js";
 
 const MAX_REQUEST_BYTES = 2 * 1024 * 1024;
 const MAX_MESSAGES = 100;
@@ -112,6 +112,7 @@ export interface PiMemLeaderboardBackendOptions {
   maxConcurrentSearches?: number;
   maxRunMs?: number;
   searchAttempts?: number;
+  searchArtifactDirectory?: string;
 }
 
 class ApiError extends Error {
@@ -347,6 +348,72 @@ export function buildLeaderboardSearchResponse(
   return { data: [capsuleItem, ...rawItems].slice(0, topK) };
 }
 
+export async function writeSearchAgentArtifact(
+  directory: string,
+  request: LeaderboardSearchRequest,
+  result: PiMemResult | undefined,
+  response: LeaderboardSearchResponse | undefined,
+  error?: unknown,
+): Promise<void> {
+  await mkdir(directory, { recursive: true, mode: 0o700 });
+  const artifactId = result?.runId ?? `failed-${newRunId()}`;
+  const artifact = {
+    schema_version: "pimem-agent-search-artifact/v1",
+    artifact_id: artifactId,
+    search: {
+      query: request.query,
+      ...(request.options === undefined ? {} : { options: request.options }),
+      user_id: request.user_id,
+      top_k: request.top_k,
+      ...(response?.data[0] === undefined
+        ? {}
+        : { package_id: response.data[0].id }),
+    },
+    ...(result === undefined
+      ? {
+          status: "error",
+          error: error instanceof Error ? error.message : String(error),
+          ...(error instanceof PiMemRunError
+            ? { agent_failure: error.diagnostics }
+            : {}),
+        }
+      : {
+          status: "ok",
+          agent: {
+            run_id: result.runId,
+            retrieval_question: result.question,
+            selection: {
+              status: result.status,
+              evidence_summary: result.evidenceSummary,
+              citations: result.citations,
+              ...(result.count === undefined ? {} : { count: result.count }),
+              ...(result.inventory === undefined
+                ? {}
+                : { inventory: result.inventory }),
+            },
+            reasoning_trace: result.trace,
+            memory: {
+              candidates: result.candidates,
+              searched_memories: result.searchedMemories,
+              read_evidence: result.evidence,
+              returned_items: response?.data ?? [],
+            },
+            metrics: result.metrics,
+            retrieval: result.retrieval,
+            retrieval_model: result.retrievalModel,
+          },
+        }),
+  };
+  const finalPath = join(directory, `${artifactId}.json`);
+  const temporaryPath = join(directory, `.${artifactId}.${process.pid}.tmp`);
+  await writeFile(temporaryPath, `${JSON.stringify(artifact)}\n`, {
+    encoding: "utf8",
+    mode: 0o600,
+    flag: "wx",
+  });
+  await rename(temporaryPath, finalPath);
+}
+
 async function awaitWithSignal<T>(
   promise: Promise<T>,
   signal?: AbortSignal,
@@ -454,6 +521,7 @@ export class PiMemLeaderboardBackend implements LeaderboardApiBackend {
   private readonly searchAttempts: number;
   private readonly vectorSynchronizer: QdrantVectorSynchronizer | undefined;
   private readonly vectorGenerationId: string | undefined;
+  private readonly searchArtifactDirectory: string | undefined;
   private vectorSyncTail: Promise<void> = Promise.resolve();
   private vectorFinalizePromise: Promise<void> | undefined;
 
@@ -474,6 +542,7 @@ export class PiMemLeaderboardBackend implements LeaderboardApiBackend {
     );
     this.maxRunMs = options.maxRunMs ?? 120_000;
     this.searchAttempts = options.searchAttempts ?? 1;
+    this.searchArtifactDirectory = options.searchArtifactDirectory;
     this.vectorSynchronizer = options.vectorSynchronizer;
     this.vectorGenerationId = options.vectorGenerationId;
     if ((this.vectorSynchronizer === undefined) !== (this.vectorGenerationId === undefined)) {
@@ -573,27 +642,50 @@ export class PiMemLeaderboardBackend implements LeaderboardApiBackend {
       if (!(await this.hybridStore.hasScopeRecords(scopeId))) {
         return { data: [] };
       }
-      const result = await runSearchWithRetries({
-        maxRunMs: this.maxRunMs,
-        maxAttempts: this.searchAttempts,
-        ...(signal === undefined ? {} : { signal }),
-        run: (attemptRunMs) => runPiMem({
-          store: this.hybridStore,
-          modelRuntime: this.modelRuntime,
-          scopeId,
-          question: retrievalQuestion(request),
-          maxTurns: 1_024,
-          maxToolCalls: 4_096,
-          maxProtocolNudges: 8,
-          maxRunMs: attemptRunMs,
+      let result: PiMemResult;
+      try {
+        result = await runSearchWithRetries({
+          maxRunMs: this.maxRunMs,
+          maxAttempts: this.searchAttempts,
           ...(signal === undefined ? {} : { signal }),
-        }),
-      });
-      return buildLeaderboardSearchResponse(
+          run: (attemptRunMs) => runPiMem({
+            store: this.hybridStore,
+            modelRuntime: this.modelRuntime,
+            scopeId,
+            question: retrievalQuestion(request),
+            maxTurns: 1_024,
+            maxToolCalls: 4_096,
+            maxProtocolNudges: 8,
+            maxRunMs: attemptRunMs,
+            ...(signal === undefined ? {} : { signal }),
+          }),
+        });
+      } catch (error) {
+        if (this.searchArtifactDirectory !== undefined) {
+          await writeSearchAgentArtifact(
+            this.searchArtifactDirectory,
+            request,
+            undefined,
+            undefined,
+            error,
+          );
+        }
+        throw error;
+      }
+      const response = buildLeaderboardSearchResponse(
         result,
         request.query,
         request.top_k,
       );
+      if (this.searchArtifactDirectory !== undefined) {
+        await writeSearchAgentArtifact(
+          this.searchArtifactDirectory,
+          request,
+          result,
+          response,
+        );
+      }
+      return response;
     });
   }
 
@@ -898,6 +990,13 @@ export async function startLeaderboardServer(): Promise<void> {
     ),
     maxRunMs: positiveEnvironmentInteger("PIMEM_MAX_RUN_MS", 120_000, 600_000),
     searchAttempts: positiveEnvironmentInteger("PIMEM_SEARCH_ATTEMPTS", 1, 5),
+    ...(process.env.PIMEM_SEARCH_ARTIFACT_DIR?.trim()
+      ? {
+          searchArtifactDirectory: resolve(
+            process.env.PIMEM_SEARCH_ARTIFACT_DIR.trim(),
+          ),
+        }
+      : {}),
   });
   const authScheme = authSchemeFromEnvironment();
   const apiKey = process.env.PIMEM_MEMORY_API_KEY;
