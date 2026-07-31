@@ -73,6 +73,10 @@ interface VectorSyncRow {
   dimensions: number;
 }
 
+export interface MemoryStoreOptions {
+  readOnly?: boolean;
+}
+
 export interface EmbeddingProfile {
   profileId: string;
   model: string;
@@ -316,9 +320,22 @@ export class MemoryStore {
     EmbeddingIndexStatus
   >();
 
-  constructor(databasePath: string) {
+  constructor(databasePath: string, options: MemoryStoreOptions = {}) {
     this.databasePath = databasePath;
-    this.db = new DatabaseSync(databasePath);
+    const readOnly = options.readOnly ?? false;
+    this.db = new DatabaseSync(databasePath, { readOnly });
+    if (readOnly) {
+      this.db.exec("PRAGMA busy_timeout = 30000");
+      this.db.exec(`
+        PRAGMA query_only = ON;
+        PRAGMA foreign_keys = ON;
+        PRAGMA temp_store = MEMORY;
+        PRAGMA mmap_size = 4294967296;
+        PRAGMA cache_size = -65536;
+      `);
+      this.evidenceOperators = new DatabaseEvidenceOperators(this.db, true);
+      return;
+    }
     this.db.exec("PRAGMA journal_mode = WAL");
     this.db.exec("PRAGMA foreign_keys = ON");
     this.db.exec(`
@@ -416,7 +433,7 @@ export class MemoryStore {
       CREATE INDEX IF NOT EXISTS memory_append_requests_scope
         ON memory_append_requests(scope_id, request_id);
     `);
-    this.evidenceOperators = new DatabaseEvidenceOperators(this.db);
+    this.evidenceOperators = new DatabaseEvidenceOperators(this.db, false);
   }
 
   close(): void {
@@ -847,6 +864,12 @@ export class MemoryStore {
       .filter((row): row is MemoryRow => row !== undefined)
       .map(rowToRecord)
       .sort(compareRecords);
+  }
+
+  hasScopeRecords(scopeId: string): boolean {
+    return this.db.prepare(`
+      SELECT 1 FROM memories WHERE scope_id = ? LIMIT 1
+    `).get(scopeId) !== undefined;
   }
 
   listScopeRecords(scopeId: string): MemoryRecord[] {
@@ -1724,8 +1747,13 @@ export class MemoryStore {
     return { scopeId, path: scopePath, memoryCount: records.length };
   }
 
-  static async create(databasePath: string): Promise<MemoryStore> {
-    await mkdir(dirname(databasePath), { recursive: true });
-    return new MemoryStore(databasePath);
+  static async create(
+    databasePath: string,
+    options: MemoryStoreOptions = {},
+  ): Promise<MemoryStore> {
+    if (!(options.readOnly ?? false)) {
+      await mkdir(dirname(databasePath), { recursive: true });
+    }
+    return new MemoryStore(databasePath, options);
   }
 }

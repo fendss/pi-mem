@@ -22,6 +22,7 @@
     "test": "vitest run",
     "test:python": "python3 -m unittest scripts/test_longmemeval_frozen_eval.py scripts/test_leaderboard_local_search_eval.py",
     "test:qdrant-integration": "npm run build && scripts/test_qdrant_server_integration.sh",
+    "test:sqlite-workers-integration": "npm run build && scripts/test_sqlite_worker_pool_integration.sh",
     "check": "npm run typecheck && npm test -- --maxWorkers=4 && npm run test:python && npm run build",
     "cli": "node --disable-warning=ExperimentalWarning dist/cli.js",
     "server": "node --disable-warning=ExperimentalWarning dist/server.js"

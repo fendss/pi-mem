@@ -445,6 +445,7 @@ async function runQuestion(
     return await runQuestionWithRuntime(
       paths,
       retrieval.store,
+      rawStore,
       modelRuntime,
       scopeId,
       question,
@@ -458,6 +459,7 @@ async function runQuestion(
 async function runQuestionWithRuntime(
   paths: ReturnType<typeof dataPaths>,
   store: PiMemRuntimeStore,
+  bashStore: Pick<MemoryStore, "findMentionedMemoryIds" | "getRecords">,
   modelRuntime: PiModelRuntime,
   scopeId: string,
   question: string,
@@ -471,6 +473,7 @@ async function runQuestionWithRuntime(
   return runPiMem({
     store,
     modelRuntime,
+    bashStore,
     scopeId,
     question,
     ...(questionDate === undefined ? {} : { questionDate }),
@@ -533,6 +536,7 @@ async function runLongMemEval(parsed: ParsedCommand): Promise<void> {
     const retrieval = await runQuestionWithRuntime(
       paths,
       context.store,
+      rawStore,
       modelRuntime,
       question.scopeId,
       question.question,
@@ -917,6 +921,7 @@ async function benchmarkLongMemEval(parsed: ParsedCommand): Promise<void> {
         const retrievalResult = await runQuestionWithRuntime(
           paths,
           retrievalContexts[slot - 1]!.store,
+          rawStore,
           modelRuntime,
           question.scopeId,
           question.question,

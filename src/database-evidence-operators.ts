@@ -96,15 +96,19 @@ function operatorTokens(queries: readonly string[]): string[] {
 export class DatabaseEvidenceOperators {
   private readonly db: DatabaseSync;
   private readonly factIndex: EvidenceFactIndex;
+  private readonly readOnly: boolean;
 
-  constructor(db: DatabaseSync) {
+  constructor(db: DatabaseSync, readOnly = false) {
     this.db = db;
-    this.factIndex = new EvidenceFactIndex(db);
+    this.readOnly = readOnly;
+    this.factIndex = new EvidenceFactIndex(db, !readOnly);
   }
 
-  /** Lazily materializes facts for one scope and is idempotent. */
+  /** Lazily materializes facts for a writer, or verifies them for a reader. */
   ensureScope(scopeId: string): EvidenceFactIndexStatus {
-    return this.factIndex.ensureScope(scopeId);
+    return this.readOnly
+      ? this.factIndex.assertCompleteScope(scopeId)
+      : this.factIndex.ensureScope(scopeId);
   }
 
   expand(

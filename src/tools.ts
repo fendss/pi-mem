@@ -172,12 +172,14 @@ export interface MemoryToolStore {
     memoryIds: string[],
     contextBefore?: number,
     contextAfter?: number,
-  ): MemoryRecord[];
+    signal?: AbortSignal,
+  ): MemoryRecord[] | Promise<MemoryRecord[]>;
   expandEvidenceOperator?(
     scopeId: string,
     request: SearchRequest,
     context: EvidenceOperatorSearchContext,
     seedHits: readonly StoreSearchHit[],
+    signal?: AbortSignal,
   ): StoreSearchHit[] | Promise<StoreSearchHit[]>;
 }
 
@@ -561,6 +563,7 @@ export function createSearchTool(
               request,
               context,
               primaryHits,
+              signal,
             );
         hits = databaseHits.length === 0
           ? primaryHits
@@ -616,7 +619,7 @@ export function createReadTool(
     description:
       "Read selected immutable source memories using candidate numbers returned by search or bash_ro. The harness resolves them to exact internal IDs and records all context expansion. When a hit may omit its value, date, state, or adjacent reply, use bounded contextBefore/contextAfter. Use the same candidate numbers for citations in finish; there is no second evidence-number namespace.",
     parameters: ReadParameters,
-    async execute(_toolCallId, params) {
+    async execute(_toolCallId, params, signal) {
       const candidateRefs = normalizeHarnessRefs(params.candidateRefs);
       if (options.ledger.candidates.length === 0) {
         return {
@@ -637,11 +640,12 @@ export function createReadTool(
       const memoryIds = options.ledger.resolveCandidateRefs(candidateRefs);
       const contextBefore = params.contextBefore ?? 0;
       const contextAfter = params.contextAfter ?? 0;
-      const memories = options.store.read(
+      const memories = await options.store.read(
         options.scopeId,
         memoryIds,
         contextBefore,
         contextAfter,
+        signal,
       );
       const recorded = options.ledger.recordRead(memories);
       const requested = new Set(memoryIds);
@@ -688,7 +692,7 @@ export function createFinishTool(
       "Submit an internally consistent evidence package. Cite candidate numbers returned by search/read; the harness converts them to exact source IDs, auto-reads selected candidates, and enforces provenance. Cover every independent evidence need. Keep citation supports atomic and source-local; make evidenceSummary a lossless ledger of those facts; keep inventory, count, summary, supports, and raw citations consistent. Do not generate the benchmark answer.",
     parameters: FinishParameters,
     executionMode: "sequential",
-    async execute(_toolCallId, params) {
+    async execute(_toolCallId, params, signal) {
       const submitted: PiMemSelection = {
         status: params.status,
         citations: params.citations.map((citation) => ({
@@ -722,11 +726,12 @@ export function createFinishTool(
         options.ledger.candidateRef(memoryId)!
       );
       if (autoReadMemoryIds.length > 0) {
-        const autoReadRecords = options.store.read(
+        const autoReadRecords = await options.store.read(
           options.scopeId,
           autoReadMemoryIds,
           0,
           0,
+          signal,
         );
         options.ledger.recordRead(autoReadRecords);
       }

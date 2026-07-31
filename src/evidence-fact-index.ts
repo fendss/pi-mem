@@ -44,15 +44,32 @@ function rowToRecord(row: MemoryRow): MemoryRecord {
 export class EvidenceFactIndex {
   private readonly db: DatabaseSync;
 
-  constructor(db: DatabaseSync) {
+  constructor(db: DatabaseSync, initializeSchema = true) {
     this.db = db;
-    this.initializeSchema();
+    if (initializeSchema) this.initializeSchema();
   }
 
   ensureScope(scopeId: string): EvidenceFactIndexStatus {
     this.assertContentHashes(scopeId);
     const missing = this.listUnindexedRows(scopeId);
     if (missing.length > 0) this.indexRows(missing);
+    return this.status(scopeId);
+  }
+
+  assertCompleteScope(scopeId: string): EvidenceFactIndexStatus {
+    this.assertContentHashes(scopeId);
+    const missing = this.db.prepare(`
+      SELECT 1
+      FROM memories AS m
+      WHERE m.scope_id = ? AND NOT EXISTS (
+        SELECT 1 FROM memory_evidence_fact_index AS i
+        WHERE i.memory_id = m.memory_id AND i.extractor_version = ?
+      )
+      LIMIT 1
+    `).get(scopeId, EVIDENCE_FACT_EXTRACTOR_VERSION);
+    if (missing) {
+      throw new Error(`Evidence fact index is incomplete for scope ${scopeId}`);
+    }
     return this.status(scopeId);
   }
 

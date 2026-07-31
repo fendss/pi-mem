@@ -4,6 +4,7 @@ import { QdrantDenseRetriever } from "../dist/dense-retriever.js";
 import { HybridMemoryStore } from "../dist/hybrid-search.js";
 import { ingestMemorySessions } from "../dist/ingest.js";
 import { QdrantClient } from "../dist/qdrant.js";
+import { SqliteRetrievalWorkerPool } from "../dist/sqlite-retrieval-pool.js";
 import { MemoryStore } from "../dist/store.js";
 import {
   deterministicQdrantPointId,
@@ -146,25 +147,35 @@ try {
     embedQueries: async (texts) => texts.map(() => [1, 0, 0, 0]),
     snapshotMetrics: () => ({ calls: 1, latencyMs: 0 }),
   };
-  const denseRetriever = new QdrantDenseRetriever({
-    store,
-    client,
-    generationId,
-    collectionName: collection.name,
-    hnswEf: 256,
+  const sqlitePool = await SqliteRetrievalWorkerPool.create({
+    databasePath,
+    size: 4,
   });
-  const hybrid = new HybridMemoryStore(store, embedder, denseRetriever);
-  const hybridHits = await hybrid.search("scope-sync-a", {
-    queries: ["alpha"],
-    limit: 2,
-  });
-  if (
-    hybrid.getRetrievalMetadata().retrievalProfile !==
-      "pimem-hybrid-qdrant-hnsw-v1" ||
-    hybridHits.length !== 2 ||
-    !hybridHits.some((hit) => hit.record.memoryId === "memory-sync-a")
-  ) {
-    throw new Error(`Qdrant hybrid retrieval mismatch: ${JSON.stringify(hybridHits)}`);
+  let hybrid;
+  let hybridHits;
+  try {
+    const denseRetriever = new QdrantDenseRetriever({
+      store: sqlitePool,
+      client,
+      generationId,
+      collectionName: collection.name,
+      hnswEf: 256,
+    });
+    hybrid = new HybridMemoryStore(sqlitePool, embedder, denseRetriever);
+    hybridHits = await hybrid.search("scope-sync-a", {
+      queries: ["alpha"],
+      limit: 2,
+    });
+    if (
+      hybrid.getRetrievalMetadata().retrievalProfile !==
+        "pimem-hybrid-qdrant-hnsw-v1" ||
+      hybridHits.length !== 2 ||
+      !hybridHits.some((hit) => hit.record.memoryId === "memory-sync-a")
+    ) {
+      throw new Error(`Qdrant hybrid retrieval mismatch: ${JSON.stringify(hybridHits)}`);
+    }
+  } finally {
+    await sqlitePool.close();
   }
   process.stdout.write(`${JSON.stringify({
     phase,

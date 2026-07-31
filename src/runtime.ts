@@ -58,8 +58,13 @@ export function orderCandidatesForEvidenceAttention(
     .map(({ candidate }) => candidate);
 }
 
-export interface PiMemRuntimeStore extends MemoryToolStore,
-  Pick<MemoryStore, "findMentionedMemoryIds" | "getRecords"> {
+export interface PiMemRuntimeStore extends MemoryToolStore {
+  getRecords(
+    scopeId: string,
+    memoryIds: string[],
+    signal?: AbortSignal,
+  ): ReturnType<MemoryStore["getRecords"]> |
+    Promise<ReturnType<MemoryStore["getRecords"]>>;
   getRetrievalMetadata?(): RetrievalMetadata;
   snapshotRetrievalMetrics?(): RetrievalMetricsSnapshot;
 }
@@ -72,6 +77,7 @@ export interface RunPiMemOptions {
   questionDate?: string;
   scopePath?: string;
   bashRunner?: ReadOnlyBash;
+  bashStore?: Pick<MemoryStore, "findMentionedMemoryIds" | "getRecords">;
   maxTurns?: number;
   maxToolCalls?: number;
   maxProtocolNudges?: number;
@@ -197,7 +203,9 @@ export async function runPiMem(
           bashRo: {
             runner: options.bashRunner ?? new ReadOnlyBash(),
             scopePath: options.scopePath,
-            store: options.store,
+            store: options.bashStore ?? (() => {
+              throw new Error("bashStore is required when scopePath is provided");
+            })(),
           },
         }),
 
@@ -325,10 +333,12 @@ export async function runPiMem(
     );
   }
   const candidates = ledger.candidates;
+  const exactCandidateRecords = await options.store.getRecords(
+    scopeId,
+    candidates.map((candidate) => candidate.memoryId),
+  );
   const exactCandidates = new Map(
-    options.store
-      .getRecords(scopeId, candidates.map((candidate) => candidate.memoryId))
-      .map((record) => [record.memoryId, record]),
+    exactCandidateRecords.map((record) => [record.memoryId, record]),
   );
   const searchedMemories = orderCandidatesForEvidenceAttention(candidates).map((candidate) => {
     const record = exactCandidates.get(candidate.memoryId);

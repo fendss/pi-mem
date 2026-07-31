@@ -5,6 +5,7 @@ import type {
 import type {
   EmbeddingProfile,
   MemoryStore,
+  VectorIndexGenerationStatus,
 } from "./store.js";
 import type {
   MemoryRecord,
@@ -38,8 +39,20 @@ export interface QdrantDenseSearchClient {
   search(request: QdrantSearchRequest): Promise<QdrantSearchHit[]>;
 }
 
+export interface QdrantDenseMetadataStore {
+  assertVectorIndexGenerationReady(
+    generationId: string,
+    signal?: AbortSignal,
+  ): VectorIndexGenerationStatus | Promise<VectorIndexGenerationStatus>;
+  getRecords(
+    scopeId: string,
+    memoryIds: string[],
+    signal?: AbortSignal,
+  ): MemoryRecord[] | Promise<MemoryRecord[]>;
+}
+
 export interface QdrantDenseRetrieverOptions {
-  store: MemoryStore;
+  store: QdrantDenseMetadataStore;
   client: QdrantDenseSearchClient;
   generationId: string;
   collectionName: string;
@@ -107,7 +120,7 @@ export class SqliteExactDenseRetriever implements DenseRetriever {
 /** Filtered HNSW retrieval whose returned IDs are revalidated against SQLite. */
 export class QdrantDenseRetriever implements DenseRetriever {
   readonly retrievalProfile = "pimem-hybrid-qdrant-hnsw-v1" as const;
-  private readonly store: MemoryStore;
+  private readonly store: QdrantDenseMetadataStore;
   private readonly client: QdrantDenseSearchClient;
   private readonly generationId: string;
   private readonly collectionName: string;
@@ -128,17 +141,22 @@ export class QdrantDenseRetriever implements DenseRetriever {
     this.hnswEf = hnswEf;
   }
 
-  private hydrate(
+  private async hydrate(
     scopeId: string,
     hits: readonly QdrantSearchHit[],
     limit: number,
-  ): DenseSearchHit[] {
+    signal?: AbortSignal,
+  ): Promise<DenseSearchHit[]> {
     if (new Set(hits.map((hit) => hit.memoryId)).size !== hits.length) {
       throw new Error("Qdrant dense results contain duplicate memory IDs");
     }
+    const rawRecords = await this.store.getRecords(
+      scopeId,
+      hits.map((hit) => hit.memoryId),
+      signal,
+    );
     const records = new Map(
-      this.store.getRecords(scopeId, hits.map((hit) => hit.memoryId))
-        .map((record) => [record.memoryId, record]),
+      rawRecords.map((record) => [record.memoryId, record]),
     );
     return hits.map((hit) => {
       const record = records.get(hit.memoryId);
@@ -168,8 +186,9 @@ export class QdrantDenseRetriever implements DenseRetriever {
   }
 
   async search(request: DenseSearchBatchRequest): Promise<DenseSearchHit[][]> {
-    const generation = this.store.assertVectorIndexGenerationReady(
+    const generation = await this.store.assertVectorIndexGenerationReady(
       this.generationId,
+      request.signal,
     );
     if (
       generation.collectionName !== this.collectionName ||
@@ -205,7 +224,12 @@ export class QdrantDenseRetriever implements DenseRetriever {
         hnswEf: Math.min(10_000, Math.max(this.hnswEf, request.limit * 2)),
         ...(request.signal === undefined ? {} : { signal: request.signal }),
       });
-      return this.hydrate(request.scopeId, hits, request.limit);
+      return this.hydrate(
+        request.scopeId,
+        hits,
+        request.limit,
+        request.signal,
+      );
     }));
     return rankings;
   }

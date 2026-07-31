@@ -12,7 +12,10 @@ import { pathToFileURL } from "node:url";
 import type { DenseRetriever } from "./dense-retriever.js";
 import { OpenAICompatibleEmbedder, type Embedder } from "./embedding.js";
 import { indexScopeEmbeddings } from "./embedding-index.js";
-import { HybridMemoryStore } from "./hybrid-search.js";
+import {
+  HybridMemoryStore,
+  type HybridRawStore,
+} from "./hybrid-search.js";
 import {
   createPiModelRuntime,
   type PiModelRuntime,
@@ -88,6 +91,7 @@ export interface PiMemLeaderboardBackendOptions {
   rawStore: MemoryStore;
   embedder: Embedder;
   modelRuntime: PiModelRuntime;
+  retrievalStore?: HybridRawStore;
   denseRetriever?: DenseRetriever;
   maxConcurrentAdds?: number;
   maxConcurrentSearches?: number;
@@ -390,6 +394,7 @@ export class PiMemLeaderboardBackend implements LeaderboardApiBackend {
   private readonly rawStore: MemoryStore;
   private readonly embedder: Embedder;
   private readonly modelRuntime: PiModelRuntime;
+  private readonly retrievalStore: HybridRawStore;
   private readonly hybridStore: HybridMemoryStore;
   private readonly addGate: AsyncRequestGate;
   private readonly searchGate: AsyncRequestGate;
@@ -400,8 +405,9 @@ export class PiMemLeaderboardBackend implements LeaderboardApiBackend {
     this.rawStore = options.rawStore;
     this.embedder = options.embedder;
     this.modelRuntime = options.modelRuntime;
+    this.retrievalStore = options.retrievalStore ?? options.rawStore;
     this.hybridStore = new HybridMemoryStore(
-      options.rawStore,
+      this.retrievalStore,
       options.embedder,
       options.denseRetriever,
     );
@@ -460,7 +466,7 @@ export class PiMemLeaderboardBackend implements LeaderboardApiBackend {
       if (this.rawStore.hasPendingAppendRequests(scopeId)) {
         throw new ApiError(503, "Memory ingestion is incomplete for this user_id");
       }
-      if (this.rawStore.listScopeRecords(scopeId).length === 0) {
+      if (!(await this.hybridStore.hasScopeRecords(scopeId))) {
         return { data: [] };
       }
       const result = await runSearchWithRetries({
@@ -485,7 +491,10 @@ export class PiMemLeaderboardBackend implements LeaderboardApiBackend {
     });
   }
 
-  close(): void {
+  async close(): Promise<void> {
+    if (this.retrievalStore !== this.rawStore) {
+      await this.retrievalStore.close?.();
+    }
     this.rawStore.close();
   }
 }

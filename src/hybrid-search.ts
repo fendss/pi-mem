@@ -10,7 +10,12 @@ import {
   reciprocalRankFusion,
 } from "./ranking.js";
 import { finalizeSearchHits } from "./search-results.js";
-import type { MemoryStore, StoreSearchHit } from "./store.js";
+import {
+  MemoryStore,
+  type EmbeddingIndexStatus,
+  type EmbeddingProfile,
+  type StoreSearchHit,
+} from "./store.js";
 import type {
   EvidenceOperatorSearchContext,
   MemoryRecord,
@@ -19,6 +24,43 @@ import type {
   SearchRequest,
 } from "./types.js";
 import { episodicPreview } from "./util.js";
+
+export interface HybridRawStore {
+  getEmbeddingIndexStatus(
+    scopeId: string,
+    profile: EmbeddingProfile,
+    signal?: AbortSignal,
+  ): EmbeddingIndexStatus | Promise<EmbeddingIndexStatus>;
+  search(
+    scopeId: string,
+    request: SearchRequest,
+    signal?: AbortSignal,
+  ): StoreSearchHit[] | Promise<StoreSearchHit[]>;
+  expandEvidenceOperator(
+    scopeId: string,
+    request: SearchRequest,
+    context: EvidenceOperatorSearchContext,
+    seedHits: readonly StoreSearchHit[],
+    signal?: AbortSignal,
+  ): StoreSearchHit[] | Promise<StoreSearchHit[]>;
+  read(
+    scopeId: string,
+    memoryIds: string[],
+    contextBefore?: number,
+    contextAfter?: number,
+    signal?: AbortSignal,
+  ): MemoryRecord[] | Promise<MemoryRecord[]>;
+  getRecords(
+    scopeId: string,
+    memoryIds: string[],
+    signal?: AbortSignal,
+  ): MemoryRecord[] | Promise<MemoryRecord[]>;
+  hasScopeRecords(
+    scopeId: string,
+    signal?: AbortSignal,
+  ): boolean | Promise<boolean>;
+  close?(): void | Promise<void>;
+}
 
 interface RankedHybridHit extends StoreSearchHit {
   denseRank: number;
@@ -38,7 +80,7 @@ function candidateText(candidate: { record: MemoryRecord }): string {
 }
 
 export class HybridMemoryStore {
-  readonly rawStore: MemoryStore;
+  readonly rawStore: HybridRawStore;
   readonly embedder: Embedder;
   readonly denseRetriever: DenseRetriever;
 
@@ -46,13 +88,20 @@ export class HybridMemoryStore {
   private rerankCandidateCount = 0;
 
   constructor(
-    rawStore: MemoryStore,
+    rawStore: HybridRawStore,
     embedder: Embedder,
-    denseRetriever: DenseRetriever = new SqliteExactDenseRetriever(rawStore),
+    denseRetriever?: DenseRetriever,
   ) {
     this.rawStore = rawStore;
     this.embedder = embedder;
-    this.denseRetriever = denseRetriever;
+    if (denseRetriever !== undefined) {
+      this.denseRetriever = denseRetriever;
+    } else {
+      if (!(rawStore instanceof MemoryStore)) {
+        throw new Error("An asynchronous raw store requires an explicit dense retriever");
+      }
+      this.denseRetriever = new SqliteExactDenseRetriever(rawStore);
+    }
   }
 
   getRetrievalMetadata(): RetrievalMetadata {
@@ -80,7 +129,11 @@ export class HybridMemoryStore {
     signal?: AbortSignal,
   ): Promise<StoreSearchHit[]> {
     const profile = embeddingProfile(this.embedder);
-    const status = this.rawStore.getEmbeddingIndexStatus(scopeId, profile);
+    const status = await this.rawStore.getEmbeddingIndexStatus(
+      scopeId,
+      profile,
+      signal,
+    );
     if (status.total === 0) {
       throw new Error(`Hybrid search scope is empty: ${scopeId}`);
     }
@@ -122,15 +175,22 @@ export class HybridMemoryStore {
     } = request;
     // Qdrant I/O starts before synchronous FTS5; stage 5 moves FTS5 itself to
     // read-only workers so neither path blocks the Agent event loop.
-    const lexicalRankings = request.queries.map((query) =>
-      this.rawStore.search(scopeId, {
-        ...lexicalBase,
-        queries: [query],
-        limit: Math.min(100, headroom),
-        order: "relevance",
-      })
-    );
-    const denseRankings = await densePromise;
+    const lexicalPromise = Promise.all(request.queries.map((query) =>
+      this.rawStore.search(
+        scopeId,
+        {
+          ...lexicalBase,
+          queries: [query],
+          limit: Math.min(100, headroom),
+          order: "relevance",
+        },
+        signal,
+      )
+    ));
+    const [denseRankings, lexicalRankings] = await Promise.all([
+      densePromise,
+      lexicalPromise,
+    ]);
     if (denseRankings.length !== request.queries.length) {
       throw new Error("Dense ranking count does not match query count");
     }
@@ -235,8 +295,9 @@ export class HybridMemoryStore {
   searchLexical(
     scopeId: string,
     request: SearchRequest,
-  ): StoreSearchHit[] {
-    return this.rawStore.search(scopeId, request);
+    signal?: AbortSignal,
+  ): Promise<StoreSearchHit[]> {
+    return Promise.resolve(this.rawStore.search(scopeId, request, signal));
   }
 
   expandEvidenceOperator(
@@ -244,13 +305,15 @@ export class HybridMemoryStore {
     request: SearchRequest,
     context: EvidenceOperatorSearchContext,
     seedHits: readonly StoreSearchHit[],
-  ): StoreSearchHit[] {
-    return this.rawStore.expandEvidenceOperator(
+    signal?: AbortSignal,
+  ): Promise<StoreSearchHit[]> {
+    return Promise.resolve(this.rawStore.expandEvidenceOperator(
       scopeId,
       request,
       context,
       seedHits,
-    );
+      signal,
+    ));
   }
 
   read(
@@ -258,20 +321,26 @@ export class HybridMemoryStore {
     memoryIds: string[],
     contextBefore = 0,
     contextAfter = 0,
-  ): MemoryRecord[] {
-    return this.rawStore.read(
+    signal?: AbortSignal,
+  ): Promise<MemoryRecord[]> {
+    return Promise.resolve(this.rawStore.read(
       scopeId,
       memoryIds,
       contextBefore,
       contextAfter,
-    );
+      signal,
+    ));
   }
 
-  getRecords(scopeId: string, memoryIds: string[]): MemoryRecord[] {
-    return this.rawStore.getRecords(scopeId, memoryIds);
+  getRecords(
+    scopeId: string,
+    memoryIds: string[],
+    signal?: AbortSignal,
+  ): Promise<MemoryRecord[]> {
+    return Promise.resolve(this.rawStore.getRecords(scopeId, memoryIds, signal));
   }
 
-  findMentionedMemoryIds(scopeId: string, text: string): string[] {
-    return this.rawStore.findMentionedMemoryIds(scopeId, text);
+  hasScopeRecords(scopeId: string, signal?: AbortSignal): Promise<boolean> {
+    return Promise.resolve(this.rawStore.hasScopeRecords(scopeId, signal));
   }
 }
