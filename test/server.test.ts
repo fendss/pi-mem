@@ -126,6 +126,23 @@ describe("leaderboard API contract", () => {
     expect(budgets.every((budget) => budget > 0 && budget <= 600_000)).toBe(true);
   });
 
+  it("stops retries immediately when the caller aborts", async () => {
+    const controller = new AbortController();
+    let attempts = 0;
+    await expect(runSearchWithRetries({
+      maxRunMs: 60_000,
+      maxAttempts: 3,
+      retryDelayMs: 10_000,
+      signal: controller.signal,
+      async run() {
+        attempts += 1;
+        controller.abort();
+        throw new Error("transient failure after disconnect");
+      },
+    })).rejects.toThrow(/aborted/u);
+    expect(attempts).toBe(1);
+  });
+
   it("validates the fixed Add and Search request schemas", () => {
     expect(parseLeaderboardAddRequest({
       request_id: "request-1",
@@ -270,6 +287,58 @@ describe("leaderboard API contract", () => {
       expect(calls).toBe(1);
     } finally {
       backend.close();
+    }
+  });
+
+  it("cancels backend Search when the client disconnects", async () => {
+    let started!: () => void;
+    let canceled!: () => void;
+    const searchStarted = new Promise<void>((resolve) => { started = resolve; });
+    const searchCanceled = new Promise<void>((resolve) => { canceled = resolve; });
+    const backend: LeaderboardApiBackend = {
+      async add(request) {
+        return {
+          success: true,
+          request_id: request.request_id,
+          user_id: request.user_id,
+          session_id: request.session_id,
+        };
+      },
+      search(_request, signal) {
+        started();
+        return new Promise((_resolve, reject) => {
+          const abort = (): void => {
+            canceled();
+            reject(new Error("backend observed disconnect"));
+          };
+          if (signal?.aborted) abort();
+          else signal?.addEventListener("abort", abort, { once: true });
+        });
+      },
+    };
+    const server = createLeaderboardHttpServer({ backend, authScheme: "none" });
+    await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+    const port = (server.address() as AddressInfo).port;
+    const controller = new AbortController();
+    try {
+      const pending = fetch(`http://127.0.0.1:${port}/v1/memories/search`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          query: "question",
+          user_id: "user-1",
+          top_k: 100,
+        }),
+        signal: controller.signal,
+      });
+      await searchStarted;
+      controller.abort();
+      await expect(pending).rejects.toThrow();
+      await searchCanceled;
+    } finally {
+      await new Promise<void>((resolve, reject) =>
+        server.close((error) => error ? reject(error) : resolve())
+      );
     }
   });
 

@@ -82,6 +82,7 @@ export interface RunPiMemOptions {
   maxToolCalls?: number;
   maxProtocolNudges?: number;
   maxRunMs?: number;
+  signal?: AbortSignal;
   systemPrompt?: string;
 }
 
@@ -171,6 +172,7 @@ export async function runPiMem(
   let turns = 0;
   let toolCalls = 0;
   let timedOut = false;
+  let externallyAborted = options.signal?.aborted ?? false;
   const retrieval = options.store.getRetrievalMetadata?.() ?? {
     retrievalProfile: "fts5" as const,
   };
@@ -278,6 +280,12 @@ export async function runPiMem(
       trace: [...trace],
     });
 
+  const externalAbort = (): void => {
+    externallyAborted = true;
+    agent.abort();
+  };
+  options.signal?.addEventListener("abort", externalAbort, { once: true });
+  if (externallyAborted) agent.abort();
   const runTimer = setTimeout(() => {
     timedOut = true;
     agent.abort();
@@ -287,10 +295,12 @@ export async function runPiMem(
     try {
       await agent.prompt(questionPrompt(question, options.questionDate));
     } catch (error) {
+      if (externallyAborted) throw failure("PiMem run aborted");
       throw failure(error instanceof Error ? error.message : String(error));
     }
     for (let nudge = 0; ledger.selection === undefined; nudge += 1) {
       const lastAssistant = lastAssistantMessage(agent.state.messages);
+      if (externallyAborted) throw failure("PiMem run aborted");
       if (timedOut) {
         throw failure(`PiMem exceeded the ${maxRunMs}ms run limit`);
       }
@@ -317,7 +327,9 @@ export async function runPiMem(
     }
   } finally {
     clearTimeout(runTimer);
+    options.signal?.removeEventListener("abort", externalAbort);
   }
+  if (externallyAborted) throw failure("PiMem run aborted");
   if (timedOut) {
     throw failure(`PiMem exceeded the ${maxRunMs}ms run limit`);
   }

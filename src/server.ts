@@ -76,7 +76,10 @@ export interface LeaderboardSearchResponse {
 
 export interface LeaderboardApiBackend {
   add(request: LeaderboardAddRequest): Promise<LeaderboardAddResponse>;
-  search(request: LeaderboardSearchRequest): Promise<LeaderboardSearchResponse>;
+  search(
+    request: LeaderboardSearchRequest,
+    signal?: AbortSignal,
+  ): Promise<LeaderboardSearchResponse>;
   close?(): Promise<void> | void;
 }
 
@@ -343,6 +346,7 @@ export async function runSearchWithRetries<T extends RetryableSearchResult>(
     maxRunMs: number;
     maxAttempts: number;
     retryDelayMs?: number;
+    signal?: AbortSignal;
     run: (attemptRunMs: number, attempt: number) => Promise<T>;
   },
 ): Promise<T> {
@@ -350,6 +354,7 @@ export async function runSearchWithRetries<T extends RetryableSearchResult>(
   let best: T | undefined;
   let lastError: unknown;
   for (let attempt = 1; attempt <= options.maxAttempts; attempt += 1) {
+    if (options.signal?.aborted) throw new Error("Leaderboard search aborted");
     const elapsed = Date.now() - startedAt;
     const remainingMs = options.maxRunMs - elapsed;
     if (remainingMs < 1) break;
@@ -373,6 +378,7 @@ export async function runSearchWithRetries<T extends RetryableSearchResult>(
       }
       if (result.status === "sufficient") return result;
     } catch (error) {
+      if (options.signal?.aborted) throw new Error("Leaderboard search aborted");
       lastError = error;
     }
     if (attempt < options.maxAttempts) {
@@ -381,7 +387,19 @@ export async function runSearchWithRetries<T extends RetryableSearchResult>(
         Math.max(0, options.maxRunMs - (Date.now() - startedAt) - 1),
       );
       if (delayMs > 0) {
-        await new Promise<void>((resolveDelay) => setTimeout(resolveDelay, delayMs));
+        await new Promise<void>((resolveDelay, rejectDelay) => {
+          const timer = setTimeout(finish, delayMs);
+          const abort = (): void => {
+            clearTimeout(timer);
+            options.signal?.removeEventListener("abort", abort);
+            rejectDelay(new Error("Leaderboard search aborted"));
+          };
+          function finish(): void {
+            options.signal?.removeEventListener("abort", abort);
+            resolveDelay();
+          }
+          options.signal?.addEventListener("abort", abort, { once: true });
+        });
       }
     }
   }
@@ -460,8 +478,12 @@ export class PiMemLeaderboardBackend implements LeaderboardApiBackend {
     });
   }
 
-  search(request: LeaderboardSearchRequest): Promise<LeaderboardSearchResponse> {
+  search(
+    request: LeaderboardSearchRequest,
+    signal?: AbortSignal,
+  ): Promise<LeaderboardSearchResponse> {
     return this.searchGate.run(async () => {
+      if (signal?.aborted) throw new Error("Leaderboard search aborted");
       const scopeId = leaderboardScopeId(request.user_id);
       if (this.rawStore.hasPendingAppendRequests(scopeId)) {
         throw new ApiError(503, "Memory ingestion is incomplete for this user_id");
@@ -472,6 +494,7 @@ export class PiMemLeaderboardBackend implements LeaderboardApiBackend {
       const result = await runSearchWithRetries({
         maxRunMs: this.maxRunMs,
         maxAttempts: this.searchAttempts,
+        ...(signal === undefined ? {} : { signal }),
         run: (attemptRunMs) => runPiMem({
           store: this.hybridStore,
           modelRuntime: this.modelRuntime,
@@ -481,6 +504,7 @@ export class PiMemLeaderboardBackend implements LeaderboardApiBackend {
           maxToolCalls: 4_096,
           maxProtocolNudges: 8,
           maxRunMs: attemptRunMs,
+          ...(signal === undefined ? {} : { signal }),
         }),
       });
       return buildLeaderboardSearchResponse(
@@ -572,6 +596,13 @@ export function createLeaderboardHttpServer(
     throw new Error("PIMEM_MEMORY_API_KEY is required unless auth scheme is none");
   }
   return createServer(async (request, response) => {
+    const requestAbort = new AbortController();
+    const abort = (): void => requestAbort.abort();
+    const abortClosedResponse = (): void => {
+      if (!response.writableEnded) requestAbort.abort();
+    };
+    request.once("aborted", abort);
+    response.once("close", abortClosedResponse);
     try {
       const url = new URL(request.url ?? "/", "http://pimem.local");
       if (request.method === "GET" && url.pathname === "/health") {
@@ -591,12 +622,14 @@ export function createLeaderboardHttpServer(
       if (url.pathname === "/v1/memories/search") {
         const result = await options.backend.search(
           parseLeaderboardSearchRequest(body),
+          requestAbort.signal,
         );
         sendJson(response, 200, result);
         return;
       }
       throw new ApiError(404, "Route not found");
     } catch (error) {
+      if (response.destroyed) return;
       if (error instanceof ApiError) {
         sendJson(response, error.status, { detail: { reason: error.message } });
         return;
@@ -606,6 +639,9 @@ export function createLeaderboardHttpServer(
       sendJson(response, 503, {
         detail: { reason: "PiMem is temporarily unable to complete the request" },
       });
+    } finally {
+      request.off("aborted", abort);
+      response.off("close", abortClosedResponse);
     }
   });
 }

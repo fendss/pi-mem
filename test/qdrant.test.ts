@@ -287,6 +287,34 @@ describe("Qdrant server client", () => {
     })).rejects.toThrow(/outside the mandatory scope/u);
   });
 
+  it("rejects stale-generation points even when scope and profile match", async () => {
+    const fetchImpl = vi.fn<typeof fetch>(async () => jsonResponse({
+      result: [{
+        id: "00000000-0000-4000-8000-000000000003",
+        score: 0.9,
+        payload: {
+          generation_id: "generation-old",
+          scope_id: "scope-a",
+          memory_id: "memory-a",
+          session_id: "session-a",
+          role: "user",
+          profile_id: "profile-a",
+          content_hash: "hash-a",
+        },
+      }],
+      status: "ok",
+    }));
+    await expect(client(fetchImpl).search({
+      collection: SPEC.name,
+      vector: [1, 0],
+      generationId: "generation-a",
+      scopeId: "scope-a",
+      profileId: "profile-a",
+      limit: 20,
+      hnswEf: 256,
+    })).rejects.toThrow(/outside the mandatory scope/u);
+  });
+
   it("surfaces authentication and authorization failures without masking them", async () => {
     const fetchImpl = vi.fn<typeof fetch>(async () =>
       jsonResponse({ status: "forbidden" }, 403)

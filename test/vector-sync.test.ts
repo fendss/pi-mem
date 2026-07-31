@@ -3,6 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { ingestMemorySessions } from "../src/ingest.js";
+import { QdrantHttpError } from "../src/qdrant.js";
 import type {
   QdrantCollectionInfo,
   QdrantCollectionSpec,
@@ -72,6 +73,8 @@ class FakeQdrant implements QdrantVectorIndexClient {
   ensureCalls = 0;
   upsertCalls = 0;
   failNextUpsert = false;
+  nextUpsertError: Error | undefined;
+  nextCountError: Error | undefined;
   countAdjustment = 0;
 
   async ensureCollection(_spec: QdrantCollectionSpec): Promise<void> {
@@ -96,6 +99,11 @@ class FakeQdrant implements QdrantVectorIndexClient {
     points: readonly QdrantVectorPoint[],
   ): Promise<void> {
     this.upsertCalls += 1;
+    if (this.nextUpsertError) {
+      const error = this.nextUpsertError;
+      this.nextUpsertError = undefined;
+      throw error;
+    }
     if (this.failNextUpsert) {
       this.failNextUpsert = false;
       throw new Error("temporary Qdrant outage");
@@ -107,6 +115,11 @@ class FakeQdrant implements QdrantVectorIndexClient {
   }
 
   async count(request: QdrantCountRequest): Promise<number> {
+    if (this.nextCountError) {
+      const error = this.nextCountError;
+      this.nextCountError = undefined;
+      throw error;
+    }
     const count = [...this.points.values()].filter((point) =>
       point.generationId === request.generationId &&
       point.profileId === request.profileId &&
@@ -343,6 +356,60 @@ describe("durable vector synchronization", () => {
       });
       expect(() => store.assertVectorIndexGenerationReady("generation-a"))
         .toThrow(/not ready/u);
+    } finally {
+      store.close();
+    }
+  });
+
+  it("fails fast and seals the generation on permanent Qdrant authorization errors", async () => {
+    const { store, records } = await fixture();
+    const qdrant = new FakeQdrant();
+    try {
+      begin(store);
+      storeAll(store, records);
+      qdrant.nextUpsertError = new QdrantHttpError(403, "forbidden");
+      const synchronizer = new QdrantVectorSynchronizer({
+        store,
+        client: qdrant,
+        generationId: "generation-a",
+        collection,
+        concurrentBatches: 1,
+      });
+      await expect(synchronizer.synchronizeAvailable())
+        .rejects.toMatchObject({ status: 403 });
+      expect(store.getVectorIndexGeneration("generation-a")).toMatchObject({
+        state: "failed",
+        lastError: "forbidden",
+      });
+      await expect(synchronizer.finalize()).rejects.toThrow(/failed/u);
+    } finally {
+      store.close();
+    }
+  });
+
+  it("keeps transient verification failures resumable", async () => {
+    const { store, records } = await fixture();
+    const qdrant = new FakeQdrant();
+    try {
+      begin(store);
+      storeAll(store, records);
+      qdrant.nextCountError = new QdrantHttpError(503, "temporarily unavailable");
+      const synchronizer = new QdrantVectorSynchronizer({
+        store,
+        client: qdrant,
+        generationId: "generation-a",
+        collection,
+        concurrentBatches: 1,
+        verificationPollMs: 1,
+        verificationTimeoutMs: 1_000,
+      });
+      await expect(synchronizer.finalize()).rejects.toMatchObject({ status: 503 });
+      expect(store.getVectorIndexGeneration("generation-a").state)
+        .toBe("verifying");
+      await expect(synchronizer.finalize()).resolves.toMatchObject({
+        state: "ready",
+        expectedVectorCount: 3,
+      });
     } finally {
       store.close();
     }
