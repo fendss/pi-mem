@@ -235,23 +235,16 @@ export class MemoryLedger {
       if (!supports) {
         throw new Error(`Citation supports must not be empty: ${memoryId}`);
       }
-      const evidence = this.evidenceById.get(memoryId);
-      if (!evidence) {
+      if (!this.evidenceById.has(memoryId)) {
         throw new Error(
           `Finish rejected: citation must reference memory read in this run: ` +
             `${memoryId}. Do not repeat this call; call read for that memory ` +
             `before citing it, or remove the citation.`,
         );
       }
-      if (!evidence.content.trim()) {
-        throw new Error(`Cited memory has empty raw content: ${memoryId}`);
-      }
       return { memoryId, supports };
     });
 
-    const citedMemoryIds = new Set(
-      citations.map((citation) => citation.memoryId),
-    );
     const inventory = input.inventory?.map((entry) => {
       const item = entry.item.trim();
       const memoryIds = [
@@ -265,11 +258,6 @@ export class MemoryLedger {
         if (!this.evidenceById.has(memoryId)) {
           throw new Error(
             `Inventory item must reference memory read in this run: ${memoryId}`,
-          );
-        }
-        if (!citedMemoryIds.has(memoryId)) {
-          throw new Error(
-            `Inventory item must reference a cited memory: ${memoryId}`,
           );
         }
       }

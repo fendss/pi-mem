@@ -135,11 +135,12 @@ export interface ReadToolDetails {
   }>;
   expandedMemoryIds: string[];
   candidates: MemoryCandidate[];
-  repeatedRequest?: boolean;
 }
 
 export interface FinishToolDetails {
   kind: "finish";
+  autoReadCandidateRefs: number[];
+  autoReadMemoryIds: string[];
   selection: PiMemSelection;
 }
 
@@ -593,13 +594,6 @@ export function createSearchTool(
         ...(repeatedQueries.length === 0 ? {} : { repeatedQueries }),
       };
       const rendered = [
-        repeatedQueries.length === 0
-          ? ""
-          : "No-progress notice: this Search repeats a query already executed " +
-            "in this run, so its candidate references are unchanged. Do not " +
-            "repeat it again. If any requested evidence slot is still missing, " +
-            "read a new candidate or search for that materially different slot. " +
-            "Finish only after every requested slot is covered.",
         renderEvidenceOperator(operatorResult, options.ledger),
         renderCandidates(candidates, options.ledger, options.questionDate),
       ].filter(Boolean).join("\n");
@@ -619,7 +613,6 @@ export function createSearchTool(
 export function createReadTool(
   options: CreatePiMemToolsOptions,
 ): PiMemTools["read"] {
-  const seenReadRequests = new Set<string>();
   return {
     name: "read",
     label: "Read memory",
@@ -647,13 +640,6 @@ export function createReadTool(
       const memoryIds = options.ledger.resolveCandidateRefs(candidateRefs);
       const contextBefore = params.contextBefore ?? 0;
       const contextAfter = params.contextAfter ?? 0;
-      const requestFingerprint = JSON.stringify({
-        memoryIds: [...memoryIds].sort(),
-        contextBefore,
-        contextAfter,
-      });
-      const repeatedRequest = seenReadRequests.has(requestFingerprint);
-      seenReadRequests.add(requestFingerprint);
       const memories = await options.store.read(
         options.scopeId,
         memoryIds,
@@ -684,23 +670,11 @@ export function createReadTool(
         evidenceReferences,
         expandedMemoryIds,
         candidates,
-        ...(repeatedRequest ? { repeatedRequest: true } : {}),
       };
-      const rendered = renderMemories(
-        recorded,
-        options.ledger,
-        options.questionDate,
-      );
       return {
         content: [{
           type: "text",
-          text: repeatedRequest
-            ? "No-progress notice: this exact Read request was already completed " +
-              "and adds no new evidence. Do not repeat it again. If any requested " +
-              "slot is missing, use a needed context window or search for that " +
-              "slot. Finish only after every requested slot is covered.\n" +
-              rendered
-            : rendered,
+          text: renderMemories(recorded, options.ledger, options.questionDate),
         }],
         details,
       };
@@ -715,10 +689,10 @@ export function createFinishTool(
     name: "finish",
     label: "Finish",
     description:
-      "Submit an internally consistent evidence package only after reading every cited candidate and covering every independent evidence need. The harness converts candidate numbers to exact source IDs and enforces provenance; finish never substitutes for read. Keep citation supports atomic and source-local; make evidenceSummary a lossless ledger of those facts; keep inventory, count, summary, supports, and raw citations consistent. Do not generate the benchmark answer.",
+      "Submit an internally consistent evidence package. Cite candidate numbers returned by search/read; the harness converts them to exact source IDs, auto-reads selected candidates, and enforces provenance. Cover every independent evidence need. Keep citation supports atomic and source-local; make evidenceSummary a lossless ledger of those facts; keep inventory, count, summary, supports, and raw citations consistent. Do not generate the benchmark answer.",
     parameters: FinishParameters,
     executionMode: "sequential",
-    async execute(_toolCallId, params) {
+    async execute(_toolCallId, params, signal) {
       const submitted: PiMemSelection = {
         status: params.status,
         citations: params.citations.map((citation) => ({
@@ -741,9 +715,31 @@ export function createFinishTool(
             }),
       };
       await options.beforeFinish?.(submitted);
+      const selectedMemoryIds = [...new Set([
+        ...submitted.citations.map((citation) => citation.memoryId),
+        ...(submitted.inventory ?? []).flatMap((item) => item.memoryIds),
+      ])];
+      const autoReadMemoryIds = selectedMemoryIds.filter((memoryId) =>
+        !options.ledger.hasRead(memoryId)
+      );
+      const autoReadCandidateRefs = autoReadMemoryIds.map((memoryId) =>
+        options.ledger.candidateRef(memoryId)!
+      );
+      if (autoReadMemoryIds.length > 0) {
+        const autoReadRecords = await options.store.read(
+          options.scopeId,
+          autoReadMemoryIds,
+          0,
+          0,
+          signal,
+        );
+        options.ledger.recordRead(autoReadRecords);
+      }
       const selection = options.ledger.acceptSelection(submitted);
       const details: FinishToolDetails = {
         kind: "finish",
+        autoReadCandidateRefs,
+        autoReadMemoryIds,
         selection,
       };
       return {
@@ -785,19 +781,32 @@ export function createPiMemTools(
 }
 
 /**
- * Finish arguments must be composed after the Agent has observed every Search
- * and Read result they depend on. Defer a Finish that shares an assistant turn
- * with navigation tools; those navigation calls still execute, and the next
- * turn can submit a source-complete package. This is the only ordering gate.
+ * Returns an error message when finish occurs in a multi-tool assistant turn.
  */
-export function createFinishAloneBeforeToolCall(
+export function validateFinishToolBatch(
+  toolNames: readonly string[],
+  finishToolName = "finish",
+): string | undefined {
+  if (!toolNames.includes(finishToolName)) return undefined;
+  if (toolNames.length === 1 && toolNames[0] === finishToolName) {
+    return undefined;
+  }
+  return `${finishToolName} must be the only tool call in its turn`;
+}
+
+/**
+ * Core-compatible beforeToolCall hook. A sequential batch may read/search and
+ * then finish as its final call; the harness safely applies those side effects
+ * in order. If finish appears earlier, only finish is deferred while the other
+ * navigation calls remain usable.
+ */
+export function createFinishOnlyBeforeToolCall(
   finishToolName = "finish",
 ): (
   context: BeforeToolCallContext,
   signal?: AbortSignal,
 ) => Promise<BeforeToolCallResult | undefined> {
   return async (context) => {
-    if (context.toolCall.name !== finishToolName) return undefined;
     const toolNames = context.assistantMessage.content
       .filter(
         (
@@ -808,13 +817,20 @@ export function createFinishAloneBeforeToolCall(
         > => block.type === "toolCall",
       )
       .map((call) => call.name);
-    if (toolNames.length === 1 && toolNames[0] === finishToolName) {
+    const finishIndexes = toolNames
+      .map((name, index) => name === finishToolName ? index : -1)
+      .filter((index) => index >= 0);
+    if (finishIndexes.length === 0) return undefined;
+    if (
+      finishIndexes.length === 1 &&
+      finishIndexes[0] === toolNames.length - 1
+    ) {
       return undefined;
     }
+    if (context.toolCall.name !== finishToolName) return undefined;
     return {
       block: true,
-      reason:
-        "finish must be called alone after observing all Search and Read results",
+      reason: `${finishToolName} must be the final tool call in its turn`,
     };
   };
 }

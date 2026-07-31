@@ -3,8 +3,9 @@ import { describe, expect, it } from "vitest";
 import { MemoryLedger } from "../src/ledger.js";
 import type { StoreSearchHit } from "../src/store.js";
 import {
-  createFinishAloneBeforeToolCall,
+  createFinishOnlyBeforeToolCall,
   createPiMemTools,
+  validateFinishToolBatch,
   type MemoryToolStore,
 } from "../src/tools.js";
 import type { MemoryRecord, SearchRequest } from "../src/types.js";
@@ -69,12 +70,6 @@ describe("PiMem tools", () => {
     expect(searchResult.details.candidates).toEqual([
       expect.objectContaining({ memoryId: "m1", read: false }),
     ]);
-    const repeatedSearch = await tools.search.execute("search-repeat", {
-      queries: ["source"],
-      limit: 10,
-    });
-    expect(repeatedSearch.details.repeatedQueries).toEqual(["source"]);
-    expect(JSON.stringify(repeatedSearch.content)).toContain("No-progress notice");
 
     const readResult = await tools.read.execute("read-1", {
       candidateRefs: [1],
@@ -91,13 +86,6 @@ describe("PiMem tools", () => {
     expect(
       ledger.candidates.find((item) => item.memoryId === "m2")?.discoveries,
     ).toEqual([expect.objectContaining({ tool: "read_expansion" })]);
-    const repeatedRead = await tools.read.execute("read-repeat", {
-      candidateRefs: [1],
-      contextBefore: 0,
-      contextAfter: 1,
-    });
-    expect(repeatedRead.details.repeatedRequest).toBe(true);
-    expect(JSON.stringify(repeatedRead.content)).toContain("No-progress notice");
 
     const finishResult = await tools.finish.execute("finish-1", {
       status: "sufficient",
@@ -192,7 +180,7 @@ describe("PiMem tools", () => {
     expect(observedSignal).toBe(controller.signal);
   });
 
-  it("requires cited candidates to be read before accepting finish", async () => {
+  it("auto-reads exact cited candidates before accepting finish", async () => {
     const searched = record("m1", 0);
     const expanded = record("m2", 1);
     const ledger = new MemoryLedger("scope-1");
@@ -203,20 +191,16 @@ describe("PiMem tools", () => {
     });
 
     await tools.search.execute("search-1", { queries: ["source"] });
-    await expect(tools.finish.execute("finish-unread", {
-      status: "sufficient",
-      citations: [{ candidateRef: 1, supports: "The source states it." }],
-      evidenceSummary: "The exact selected candidate supplies the evidence.",
-    })).rejects.toThrow(/read in this run/u);
-
-    await tools.read.execute("read-1", { candidateRefs: [1] });
-    const result = await tools.finish.execute("finish-read", {
+    const result = await tools.finish.execute("finish-1", {
       status: "sufficient",
       citations: [{ candidateRef: 1, supports: "The source states it." }],
       evidenceSummary: "The exact selected candidate supplies the evidence.",
     });
-    expect(result.details.selection.citations[0]?.memoryId).toBe("m1");
+
+    expect(result.details.autoReadCandidateRefs).toEqual([1]);
+    expect(result.details.autoReadMemoryIds).toEqual(["m1"]);
     expect(ledger.evidence.map((item) => item.memoryId)).toEqual(["m1", "m2"]);
+    expect(ledger.selection?.citations[0]?.memoryId).toBe("m1");
   });
 
   it("lets an operator block finish before the ledger accepts it", async () => {
@@ -396,8 +380,14 @@ describe("PiMem tools", () => {
     ).rejects.toThrow(/Valid candidate range is 1-2/u);
   });
 
-  it("defers finish until it follows observed navigation results", async () => {
-    const hook = createFinishAloneBeforeToolCall();
+  it("validates that finish is the only tool call in a turn", async () => {
+    expect(validateFinishToolBatch(["finish"])).toBeUndefined();
+    expect(validateFinishToolBatch(["search"])).toBeUndefined();
+    expect(validateFinishToolBatch(["search", "finish"])).toMatch(
+      /only tool call/u,
+    );
+
+    const hook = createFinishOnlyBeforeToolCall();
     const mixedContext = {
       assistantMessage: {
         content: [
@@ -405,25 +395,26 @@ describe("PiMem tools", () => {
           { type: "toolCall", id: "2", name: "finish", arguments: {} },
         ],
       },
-      toolCall: { type: "toolCall", id: "2", name: "finish", arguments: {} },
+      toolCall: { type: "toolCall", id: "1", name: "search", arguments: {} },
       args: {},
       context: { systemPrompt: "", messages: [], tools: [] },
     } as unknown as BeforeToolCallContext;
 
-    await expect(hook(mixedContext)).resolves.toEqual({
-      block: true,
-      reason:
-        "finish must be called alone after observing all Search and Read results",
-    });
-    await expect(hook({
+    await expect(hook(mixedContext)).resolves.toBeUndefined();
+
+    const unsafeContext = {
       ...mixedContext,
       assistantMessage: {
-        content: [{ type: "toolCall", id: "2", name: "finish", arguments: {} }],
+        content: [
+          { type: "toolCall", id: "2", name: "finish", arguments: {} },
+          { type: "toolCall", id: "1", name: "search", arguments: {} },
+        ],
       },
-    } as unknown as BeforeToolCallContext)).resolves.toBeUndefined();
-    await expect(hook({
-      ...mixedContext,
-      toolCall: { type: "toolCall", id: "1", name: "search", arguments: {} },
-    } as unknown as BeforeToolCallContext)).resolves.toBeUndefined();
+      toolCall: { type: "toolCall", id: "2", name: "finish", arguments: {} },
+    } as unknown as BeforeToolCallContext;
+    await expect(hook(unsafeContext)).resolves.toEqual({
+      block: true,
+      reason: "finish must be the final tool call in its turn",
+    });
   });
 });

@@ -1,5 +1,5 @@
 export const PIMEM_RETRIEVAL_SKILL_VERSION =
-  "pimem-retrieval-v9-observed-evidence";
+  "pimem-retrieval-v5-simple-operator-routing";
 
 export const PIMEM_RETRIEVAL_SKILL = `# PiMem Retrieval
 

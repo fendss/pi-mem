@@ -11,7 +11,7 @@ import {
 import { renderMemoryQuestionPlan } from "./retrieval-strategy.js";
 import type { MemoryStore } from "./store.js";
 import {
-  createFinishAloneBeforeToolCall,
+  createFinishOnlyBeforeToolCall,
   createPiMemTools,
   type MemoryToolStore,
 } from "./tools.js";
@@ -34,11 +34,7 @@ Evidence policy:
 - Match question typos to the exact intended entity while treating merely similar entities as distractors.
 - Select direct source observations for every required subclaim.
 - Preserve exact names, titles, places, labels, values, source roles, and timestamps in the evidence summary.
-- Keep the summary source-led: state atomic cited observations and their order, not an unsupported derived answer.
-- Distinguish completed observations from plans, questions, recommendations, and hypotheticals; do not present the latter as events that occurred.
-- Reconstruct temporal or update chains when the requested slot depends on order. For current-state questions, preserve the latest explicit observation and any superseded observation needed to establish the update.
-- Treat values described as totals, cumulative, so far, or as-of snapshots as replacements unless a source explicitly says an increment was added; do not add cumulative snapshots together.
-- Before marking a package insufficient, audit the read evidence once for the required slots. If every slot has direct cited support, mark it sufficient and stop; search again only for a named missing slot.
+- Reconstruct temporal or update chains when the requested slot depends on order.
 - If a required entity or component remains unsupported after focused searches, mark the package insufficient rather than guessing or substituting zero.
 
 Tool policy:
@@ -226,7 +222,7 @@ export async function runPiMem(
     streamFn: options.modelRuntime.streamFn,
     getApiKey: options.modelRuntime.getApiKey,
     transformContext: ephemeralContext.transformContext,
-    beforeToolCall: createFinishAloneBeforeToolCall(),
+    beforeToolCall: createFinishOnlyBeforeToolCall(),
     toolExecution: "sequential",
     sessionId: runId,
   });
