@@ -25,6 +25,21 @@ import type {
 import { assertNonEmpty, newRunId } from "./util.js";
 
 export const PIMEM_HARNESS_VERSION = PIMEM_RETRIEVAL_SKILL_VERSION;
+export const PIMEM_RETRIEVAL_TEMPERATURE = 0;
+
+export function deterministicRetrievalPayload(payload: unknown): unknown {
+  if (
+    typeof payload !== "object" ||
+    payload === null ||
+    Array.isArray(payload)
+  ) {
+    throw new Error("Retrieval model payload must be an object");
+  }
+  return {
+    ...payload,
+    temperature: PIMEM_RETRIEVAL_TEMPERATURE,
+  };
+}
 
 export const PI_MEM_SYSTEM_PROMPT = `You are PiMem: a memory retrieval and evidence-selection agent.
 
@@ -225,6 +240,7 @@ export async function runPiMem(
     },
     streamFn: options.modelRuntime.streamFn,
     getApiKey: options.modelRuntime.getApiKey,
+    onPayload: deterministicRetrievalPayload,
     transformContext: ephemeralContext.transformContext,
     beforeToolCall: createFinishOnlyBeforeToolCall(),
     toolExecution: "sequential",

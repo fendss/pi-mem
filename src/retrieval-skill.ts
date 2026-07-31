@@ -1,5 +1,5 @@
 export const PIMEM_RETRIEVAL_SKILL_VERSION =
-  "pimem-retrieval-v6-structural-consistency";
+  "pimem-retrieval-v7-deterministic-sampling";
 
 export const PIMEM_RETRIEVAL_SKILL = `# PiMem Retrieval
 

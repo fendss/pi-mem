@@ -1,7 +1,9 @@
 import { describe, expect, it } from "vitest";
 import {
+  deterministicRetrievalPayload,
   orderCandidatesForEvidenceAttention,
   PIMEM_HARNESS_VERSION,
+  PIMEM_RETRIEVAL_TEMPERATURE,
   PI_MEM_SYSTEM_PROMPT,
 } from "../src/runtime.js";
 import type { MemoryCandidate } from "../src/types.js";
@@ -26,7 +28,7 @@ function candidate(
 describe("runtime candidate presentation", () => {
   it("keeps generic source-consistency constraints in the retrieval policy", () => {
     expect(PIMEM_HARNESS_VERSION).toBe(
-      "pimem-retrieval-v6-structural-consistency",
+      "pimem-retrieval-v7-deterministic-sampling",
     );
     expect(PI_MEM_SYSTEM_PROMPT).toContain(
       "Distinguish completed observations from plans",
@@ -37,6 +39,18 @@ describe("runtime candidate presentation", () => {
     expect(PI_MEM_SYSTEM_PROMPT).toContain(
       "search again only for a named missing slot",
     );
+  });
+
+  it("forces deterministic retrieval sampling without mutating the provider payload", () => {
+    const payload = { model: "gpt-4o-mini", stream: true };
+    expect(PIMEM_RETRIEVAL_TEMPERATURE).toBe(0);
+    expect(deterministicRetrievalPayload(payload)).toEqual({
+      model: "gpt-4o-mini",
+      stream: true,
+      temperature: 0,
+    });
+    expect(payload).toEqual({ model: "gpt-4o-mini", stream: true });
+    expect(() => deterministicRetrievalPayload(null)).toThrow(/must be an object/u);
   });
 
   it("presents cited and read evidence first without dropping or mutating candidates", () => {
