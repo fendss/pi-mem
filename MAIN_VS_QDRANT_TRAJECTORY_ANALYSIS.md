@@ -86,9 +86,20 @@ The v8 experiment therefore:
 4. returns the first protocol-valid Retrieval result, including `insufficient`, instead of rerolling it and selecting a later result;
 5. retries only provider/protocol failures;
 6. restores public bounds to the main-era `64` turns, `80` tool calls, and `2` protocol nudges instead of `1024/4096/8`;
-7. retains temperature-zero Retrieval sampling, immutable provenance, and all bottom Search operators.
+7. retains immutable provenance and all bottom Search operators.
 
 No Answer prompt, Answer call, retrieval operator, ranking algorithm, SQLite data, or Qdrant index behavior is changed.
+
+## Full-run finding: reject forced temperature zero
+
+The first 500-question v8 run with `temperature: 0` completed 485 questions and failed 15. Although the top-level errors were `300000ms` and `Request aborted`, durable traces showed deterministic fixed-point churn:
+
+- 4 questions repeated the same structurally invalid Finish 31–59 times;
+- 10 questions repeated already-executed Search/Read patterns up to the 80-tool bound;
+- 1 question repeated Read 62 times;
+- failed questions averaged 67.8 tool calls, and the all-question mean rose to 7.066 versus 5.59 in the historical Qdrant slots-16 run.
+
+The 485 successful records were efficient at 5.188 mean tools, but excluding failed loops would hide the regression. Temperature zero improved small-Canary candidate repeatability but made identical invalid actions self-reinforcing in the Full run. It is therefore rejected. v9 restores provider-default sampling while preserving the observed-evidence Finish gate and low-churn structural relaxations.
 
 ## Artifacts
 
