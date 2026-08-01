@@ -3,6 +3,7 @@ from __future__ import annotations
 import importlib.util
 import json
 import tempfile
+import threading
 import unittest
 import sys
 from datetime import datetime, timezone
@@ -141,6 +142,55 @@ class LeaderboardLocalSearchEvalTests(unittest.TestCase):
         self.assertNotIn("Must choose A", serialized)
         self.assertNotIn("gold evidence", serialized)
         self.assertNotIn("golden_answer", serialized)
+
+    def test_search_continuously_refills_free_slots(self) -> None:
+        third_started = threading.Event()
+        first_observed_third = threading.Event()
+
+        class ContinuousClient(FakeClient):
+            def post(self, path: str, payload: dict, attempts: int) -> dict:
+                if path.endswith("/search"):
+                    query = payload["query"]
+                    if query == "question-3":
+                        third_started.set()
+                    elif query == "question-1":
+                        if third_started.wait(timeout=1):
+                            first_observed_third.set()
+                return super().post(path, payload, attempts)
+
+        questions = [
+            SimpleNamespace(
+                source_question_id=f"question-{index}",
+                question=f"question-{index}",
+                options=[],
+            )
+            for index in range(1, 4)
+        ]
+        record = SimpleNamespace(source_record_id="record-1", questions=questions)
+        registered = runner.RegisteredBenchmark(
+            name="test_benchmark",
+            source=SimpleNamespace(),
+        )
+        with tempfile.TemporaryDirectory() as root:
+            artifact = runner.search_benchmark(
+                registered,
+                [record],
+                ContinuousClient(),
+                "run-1",
+                Path(root),
+                top_k=100,
+                attempts=1,
+                concurrency=2,
+                max_questions_per_record=0,
+            )
+            rows = [json.loads(line) for line in artifact.read_text().splitlines()]
+
+        self.assertTrue(first_observed_third.is_set())
+        self.assertEqual([row["query"] for row in rows], [
+            "question-1",
+            "question-2",
+            "question-3",
+        ])
 
     def test_chunking_respects_message_and_word_limits(self) -> None:
         messages = [

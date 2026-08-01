@@ -429,11 +429,13 @@ def search_benchmark(
     output_dir.mkdir(parents=True, exist_ok=True, mode=0o700)
     with artifact_path.open("a", encoding="utf-8") as output:
         os.chmod(artifact_path, 0o600)
-        for start in range(0, len(work), concurrency):
-            batch = work[start : start + concurrency]
-            with concurrent.futures.ThreadPoolExecutor(max_workers=concurrency) as executor:
-                completed = list(executor.map(run_one, batch))
-            for _, row in sorted(completed, key=lambda pair: pair[0]):
+        with concurrent.futures.ThreadPoolExecutor(
+            max_workers=concurrency,
+        ) as executor:
+            # executor.map preserves source order while workers continuously pull
+            # the next question whenever a slot becomes free. Do not split work
+            # into fixed waves: one slow request would leave the other slots idle.
+            for _, row in executor.map(run_one, work):
                 output.write(json.dumps(row, ensure_ascii=False, separators=(",", ":")) + "\n")
                 output.flush()
                 os.fsync(output.fileno())
