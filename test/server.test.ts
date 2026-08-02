@@ -125,6 +125,7 @@ function retrievalFixture(): PiMemResult {
       providerId: "provider",
       modelId: "model",
       thinkingLevel: "off",
+      responseModels: ["model-2026-08-01"],
     },
   };
 }

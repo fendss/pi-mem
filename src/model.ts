@@ -74,6 +74,37 @@ function asNonEmptyString(value: unknown, label: string): string {
   return value.trim();
 }
 
+export function returnedModelMatches(
+  requested: string,
+  returned: string,
+): boolean {
+  return returned === requested || returned.startsWith(`${requested}-`);
+}
+
+/**
+ * Verifies provider-returned model metadata rather than trusting the requested
+ * model copied into the local AssistantMessage. OpenAI-compatible streaming
+ * responses include the actual model on every successful assistant turn.
+ */
+export function assertRequestedResponseModel(
+  requested: string,
+  returned: string | undefined,
+  stage: string,
+): string {
+  const actual = returned?.trim();
+  if (!actual) {
+    throw new Error(
+      `${stage} provider omitted response model metadata; expected ${requested}`,
+    );
+  }
+  if (!returnedModelMatches(requested, actual)) {
+    throw new Error(
+      `${stage} provider substituted model ${actual}; expected ${requested}`,
+    );
+  }
+  return actual;
+}
+
 function optionalBoolean(
   value: unknown,
   fallback: boolean,

@@ -175,6 +175,11 @@ export interface ModelMetadata {
   thinkingLevel: string;
 }
 
+export interface ObservedModelMetadata extends ModelMetadata {
+  /** One provider-returned model identifier per successful assistant turn. */
+  responseModels: string[];
+}
+
 export interface SearchedMemory extends MemoryRecord {
   discoveries: CandidateDiscovery[];
   read: boolean;
@@ -210,7 +215,7 @@ export interface PiMemResult {
     expiredNavigationResults: number;
   };
   retrieval: RetrievalMetadata;
-  retrievalModel: ModelMetadata;
+  retrievalModel: ObservedModelMetadata;
 }
 
 export interface BenchmarkQuery {

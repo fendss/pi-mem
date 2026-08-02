@@ -3,7 +3,10 @@ import type { AssistantMessage } from "@earendil-works/pi-ai";
 import { ReadOnlyBash } from "./bash-ro.js";
 import { createEphemeralMemoryContext } from "./context.js";
 import { MemoryLedger } from "./ledger.js";
-import type { PiModelRuntime } from "./model.js";
+import {
+  assertRequestedResponseModel,
+  type PiModelRuntime,
+} from "./model.js";
 import {
   PIMEM_RETRIEVAL_SKILL,
   PIMEM_RETRIEVAL_SKILL_VERSION,
@@ -95,6 +98,7 @@ export interface PiMemFailureDiagnostics {
   candidates: PiMemResult["candidates"];
   evidence: PiMemResult["evidence"];
   trace: ToolTraceEntry[];
+  retrievalModel: PiMemResult["retrievalModel"];
 }
 
 export class PiMemRunError extends Error {
@@ -185,6 +189,7 @@ export async function runPiMem(
   const retrievalMetricsBefore =
     options.store.snapshotRetrievalMetrics?.() ?? zeroRetrievalMetrics;
   const ephemeralContext = createEphemeralMemoryContext();
+  const responseModels: string[] = [];
 
   const tools = createPiMemTools({
     store: options.store,
@@ -228,6 +233,21 @@ export async function runPiMem(
   });
 
   agent.subscribe((event) => {
+    if (
+      event.type === "message_end" &&
+      event.message.role === "assistant" &&
+      event.message.stopReason !== "error" &&
+      event.message.stopReason !== "aborted"
+    ) {
+      const returned = event.message.responseModel?.trim();
+      if (returned) responseModels.push(returned);
+      assertRequestedResponseModel(
+        options.modelRuntime.modelId,
+        event.message.responseModel,
+        "PiMem retrieval",
+      );
+      return;
+    }
     if (event.type === "turn_start") {
       turns += 1;
       if (turns > maxTurns) agent.abort();
@@ -278,6 +298,12 @@ export async function runPiMem(
       candidates: ledger.candidates,
       evidence: ledger.evidence,
       trace: [...trace],
+      retrievalModel: {
+        providerId: options.modelRuntime.providerId,
+        modelId: options.modelRuntime.modelId,
+        thinkingLevel: options.modelRuntime.thinkingLevel,
+        responseModels: [...responseModels],
+      },
     });
 
   const externalAbort = (): void => {
@@ -420,6 +446,7 @@ export async function runPiMem(
       providerId: options.modelRuntime.providerId,
       modelId: options.modelRuntime.modelId,
       thinkingLevel: options.modelRuntime.thinkingLevel,
+      responseModels: [...responseModels],
     },
   };
   return options.questionDate === undefined

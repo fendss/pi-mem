@@ -1,6 +1,10 @@
 import { Agent } from "@earendil-works/pi-agent-core";
 import type { AssistantMessage } from "@earendil-works/pi-ai";
-import type { PiModelRuntime } from "./model.js";
+import {
+  assertRequestedResponseModel,
+  type PiModelRuntime,
+} from "./model.js";
+export { returnedModelMatches } from "./model.js";
 import type { ModelMetadata } from "./types.js";
 import { assertNonEmpty, newRunId, sha256 } from "./util.js";
 
@@ -52,10 +56,6 @@ function assistantText(message: AssistantMessage): string {
     .trim();
 }
 
-export function returnedModelMatches(requested: string, returned: string): boolean {
-  return returned === requested || returned.startsWith(`${requested}-`);
-}
-
 /** Runs benchmark-owned answer synthesis after PiMem has finished retrieval. */
 export async function runBenchmarkAnswer(options: {
   modelRuntime: PiModelRuntime;
@@ -98,12 +98,11 @@ export async function runBenchmarkAnswer(options: {
   }
   const answer = assistantText(message);
   if (!answer) throw new Error("Benchmark answer stage returned empty text");
-  const responseModel = message.responseModel ?? message.model;
-  if (!returnedModelMatches(options.modelRuntime.modelId, responseModel)) {
-    throw new Error(
-      `Benchmark answer provider substituted model ${responseModel}; expected ${options.modelRuntime.modelId}`,
-    );
-  }
+  const responseModel = assertRequestedResponseModel(
+    options.modelRuntime.modelId,
+    message.responseModel,
+    "Benchmark answer",
+  );
   return {
     answer,
     promptAdapter: options.prompt.adapterId,

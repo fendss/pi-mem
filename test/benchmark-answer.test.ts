@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { returnedModelMatches } from "../src/benchmark-answer.js";
+import { assertRequestedResponseModel } from "../src/model.js";
 
 describe("benchmark answer boundary", () => {
   it("accepts dated deployments of the requested model", () => {
@@ -12,5 +13,18 @@ describe("benchmark answer boundary", () => {
     expect(
       returnedModelMatches("gpt-4o-mini", "gpt-4.1-mini-2025-04-14"),
     ).toBe(false);
+    expect(() => assertRequestedResponseModel(
+      "gpt-4o-mini",
+      "gpt-4.1-mini-2025-04-14",
+      "PiMem retrieval",
+    )).toThrow(/substituted model/u);
+  });
+
+  it("fails closed when the provider omits actual-model metadata", () => {
+    expect(() => assertRequestedResponseModel(
+      "gpt-4o-mini",
+      undefined,
+      "PiMem retrieval",
+    )).toThrow(/omitted response model metadata/u);
   });
 });
