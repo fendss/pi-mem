@@ -9,6 +9,8 @@ import {
 } from "./model.js";
 import {
   PIMEM_RETRIEVAL_SKILL,
+  PIMEM_RETRIEVAL_SKILL_V6,
+  PIMEM_RETRIEVAL_SKILL_V6_VERSION,
   PIMEM_RETRIEVAL_SKILL_VERSION,
 } from "./retrieval-skill.js";
 import { renderMemoryQuestionPlan } from "./retrieval-strategy.js";
@@ -29,7 +31,8 @@ import { assertNonEmpty, newRunId } from "./util.js";
 
 export const PIMEM_HARNESS_VERSION = PIMEM_RETRIEVAL_SKILL_VERSION;
 
-export const PI_MEM_SYSTEM_PROMPT = `You are PiMem: a memory retrieval and evidence-selection agent.
+export function buildPiMemSystemPrompt(retrievalSkill: string): string {
+  return `You are PiMem: a memory retrieval and evidence-selection agent.
 
 Your only task is to locate immutable source memories relevant to the caller's question and return a compact cited evidence package. Do not generate or format the benchmark answer. Different callers apply different answer protocols after retrieval.
 
@@ -46,7 +49,16 @@ Tool policy:
 - bash_ro is a focused last resort for exact matching, not a mandatory full-scope scan. Its output is navigation and also expires.
 - Call finish alone with status, concise evidenceSummary, and citations. Count and inventory are optional evidence metadata.
 
-${PIMEM_RETRIEVAL_SKILL}`;
+${retrievalSkill}`;
+}
+
+export const PI_MEM_SYSTEM_PROMPT = buildPiMemSystemPrompt(
+  PIMEM_RETRIEVAL_SKILL,
+);
+export const PI_MEM_V6_HARNESS_VERSION = PIMEM_RETRIEVAL_SKILL_V6_VERSION;
+export const PI_MEM_SYSTEM_PROMPT_V6 = buildPiMemSystemPrompt(
+  PIMEM_RETRIEVAL_SKILL_V6,
+);
 
 export function orderCandidatesForEvidenceAttention(
   candidates: readonly MemoryCandidate[],
@@ -87,6 +99,7 @@ export interface RunPiMemOptions {
   maxRunMs?: number;
   signal?: AbortSignal;
   systemPrompt?: string;
+  questionPromptMode?: "v5" | "v6";
 }
 
 export interface PiMemFailureDiagnostics {
@@ -111,17 +124,37 @@ export class PiMemRunError extends Error {
   }
 }
 
-function questionPrompt(question: string, questionDate?: string): string {
-  return [
+export function renderPiMemQuestionPrompt(
+  question: string,
+  questionDate?: string,
+  mode: "v5" | "v6" = "v5",
+): string {
+  const header = [
     "Question:",
     question,
     ...(questionDate === undefined
       ? []
       : ["", `Question date (source timezone unspecified): ${questionDate}`]),
     "",
-    renderMemoryQuestionPlan(question),
-    "",
-    "Search adaptively for direct source coverage, verify every required evidence slot, and call finish with the cited evidence package. Do not answer the question.",
+  ];
+  if (mode === "v5") {
+    return [
+      ...header,
+      renderMemoryQuestionPlan(question),
+      "",
+      "Search adaptively for direct source coverage, verify every required evidence slot, and call finish with the cited evidence package. Do not answer the question.",
+    ].join("\n");
+  }
+  return [
+    ...header,
+    "Retrieval protocol:",
+    "- Privately enumerate the independent evidence slots required by the question; the harness does not route the question for you.",
+    "- For multiple items, events, sessions, comparisons, summaries, or ordering, use coverage with one focused query per slot or facet.",
+    "- For those multi-slot or open-coverage requests, do not finish after the first search. Run at least one non-equivalent focused follow-up for missing facets or time segments, bounded to three search rounds total.",
+    "- In coverage results, use matched-query labels to read at least one promising direct source per query or facet before concentrating on duplicates from one facet.",
+    "- Preserve every distinct supported item in citations and inventory instead of minimizing the package.",
+    "- Mark sufficient only when every explicit slot is directly cited and an exact source sentence states its subject, relation, and value. Related passages that require invention are distractors; if any slot remains missing, mark insufficient.",
+    "- Call finish alone and do not answer the question.",
   ].join("\n");
 }
 
@@ -319,7 +352,11 @@ export async function runPiMem(
   runTimer.unref();
   try {
     try {
-      await agent.prompt(questionPrompt(question, options.questionDate));
+      await agent.prompt(renderPiMemQuestionPrompt(
+        question,
+        options.questionDate,
+        options.questionPromptMode ?? "v5",
+      ));
     } catch (error) {
       if (externallyAborted) throw failure("PiMem run aborted");
       throw failure(error instanceof Error ? error.message : String(error));

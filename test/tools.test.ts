@@ -274,6 +274,60 @@ describe("PiMem tools", () => {
     ).resolves.toMatchObject({ details: { kind: "search" } });
   });
 
+  it("balances coverage candidates across independent queries without a global session cap", async () => {
+    const requests: SearchRequest[] = [];
+    const store: MemoryToolStore = {
+      search(_scopeId, request) {
+        requests.push(request);
+        const prefix = request.queries[0] === "first need" ? "a" : "b";
+        return Array.from({ length: 6 }, (_, index) => {
+          const item = record(`${prefix}${index + 1}`, index * 2);
+          return {
+            record: item,
+            query: request.queries[0] ?? "",
+            retriever: "pimem-hybrid",
+            rank: index + 1,
+            score: 1 / (61 + index),
+            preview: item.content,
+          };
+        });
+      },
+      read() {
+        return [];
+      },
+    };
+    const tools = createPiMemTools({
+      store,
+      scopeId: "scope-1",
+      ledger: new MemoryLedger("scope-1"),
+    });
+
+    const result = await tools.search.execute("coverage", {
+      operator: "coverage",
+      queries: ["first need", "second need"],
+      limit: 12,
+    });
+
+    expect(requests).toHaveLength(2);
+    expect(requests.every((request) => request.maxPerSession === 20)).toBe(true);
+    expect(result.details.candidates.map((item) => item.memoryId)).toEqual([
+      "a1",
+      "b1",
+      "a2",
+      "b2",
+      "a3",
+      "b3",
+      "a4",
+      "b4",
+      "a5",
+      "b5",
+      "a6",
+      "b6",
+    ]);
+    expect(new Set(result.details.candidates.map((item) => item.sessionId)))
+      .toEqual(new Set(["session-1"]));
+  });
+
   it("audits punctuation-only query repeats without rejecting them", async () => {
     const searched = record("m-repeat", 0);
     const tools = createPiMemTools({

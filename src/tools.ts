@@ -349,56 +349,116 @@ function mergeOperatorHits(
   return [...merged.values()];
 }
 
-async function coverageHits(
+export async function coverageSearchHits(
   store: MemoryToolStore,
   scopeId: string,
   queries: readonly string[],
   limit: number,
   signal?: AbortSignal,
 ): Promise<StoreSearchHit[]> {
-  const grouped = new Map<string, {
-    hits: StoreSearchHit[];
-    queries: Set<string>;
-    score: number;
-  }>();
+  const perQuerySessionCap = Math.min(
+    20,
+    Math.max(4, Math.ceil(limit / Math.max(1, queries.length))),
+  );
+  const perQueryHits: StoreSearchHit[][] = [];
   for (const query of queries) {
     const hits = await store.search(scopeId, {
       queries: [query],
       limit: Math.min(100, Math.max(20, limit * 2)),
       order: "relevance",
-      maxPerSession: 4,
+      maxPerSession: perQuerySessionCap,
     }, signal);
+    perQueryHits.push([...hits].sort((left, right) =>
+      left.rank - right.rank ||
+      left.record.sessionId.localeCompare(right.record.sessionId) ||
+      left.record.turnIndex - right.record.turnIndex ||
+      left.record.memoryId.localeCompare(right.record.memoryId)
+    ));
+  }
+
+  // Preserve the prior session-diverse top 40, then expand it with query-fair
+  // candidates. This makes the recall change monotonic for the same underlying
+  // hits while allowing multiple independent needs to contribute more than the
+  // former global four-per-session cap.
+  const grouped = new Map<string, {
+    hits: StoreSearchHit[];
+    queries: Set<number>;
+    score: number;
+  }>();
+  perQueryHits.forEach((hits, queryIndex) => {
     for (const hit of hits) {
       const entry = grouped.get(hit.record.sessionId) ?? {
         hits: [],
-        queries: new Set<string>(),
+        queries: new Set<number>(),
         score: 0,
       };
       entry.hits.push(hit);
-      entry.queries.add(query);
+      entry.queries.add(queryIndex);
       entry.score += 1 / (60 + hit.rank);
       grouped.set(hit.record.sessionId, entry);
     }
-  }
+  });
   const orderedSessions = [...grouped.entries()].sort((left, right) =>
     right[1].queries.size - left[1].queries.size ||
     right[1].score - left[1].score ||
     left[0].localeCompare(right[0])
   );
-  const selected = new Map<string, StoreSearchHit>();
+  const preserved = new Map<string, StoreSearchHit>();
+  const preservedLimit = Math.min(40, limit);
   for (const [, session] of orderedSessions) {
     let sessionCount = 0;
     for (const hit of session.hits.sort((left, right) =>
-      left.rank - right.rank || left.record.turnIndex - right.record.turnIndex
+      left.rank - right.rank ||
+      left.record.turnIndex - right.record.turnIndex ||
+      left.record.memoryId.localeCompare(right.record.memoryId)
     )) {
-      if (selected.has(hit.record.memoryId)) continue;
-      selected.set(hit.record.memoryId, hit);
+      if (preserved.has(hit.record.memoryId)) continue;
+      preserved.set(hit.record.memoryId, hit);
       sessionCount += 1;
-      if (selected.size >= limit) return [...selected.values()];
+      if (preserved.size >= preservedLimit) break;
       if (sessionCount >= 4) break;
     }
+    if (preserved.size >= preservedLimit) break;
   }
-  return [...selected.values()];
+
+  // Expand rank-by-rank across independent queries so a broad or high-scoring
+  // facet cannot crowd out the remaining evidence needs.
+  const fair = new Map<string, StoreSearchHit>();
+  const cursors = perQueryHits.map(() => 0);
+  let advanced = true;
+  while (fair.size < limit && advanced) {
+    advanced = false;
+    for (let queryIndex = 0; queryIndex < perQueryHits.length; queryIndex += 1) {
+      const hits = perQueryHits[queryIndex] ?? [];
+      while (cursors[queryIndex]! < hits.length) {
+        const hit = hits[cursors[queryIndex]!]!;
+        cursors[queryIndex]! += 1;
+        if (fair.has(hit.record.memoryId)) continue;
+        fair.set(hit.record.memoryId, hit);
+        advanced = true;
+        break;
+      }
+      if (fair.size >= limit) break;
+    }
+  }
+
+  // Put a bounded query-fair tranche first so the Agent sees at least a few
+  // candidates per evidence need before session-diverse fallback candidates.
+  // At most 20 are prioritized, leaving room to preserve all prior top-40 hits.
+  const selected = new Map<string, StoreSearchHit>();
+  const priorityLimit = Math.min(20, Math.max(queries.length, queries.length * 3));
+  for (const hit of fair.values()) {
+    selected.set(hit.record.memoryId, hit);
+    if (selected.size >= priorityLimit) break;
+  }
+  for (const hit of preserved.values()) {
+    if (!selected.has(hit.record.memoryId)) selected.set(hit.record.memoryId, hit);
+  }
+  for (const hit of fair.values()) {
+    if (!selected.has(hit.record.memoryId)) selected.set(hit.record.memoryId, hit);
+    if (selected.size >= limit) break;
+  }
+  return [...selected.values()].slice(0, limit);
 }
 
 function temporalSuffix(
@@ -529,11 +589,11 @@ export function createSearchTool(
       } else if (operator === "coverage") {
         request = makeSearchRequest({
           queries: request.queries,
-          limit: Math.max(40, limit),
+          limit: Math.max(60, limit),
           order: "relevance",
           maxPerSession: 4,
         });
-        hits = await coverageHits(
+        hits = await coverageSearchHits(
           options.store,
           options.scopeId,
           request.queries,

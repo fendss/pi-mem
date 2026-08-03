@@ -31,7 +31,14 @@ import {
   AsyncKeyedRequestGate,
   AsyncRequestGate,
 } from "./request-gate.js";
-import { PiMemRunError, runPiMem } from "./runtime.js";
+import {
+  PIMEM_HARNESS_VERSION,
+  PI_MEM_SYSTEM_PROMPT,
+  PI_MEM_SYSTEM_PROMPT_V6,
+  PI_MEM_V6_HARNESS_VERSION,
+  PiMemRunError,
+  runPiMem,
+} from "./runtime.js";
 import {
   MemoryStore,
   type AppendMemoryMessage,
@@ -116,6 +123,9 @@ export interface PiMemLeaderboardBackendOptions {
   maxRunMs?: number;
   searchAttempts?: number;
   searchArtifactDirectory?: string;
+  retrievalHarnessVersion?: string;
+  retrievalSystemPrompt?: string;
+  retrievalQuestionPromptMode?: "v5" | "v6";
 }
 
 class ApiError extends Error {
@@ -360,12 +370,14 @@ export async function writeSearchAgentArtifact(
   result: PiMemResult | undefined,
   response: LeaderboardSearchResponse | undefined,
   error?: unknown,
+  harnessVersion = PIMEM_HARNESS_VERSION,
 ): Promise<void> {
   await mkdir(directory, { recursive: true, mode: 0o700 });
   const artifactId = result?.runId ?? `failed-${newRunId()}`;
   const artifact = {
     schema_version: "pimem-agent-search-artifact/v1",
     artifact_id: artifactId,
+    harness_version: harnessVersion,
     search: {
       query: request.query,
       ...(request.options === undefined ? {} : { options: request.options }),
@@ -515,6 +527,9 @@ export class PiMemLeaderboardBackend implements LeaderboardApiBackend {
   private readonly vectorSynchronizer: QdrantVectorSynchronizer | undefined;
   private readonly vectorGenerationId: string | undefined;
   private readonly searchArtifactDirectory: string | undefined;
+  private readonly retrievalHarnessVersion: string;
+  private readonly retrievalSystemPrompt: string | undefined;
+  private readonly retrievalQuestionPromptMode: "v5" | "v6";
   private vectorSyncTail: Promise<void> = Promise.resolve();
   private vectorFinalizePromise: Promise<void> | undefined;
 
@@ -536,6 +551,11 @@ export class PiMemLeaderboardBackend implements LeaderboardApiBackend {
     this.maxRunMs = options.maxRunMs ?? 120_000;
     this.searchAttempts = options.searchAttempts ?? 1;
     this.searchArtifactDirectory = options.searchArtifactDirectory;
+    this.retrievalHarnessVersion =
+      options.retrievalHarnessVersion ?? PIMEM_HARNESS_VERSION;
+    this.retrievalSystemPrompt = options.retrievalSystemPrompt;
+    this.retrievalQuestionPromptMode =
+      options.retrievalQuestionPromptMode ?? "v5";
     this.vectorSynchronizer = options.vectorSynchronizer;
     this.vectorGenerationId = options.vectorGenerationId;
     if ((this.vectorSynchronizer === undefined) !== (this.vectorGenerationId === undefined)) {
@@ -655,6 +675,10 @@ export class PiMemLeaderboardBackend implements LeaderboardApiBackend {
             maxToolCalls: 80,
             maxProtocolNudges: 2,
             maxRunMs: attemptRunMs,
+            ...(this.retrievalSystemPrompt === undefined
+              ? {}
+              : { systemPrompt: this.retrievalSystemPrompt }),
+            questionPromptMode: this.retrievalQuestionPromptMode,
             ...(signal === undefined ? {} : { signal }),
           }),
         });
@@ -666,6 +690,7 @@ export class PiMemLeaderboardBackend implements LeaderboardApiBackend {
             undefined,
             undefined,
             error,
+            this.retrievalHarnessVersion,
           );
         }
         throw error;
@@ -681,6 +706,8 @@ export class PiMemLeaderboardBackend implements LeaderboardApiBackend {
           request,
           result,
           response,
+          undefined,
+          this.retrievalHarnessVersion,
         );
       }
       return response;
@@ -879,6 +906,33 @@ function modelRuntimeFromEnvironment(): PiModelRuntime {
   });
 }
 
+function retrievalHarnessFromEnvironment(): {
+  version: string;
+  systemPrompt: string;
+  questionPromptMode: "v5" | "v6";
+} {
+  const requested =
+    process.env.PIMEM_RETRIEVAL_HARNESS_VERSION?.trim() || PIMEM_HARNESS_VERSION;
+  if (requested === PIMEM_HARNESS_VERSION) {
+    return {
+      version: PIMEM_HARNESS_VERSION,
+      systemPrompt: PI_MEM_SYSTEM_PROMPT,
+      questionPromptMode: "v5",
+    };
+  }
+  if (requested === PI_MEM_V6_HARNESS_VERSION) {
+    return {
+      version: PI_MEM_V6_HARNESS_VERSION,
+      systemPrompt: PI_MEM_SYSTEM_PROMPT_V6,
+      questionPromptMode: "v6",
+    };
+  }
+  throw new Error(
+    `PIMEM_RETRIEVAL_HARNESS_VERSION must be ${PIMEM_HARNESS_VERSION} or ` +
+      PI_MEM_V6_HARNESS_VERSION,
+  );
+}
+
 export async function startLeaderboardServer(): Promise<void> {
   process.umask(0o077);
   const dataDir = resolve(process.env.PIMEM_DATA_DIR?.trim() || "/data");
@@ -886,6 +940,7 @@ export async function startLeaderboardServer(): Promise<void> {
   const rawStore = await MemoryStore.create(join(dataDir, "memory.sqlite"));
   const embedder = OpenAICompatibleEmbedder.fromEnvironment();
   const modelRuntime = modelRuntimeFromEnvironment();
+  const retrievalHarness = retrievalHarnessFromEnvironment();
   const denseBackend = process.env.PIMEM_DENSE_BACKEND?.trim() || "sqlite-exact";
   if (!new Set(["sqlite-exact", "qdrant-hnsw"]).has(denseBackend)) {
     throw new Error("PIMEM_DENSE_BACKEND must be sqlite-exact or qdrant-hnsw");
@@ -988,6 +1043,9 @@ export async function startLeaderboardServer(): Promise<void> {
     ),
     maxRunMs: positiveEnvironmentInteger("PIMEM_MAX_RUN_MS", 120_000, 600_000),
     searchAttempts: positiveEnvironmentInteger("PIMEM_SEARCH_ATTEMPTS", 1, 5),
+    retrievalHarnessVersion: retrievalHarness.version,
+    retrievalSystemPrompt: retrievalHarness.systemPrompt,
+    retrievalQuestionPromptMode: retrievalHarness.questionPromptMode,
     ...(process.env.PIMEM_SEARCH_ARTIFACT_DIR?.trim()
       ? {
           searchArtifactDirectory: resolve(

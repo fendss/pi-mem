@@ -263,6 +263,7 @@ describe("leaderboard API contract", () => {
     expect((await stat(path)).mode & 0o777).toBe(0o600);
     expect(artifact).toMatchObject({
       schema_version: "pimem-agent-search-artifact/v1",
+      harness_version: "pimem-retrieval-v5-simple-operator-routing",
       status: "ok",
       search: { package_id: response.data[0]?.id },
       agent: {
