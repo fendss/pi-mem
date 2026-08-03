@@ -72,6 +72,7 @@ export interface QdrantCollectionInfo {
   optimizerStatus: string;
   pointsCount: number;
   indexedVectorsCount: number;
+  segmentsCount: number;
   dimensions: number;
   indexingThresholdKb: number;
   distance: string;
@@ -208,6 +209,10 @@ function collectionInfo(value: unknown): QdrantCollectionInfo {
     indexedVectorsCount: nonNegativeInteger(
       Number(result.indexed_vectors_count),
       "Qdrant indexed vector count",
+    ),
+    segmentsCount: positiveInteger(
+      Number(result.segments_count),
+      "Qdrant segment count",
     ),
     dimensions: positiveInteger(Number(vectors.size), "Qdrant vector size"),
     indexingThresholdKb: positiveInteger(

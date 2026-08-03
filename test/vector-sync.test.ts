@@ -88,6 +88,7 @@ class FakeQdrant implements QdrantVectorIndexClient {
       optimizerStatus: "ok",
       pointsCount: this.points.size,
       indexedVectorsCount: this.points.size,
+      segmentsCount: 1,
       dimensions: collection.dimensions,
       indexingThresholdKb: collection.indexingThresholdKb,
       distance: "Cosine",      hnsw: collection.hnsw,
@@ -167,19 +168,56 @@ afterEach(async () => {
 describe("durable vector synchronization", () => {
   it("accepts Qdrant's bounded exact-scan tail below indexing_threshold", () => {
     expect(qdrantCollectionIndexReady(
-      { status: "green", optimizerStatus: "ok", indexedVectorsCount: 8_094 },
+      {
+        status: "green",
+        optimizerStatus: "ok",
+        indexedVectorsCount: 8_094,
+        segmentsCount: 1,
+      },
       8_103,
       1_024,
       100,
     )).toBe(true);
     expect(qdrantCollectionIndexReady(
-      { status: "green", optimizerStatus: "ok", indexedVectorsCount: 8_000 },
+      {
+        status: "green",
+        optimizerStatus: "ok",
+        indexedVectorsCount: 8_000,
+        segmentsCount: 1,
+      },
       8_103,
       1_024,
       100,
     )).toBe(false);
     expect(qdrantCollectionIndexReady(
-      { status: "yellow", optimizerStatus: "ok", indexedVectorsCount: 8_103 },
+      {
+        status: "green",
+        optimizerStatus: "ok",
+        indexedVectorsCount: 8_000,
+        segmentsCount: 5,
+      },
+      8_103,
+      1_024,
+      100,
+    )).toBe(true);
+    expect(qdrantCollectionIndexReady(
+      {
+        status: "green",
+        optimizerStatus: "ok",
+        indexedVectorsCount: 30,
+        segmentsCount: 8,
+      },
+      120,
+      1_024,
+      100,
+    )).toBe(true);
+    expect(qdrantCollectionIndexReady(
+      {
+        status: "yellow",
+        optimizerStatus: "ok",
+        indexedVectorsCount: 8_103,
+        segmentsCount: 1,
+      },
       8_103,
       1_024,
       100,

@@ -121,7 +121,10 @@ function terminalVerificationFailure(error: unknown): boolean {
 }
 
 export function qdrantCollectionIndexReady(
-  info: Pick<QdrantCollectionInfo, "status" | "optimizerStatus" | "indexedVectorsCount">,
+  info: Pick<
+    QdrantCollectionInfo,
+    "status" | "optimizerStatus" | "indexedVectorsCount" | "segmentsCount"
+  >,
   expectedVectorCount: number,
   dimensions: number,
   indexingThresholdKb: number,
@@ -132,9 +135,12 @@ export function qdrantCollectionIndexReady(
   );
   const unindexedVectorSizeKb =
     unindexedVectorCount * dimensions * Float32Array.BYTES_PER_ELEMENT / 1_024;
+  // Each settled Qdrant segment may retain one exact-scan tail below its own
+  // indexing threshold. Parallel upserts can produce several such segments.
+  const exactScanTailBudgetKb = indexingThresholdKb * info.segmentsCount;
   return info.status.toLowerCase() === "green" &&
     info.optimizerStatus.toLowerCase() === "ok" &&
-    unindexedVectorSizeKb < indexingThresholdKb;
+    unindexedVectorSizeKb < exactScanTailBudgetKb;
 }
 
 async function wait(delayMs: number, signal?: AbortSignal): Promise<void> {
@@ -277,9 +283,9 @@ export class QdrantVectorSynchronizer {
       if (!info) {
         throw new Error(`Qdrant collection disappeared: ${this.collection.name}`);
       }
-      // Qdrant intentionally leaves a final segment below indexing_threshold
-      // unindexed and searches that bounded tail exactly. Requiring every point
-      // to appear in indexed_vectors_count can therefore deadlock READY forever.
+      // Qdrant may leave one tail below indexing_threshold in each settled
+      // segment and searches those tails exactly. Requiring every point to
+      // appear in indexed_vectors_count can therefore deadlock READY forever.
       if (qdrantCollectionIndexReady(
         info,
         expectedVectorCount,

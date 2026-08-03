@@ -30,6 +30,7 @@ function collectionResponse(overrides: {
       optimizer_status: "ok",
       points_count: 0,
       indexed_vectors_count: 0,
+      segments_count: 1,
       config: {
         params: {
           vectors: {
