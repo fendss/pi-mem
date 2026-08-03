@@ -9,6 +9,7 @@ import type {
 } from "../src/embedding.js";
 import {
   embeddingProfile,
+  indexMemoryRecordEmbeddingsForVectorGeneration,
   indexScopeEmbeddings,
   indexScopeEmbeddingsForVectorGeneration,
 } from "../src/embedding-index.js";
@@ -126,6 +127,52 @@ describe("derived embedding index", () => {
         pendingVectorCount: 2,
       });
       expect(embedder.inputs).toEqual(["assistant: beta"]);
+    } finally {
+      store.close();
+    }
+  });
+
+  it("embeds and queues only the records owned by one Add request", async () => {
+    const store = await createStore();
+    const embedder = new FakeEmbedder();
+    try {
+      const records = store.listScopeRecords("scope-1");
+      const profile = embeddingProfile(embedder);
+      store.beginVectorIndexGeneration({
+        generationId: "generation-records",
+        collectionName: "pimem_vectors_records",
+        profile,
+      });
+
+      const first = await indexMemoryRecordEmbeddingsForVectorGeneration(
+        store,
+        [records[1]!],
+        embedder,
+        "generation-records",
+      );
+      expect(first).toEqual({ indexedNow: 1, skipped: 0 });
+      expect(embedder.inputs).toEqual(["assistant: beta"]);
+      expect(store.getEmbeddingIndexStatus("scope-1", profile)).toMatchObject({
+        total: 2,
+        indexed: 1,
+        missing: 1,
+      });
+      expect(store.getVectorIndexGeneration("generation-records")).toMatchObject({
+        pendingVectorCount: 1,
+      });
+
+      embedder.inputs.length = 0;
+      const replay = await indexMemoryRecordEmbeddingsForVectorGeneration(
+        store,
+        [records[1]!],
+        embedder,
+        "generation-records",
+      );
+      expect(replay).toEqual({ indexedNow: 0, skipped: 1 });
+      expect(embedder.inputs).toEqual([]);
+      expect(store.getVectorIndexGeneration("generation-records")).toMatchObject({
+        pendingVectorCount: 1,
+      });
     } finally {
       store.close();
     }

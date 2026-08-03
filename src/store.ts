@@ -986,6 +986,51 @@ export class MemoryStore {
     return rows.map(rowToRecord);
   }
 
+  listMissingEmbeddingRecordsForRecords(
+    records: readonly MemoryRecord[],
+    profile: EmbeddingProfile,
+  ): MemoryRecord[] {
+    this.assertEmbeddingProfileConsistent(profile);
+    if (new Set(records.map((record) => record.memoryId)).size !== records.length) {
+      throw new Error("Embedding record selection contains duplicate memory IDs");
+    }
+    const getRaw = this.db.prepare(`
+      SELECT scope_id, content_hash FROM memories WHERE memory_id = ?
+    `);
+    const getExisting = this.db.prepare(`
+      SELECT model, dimensions, content_hash
+      FROM memory_embeddings
+      WHERE memory_id = ? AND profile_id = ?
+    `);
+    return records.filter((record) => {
+      const raw = getRaw.get(record.memoryId) as unknown as
+        | { scope_id: string; content_hash: string }
+        | undefined;
+      if (!raw) throw new Error(`Cannot index missing memory: ${record.memoryId}`);
+      if (raw.scope_id !== record.scopeId) {
+        throw new Error(`Embedding memory scope mismatch: ${record.memoryId}`);
+      }
+      if (raw.content_hash !== record.contentHash) {
+        throw new Error(`Embedding content hash mismatch: ${record.memoryId}`);
+      }
+      const existing = getExisting.get(
+        record.memoryId,
+        profile.profileId,
+      ) as unknown as Omit<ExistingEmbeddingRow, "vector"> | undefined;
+      if (!existing) return true;
+      if (
+        existing.model !== profile.model ||
+        existing.dimensions !== profile.dimensions ||
+        existing.content_hash !== record.contentHash
+      ) {
+        throw new Error(
+          `Derived embedding conflict for immutable memory: ${record.memoryId}`,
+        );
+      }
+      return false;
+    });
+  }
+
   beginVectorIndexGeneration(
     config: VectorIndexGenerationConfig,
   ): VectorIndexGenerationStatus {
@@ -1174,6 +1219,87 @@ export class MemoryStore {
       throw error;
     }
     return { inserted, unchanged };
+  }
+
+  enqueueStoredRecordEmbeddingsForVectorGeneration(
+    generationId: string,
+    records: readonly MemoryRecord[],
+    profile: EmbeddingProfile,
+  ): number {
+    requiredIndexIdentity(generationId, "Vector generation ID");
+    this.assertEmbeddingProfileConsistent(profile);
+    if (records.length === 0) return 0;
+    if (new Set(records.map((record) => record.memoryId)).size !== records.length) {
+      throw new Error("Vector enqueue selection contains duplicate memory IDs");
+    }
+    this.db.exec("BEGIN IMMEDIATE");
+    try {
+      const generation = this.vectorGenerationRow(generationId);
+      if (!generation) throw new Error(`Unknown vector generation: ${generationId}`);
+      if (generation.state !== "ingesting") {
+        throw new Error(
+          `Vector generation is sealed for embedding writes: ${generationId}`,
+        );
+      }
+      if (
+        generation.profile_id !== profile.profileId ||
+        generation.model !== profile.model ||
+        generation.dimensions !== profile.dimensions
+      ) {
+        throw new Error(`Vector generation profile mismatch: ${generationId}`);
+      }
+      const insert = this.db.prepare(`
+        INSERT OR IGNORE INTO vector_sync_outbox (
+          generation_id, scope_id, memory_id, profile_id, content_hash, state
+        )
+        SELECT ?, m.scope_id, m.memory_id, e.profile_id, e.content_hash, 'pending'
+        FROM memories AS m
+        JOIN memory_embeddings AS e ON e.memory_id = m.memory_id
+        WHERE m.memory_id = ? AND m.scope_id = ?
+          AND m.content_hash = ? AND e.profile_id = ?
+          AND e.model = ? AND e.dimensions = ?
+          AND e.content_hash = m.content_hash
+      `);
+      const getQueued = this.db.prepare(`
+        SELECT scope_id, content_hash FROM vector_sync_outbox
+        WHERE generation_id = ? AND memory_id = ? AND profile_id = ?
+      `);
+      let inserted = 0;
+      for (const record of records) {
+        inserted += Number(insert.run(
+          generationId,
+          record.memoryId,
+          record.scopeId,
+          record.contentHash,
+          profile.profileId,
+          profile.model,
+          profile.dimensions,
+        ).changes);
+        const queued = getQueued.get(
+          generationId,
+          record.memoryId,
+          profile.profileId,
+        ) as unknown as { scope_id: string; content_hash: string } | undefined;
+        if (!queued) {
+          throw new Error(
+            `Cannot enqueue missing embedding for memory: ${record.memoryId}`,
+          );
+        }
+        if (
+          queued.scope_id !== record.scopeId ||
+          queued.content_hash !== record.contentHash
+        ) {
+          throw new Error(
+            `Vector enqueue provenance conflict for memory: ${record.memoryId}`,
+          );
+        }
+      }
+      this.db.exec("COMMIT");
+      return inserted;
+    } catch (error) {
+      this.db.exec("ROLLBACK");
+      throw error;
+    }
   }
 
   enqueueStoredScopeEmbeddingsForVectorGeneration(

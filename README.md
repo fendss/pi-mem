@@ -157,9 +157,12 @@ The wrapper constructs the requested OpenAI-compatible Agent runtime directly
 from these environment variables; no provider configuration or secret is baked
 into the image. Optional capacity controls are
 `PIMEM_MAX_CONCURRENT_ADDS` (default 1), `PIMEM_MAX_CONCURRENT_SEARCHES`
-(default 4), and `PIMEM_MAX_RUN_MS` (default 120000). Terminate HTTPS in a
-public reverse proxy, keep `/health` unauthenticated, and delete evaluation data
-from the persistent volume within the leaderboard retention window.
+(default 4), and `PIMEM_MAX_RUN_MS` (default 120000). Concurrent Add requests
+embed only their own immutable records; requests for the same `user_id` and
+`session_id` remain serialized so turn provenance is stable, while independent
+sessions may use the full Add limit. Terminate HTTPS in a public reverse proxy,
+keep `/health` unauthenticated, and delete evaluation data from the persistent
+volume within the leaderboard retention window.
 
 ### Qdrant HNSW retrieval mode
 

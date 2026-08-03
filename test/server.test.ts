@@ -374,6 +374,94 @@ describe("leaderboard API contract", () => {
     }
   });
 
+  it("embeds independent sessions concurrently without scanning the whole scope", async () => {
+    const root = await mkdtemp(join(tmpdir(), "pimem-leaderboard-concurrent-add-"));
+    temporaryPaths.push(root);
+    const store = await MemoryStore.create(join(root, "memory.sqlite"));
+    let active = 0;
+    let maximumActive = 0;
+    const embeddedInputs: string[][] = [];
+    const embedder: Embedder = {
+      profileId: "test-profile",
+      model: "test-embedding",
+      dimensions: 2,
+      maxInputLength: 2_048,
+      batchSize: 10,
+      async embedDocuments(texts) {
+        embeddedInputs.push([...texts]);
+        active += 1;
+        maximumActive = Math.max(maximumActive, active);
+        await new Promise((resolve) => setTimeout(resolve, 20));
+        active -= 1;
+        return texts.map((text) => [text.length, 1]);
+      },
+      async embedQueries(texts) {
+        return texts.map((text) => [text.length, 1]);
+      },
+      snapshotMetrics() {
+        return { calls: embeddedInputs.length, latencyMs: 0 };
+      },
+    };
+    const backend = new PiMemLeaderboardBackend({
+      rawStore: store,
+      embedder,
+      modelRuntime: {} as PiModelRuntime,
+      maxConcurrentAdds: 4,
+    });
+    try {
+      await Promise.all([
+        backend.add({
+          request_id: "request-a",
+          messages: [{ role: "user", content: "Alpha." }],
+          user_id: "user-1",
+          session_id: "session-a",
+        }),
+        backend.add({
+          request_id: "request-b",
+          messages: [{ role: "assistant", content: "Beta." }],
+          user_id: "user-1",
+          session_id: "session-b",
+        }),
+      ]);
+      expect(maximumActive).toBe(2);
+      expect(embeddedInputs.flat().sort()).toEqual([
+        "assistant: Beta.",
+        "user: Alpha.",
+      ]);
+
+      maximumActive = 0;
+      embeddedInputs.length = 0;
+      await Promise.all([
+        backend.add({
+          request_id: "request-c",
+          messages: [{ role: "user", content: "First chunk." }],
+          user_id: "user-1",
+          session_id: "shared-session",
+        }),
+        backend.add({
+          request_id: "request-d",
+          messages: [{ role: "assistant", content: "Second chunk." }],
+          user_id: "user-1",
+          session_id: "shared-session",
+        }),
+      ]);
+      expect(maximumActive).toBe(1);
+      const scopeId = leaderboardScopeId("user-1");
+      const sharedTurns = store.listScopeRecords(scopeId)
+        .filter((record) =>
+          (record.metadata.session as { sourceSessionId?: string } | undefined)
+            ?.sourceSessionId === "shared-session"
+        )
+        .map((record) => record.turnIndex);
+      expect(sharedTurns).toEqual([0, 1]);
+      expect(store.getEmbeddingIndexStatus(scopeId, embeddingProfile(embedder)))
+        .toMatchObject({ total: 4, indexed: 4, missing: 0 });
+      expect(store.hasPendingAppendRequests(scopeId)).toBe(false);
+    } finally {
+      await backend.close();
+    }
+  });
+
   it("cancels backend Search when the client disconnects", async () => {
     let started!: () => void;
     let canceled!: () => void;

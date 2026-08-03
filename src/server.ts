@@ -16,8 +16,8 @@ import {
 import { OpenAICompatibleEmbedder, type Embedder } from "./embedding.js";
 import {
   embeddingProfile,
-  indexScopeEmbeddings,
-  indexScopeEmbeddingsForVectorGeneration,
+  indexMemoryRecordEmbeddings,
+  indexMemoryRecordEmbeddingsForVectorGeneration,
 } from "./embedding-index.js";
 import {
   HybridMemoryStore,
@@ -27,7 +27,10 @@ import {
   createPiModelRuntime,
   type PiModelRuntime,
 } from "./model.js";
-import { AsyncRequestGate } from "./request-gate.js";
+import {
+  AsyncKeyedRequestGate,
+  AsyncRequestGate,
+} from "./request-gate.js";
 import { PiMemRunError, runPiMem } from "./runtime.js";
 import {
   MemoryStore,
@@ -505,6 +508,7 @@ export class PiMemLeaderboardBackend implements LeaderboardApiBackend {
   private readonly retrievalStore: HybridRawStore;
   private readonly hybridStore: HybridMemoryStore;
   private readonly addGate: AsyncRequestGate;
+  private readonly addSessionGate = new AsyncKeyedRequestGate();
   private readonly searchGate: AsyncRequestGate;
   private readonly maxRunMs: number;
   private readonly searchAttempts: number;
@@ -568,8 +572,9 @@ export class PiMemLeaderboardBackend implements LeaderboardApiBackend {
   }
 
   add(request: LeaderboardAddRequest): Promise<LeaderboardAddResponse> {
-    return this.addGate.run(async () => {
-      const scopeId = leaderboardScopeId(request.user_id);
+    const scopeId = leaderboardScopeId(request.user_id);
+    const sessionKey = `${scopeId}\0${request.session_id}`;
+    return this.addSessionGate.run(sessionKey, () => this.addGate.run(async () => {
       const requestHash = canonicalAddHash(request);
       const messages: AppendMemoryMessage[] = request.messages.map((message) => ({
         role: message.role,
@@ -595,11 +600,15 @@ export class PiMemLeaderboardBackend implements LeaderboardApiBackend {
       }
       if (appended.status !== "complete") {
         if (this.vectorGenerationId === undefined) {
-          await indexScopeEmbeddings(this.rawStore, scopeId, this.embedder);
-        } else {
-          await indexScopeEmbeddingsForVectorGeneration(
+          await indexMemoryRecordEmbeddings(
             this.rawStore,
-            scopeId,
+            appended.records,
+            this.embedder,
+          );
+        } else {
+          await indexMemoryRecordEmbeddingsForVectorGeneration(
+            this.rawStore,
+            appended.records,
             this.embedder,
             this.vectorGenerationId,
           );
@@ -614,7 +623,7 @@ export class PiMemLeaderboardBackend implements LeaderboardApiBackend {
         user_id: request.user_id,
         session_id: request.session_id,
       };
-    });
+    }));
   }
 
   search(

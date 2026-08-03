@@ -1,3 +1,36 @@
+export class AsyncKeyedRequestGate {
+  private readonly states = new Map<string, {
+    tail: Promise<void>;
+    pending: number;
+  }>();
+
+  async run<T>(key: string, operation: () => Promise<T>): Promise<T> {
+    if (key.length === 0) throw new Error("Request gate key must not be empty");
+    let state = this.states.get(key);
+    if (!state) {
+      state = { tail: Promise.resolve(), pending: 0 };
+      this.states.set(key, state);
+    }
+    state.pending += 1;
+    const previous = state.tail;
+    let release!: () => void;
+    const current = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    state.tail = previous.then(() => current, () => current);
+    await previous.catch(() => undefined);
+    try {
+      return await operation();
+    } finally {
+      release();
+      state.pending -= 1;
+      if (state.pending === 0 && this.states.get(key) === state) {
+        this.states.delete(key);
+      }
+    }
+  }
+}
+
 export class AsyncRequestGate {
   private readonly maximumConcurrent: number;
   private readonly minimumStartIntervalMs: number;
