@@ -22,6 +22,7 @@ import {
 import {
   HybridMemoryStore,
   type HybridRawStore,
+  type HybridRerankerOptions,
 } from "./hybrid-search.js";
 import {
   createPiModelRuntime,
@@ -118,7 +119,7 @@ export interface PiMemLeaderboardBackendOptions {
   retrievalStore?: HybridRawStore;
   denseRetriever?: DenseRetriever;
   reranker?: Reranker;
-  rerankerCandidateLimit?: number;
+  rerankerOptions?: HybridRerankerOptions;
   vectorSynchronizer?: QdrantVectorSynchronizer;
   vectorGenerationId?: string;
   maxConcurrentAdds?: number;
@@ -546,7 +547,7 @@ export class PiMemLeaderboardBackend implements LeaderboardApiBackend {
       options.embedder,
       options.denseRetriever,
       options.reranker,
-      options.rerankerCandidateLimit,
+      options.rerankerOptions,
     );
     this.addGate = new AsyncRequestGate(options.maxConcurrentAdds ?? 1, 1_000);
     this.searchGate = new AsyncRequestGate(
@@ -865,6 +866,21 @@ function positiveEnvironmentInteger(
   return parsed;
 }
 
+function boundedEnvironmentNumber(
+  name: string,
+  fallback: number,
+  minimum: number,
+  maximum: number,
+): number {
+  const raw = process.env[name]?.trim();
+  if (!raw) return fallback;
+  const parsed = Number(raw);
+  if (!Number.isFinite(parsed) || parsed < minimum || parsed > maximum) {
+    throw new Error(`${name} must be a number between ${minimum} and ${maximum}`);
+  }
+  return parsed;
+}
+
 function authSchemeFromEnvironment(): LeaderboardAuthScheme {
   const value = process.env.PIMEM_AUTH_SCHEME?.trim().toLowerCase() || "x-api-key";
   if (!new Set(["token", "bearer", "x-api-key", "none"]).has(value)) {
@@ -913,13 +929,23 @@ function modelRuntimeFromEnvironment(): PiModelRuntime {
 
 function rerankerFromEnvironment(): {
   reranker?: Reranker;
-  candidateLimit?: number;
+  options?: HybridRerankerOptions;
 } {
   const baseUrl = process.env.PIMEM_RERANKER_BASE_URL?.trim();
   if (!baseUrl) return {};
-  const candidateLimit = positiveEnvironmentInteger(
+  const initialCandidateLimit = positiveEnvironmentInteger(
+    "PIMEM_RERANKER_INITIAL_CANDIDATE_LIMIT",
+    800,
+    1_000,
+  );
+  const mmrCandidateLimit = positiveEnvironmentInteger(
     "PIMEM_RERANKER_CANDIDATE_LIMIT",
     100,
+    100,
+  );
+  const topK = positiveEnvironmentInteger(
+    "PIMEM_RERANKER_TOP_K",
+    30,
     100,
   );
   return {
@@ -936,9 +962,19 @@ function rerankerFromEnvironment(): {
         120_000,
         600_000,
       ),
-      maxDocuments: candidateLimit,
+      maxDocuments: mmrCandidateLimit,
     }),
-    candidateLimit,
+    options: {
+      initialCandidateLimit,
+      mmrCandidateLimit,
+      mmrLambda: boundedEnvironmentNumber(
+        "PIMEM_RERANKER_MMR_LAMBDA",
+        0.8,
+        0,
+        1,
+      ),
+      topK,
+    },
   };
 }
 
@@ -1067,9 +1103,9 @@ export async function startLeaderboardServer(): Promise<void> {
     ...(retrievalStore === undefined ? {} : { retrievalStore }),
     ...(denseRetriever === undefined ? {} : { denseRetriever }),
     ...(reranker.reranker === undefined ? {} : { reranker: reranker.reranker }),
-    ...(reranker.candidateLimit === undefined
+    ...(reranker.options === undefined
       ? {}
-      : { rerankerCandidateLimit: reranker.candidateLimit }),
+      : { rerankerOptions: reranker.options }),
     ...(vectorSynchronizer === undefined ? {} : { vectorSynchronizer }),
     ...(vectorGenerationId === undefined ? {} : { vectorGenerationId }),
     maxConcurrentAdds: positiveEnvironmentInteger(

@@ -56,19 +56,23 @@ PIMEM_RERANKER_BASE_URL=http://pimem-qwen3-reranker:8090
 PIMEM_RERANKER_MODEL=Qwen/Qwen3-Reranker-4B
 PIMEM_RERANKER_REVISION=22e683669bc0f0bd69640a1354a6d0aebcfeede5
 PIMEM_RERANKER_MANIFEST_SHA256=11159710006fbde455370d2bdd4b8d5d46620c14631d3f8c30781ee83ce4652f
+PIMEM_RERANKER_INITIAL_CANDIDATE_LIMIT=800
 PIMEM_RERANKER_CANDIDATE_LIMIT=100
+PIMEM_RERANKER_MMR_LAMBDA=0.8
+PIMEM_RERANKER_TOP_K=30
 PIMEM_RERANKER_TIMEOUT_MS=120000
 ```
 
 For every Agent-planned hybrid query, PiMem:
 
-1. obtains dense, FTS5, and candidate-local BM25 rankings;
-2. fuses them with the existing `RRF(k=60)` contract;
-3. submits at most the top 100 fused candidates to the reranker;
-4. orders the scored pool by Qwen probability, using the existing fused order as a deterministic tie-breaker;
-5. applies the existing limit, session cap, provenance ledger, Read boundary, and cited-only projection.
+1. retrieves up to 800 dense candidates plus the bounded FTS5 pool;
+2. fuses dense, FTS5, and candidate-local BM25 with the existing `RRF(k=60)` contract;
+3. applies deterministic semantic MMR with `lambda=0.8`, using stored immutable embedding vectors, and retains 100 diverse candidates;
+4. submits those 100 candidates to Qwen3-Reranker-4B;
+5. retains at most 30 reranked candidates per Search result, using fused order as the deterministic tie-breaker;
+6. applies the existing session cap, provenance ledger, Read boundary, and cited-only projection.
 
-The client fails closed on HTTP errors, timeouts, missing IDs, duplicate IDs, invalid probabilities, model substitution, revision substitution, or model-manifest substitution. Lexical-only search remains lexical-only.
+Qdrant vectors are returned only for the opt-in MMR path. Lexical-only search remains lexical-only. The client fails closed on HTTP errors, timeouts, missing IDs or vectors, duplicate IDs, invalid probabilities, model substitution, revision substitution, or model-manifest substitution.
 
 ## Acceptance
 
@@ -82,22 +86,24 @@ Service canaries:
 
 A gold-blind, fixed 100-question Search experiment completed `100/100` with no retries. Gold was joined only after Search completed; no Answer or Judge calls were made.
 
-| Metric | v6 without reranker | v6 + Qwen3 reranker |
-|---|---:|---:|
-| Candidate near-1 group recall | 49.90% | 52.40% |
-| Read near-1 group recall | 32.65% | 32.00% |
-| Cited near-1 group recall | 21.15% | 23.00% |
-| Candidate-complete questions | 66.67% | 68.89% |
-| Read-complete questions | 41.11% | 45.56% |
-| Cited-complete questions | 25.56% | 32.22% |
-| Abstention marked sufficient | 9/10 | 8/10 |
+| Metric | v6 | Reranker only | Expanded + MMR + final Top-30 |
+|---|---:|---:|---:|
+| Mean accumulated candidates | 72.57 | 72.93 | 36.67 |
+| Candidate near-1 group recall | 49.90% | 52.40% | 45.20% |
+| Read near-1 group recall | 32.65% | 32.00% | 35.90% |
+| Cited near-1 group recall | 21.15% | 23.00% | 23.80% |
+| Candidate-complete questions | 66.67% | 68.89% | 61.11% |
+| Read-complete questions | 41.11% | 45.56% | 52.22% |
+| Cited-complete questions | 25.56% | 32.22% | 35.56% |
+| Abstention marked sufficient | 9/10 | 8/10 | 9/10 |
 
-The reranker improves final cited coverage and evidence-complete questions, but the gain is not yet large enough to justify enabling it in production without a larger latency and quality acceptance.
+The final Top-30 intentionally gives up some Candidate recall while improving relevant-evidence retention through Read and Citation. It has the highest cited group recall and cited-complete question rate of the tested variants, but summarization remains a regression and end-to-end latency remains too high for production enablement.
 
 Artifacts:
 
 ```text
 /data/zhaogangyi/pi-mem-reranker/RETRIEVAL_QWEN3_RERANKER_100_RESULT.json
-/data/zhaogangyi/pi-mem-reranker/request-results-reranker-100.jsonl
-/data/zhaogangyi/pi-mem-reranker/artifacts-v2/
+/data/zhaogangyi/pi-mem-reranker/RETRIEVAL_MMR_FINAL_TOP30_100_RESULT.json
+/data/zhaogangyi/pi-mem-reranker/request-results-mmr-final-top30-100.jsonl
+/data/zhaogangyi/pi-mem-reranker/artifacts-mmr-top30/
 ```

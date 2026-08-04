@@ -40,6 +40,7 @@ export interface QdrantSearchRequest {
   before?: string;
   limit: number;
   hnswEf: number;
+  withVector?: boolean;
   signal?: AbortSignal;
 }
 
@@ -54,6 +55,7 @@ export interface QdrantSearchHit {
   timestamp?: string;
   profileId: string;
   contentHash: string;
+  vector?: number[];
 }
 
 export interface QdrantClientOptions {
@@ -558,7 +560,7 @@ export class QdrantClient {
             "profile_id",
             "content_hash",
           ],
-          with_vector: false,
+          with_vector: request.withVector ?? false,
         },
         ...(request.signal === undefined ? {} : { signal: request.signal }),
       },
@@ -616,6 +618,17 @@ export class QdrantClient {
       if (!Number.isFinite(score)) {
         throw new Error("Qdrant search score must be finite");
       }
+      const vector = request.withVector
+        ? (() => {
+            if (
+              !Array.isArray(hit.vector) ||
+              hit.vector.some((value) => typeof value !== "number")
+            ) {
+              throw new Error("Qdrant search vector must be a numeric array");
+            }
+            return finiteVector(hit.vector as number[]);
+          })()
+        : undefined;
       return {
         pointId: nonEmptyString(String(hit.id ?? ""), "Qdrant result point ID"),
         score,
@@ -630,6 +643,7 @@ export class QdrantClient {
           String(payload.content_hash ?? ""),
           "Qdrant result content hash",
         ),
+        ...(vector === undefined ? {} : { vector }),
       };
     });
   }

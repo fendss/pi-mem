@@ -163,7 +163,10 @@ export interface RetrievalMetadata {
   rerankerModel?: string;
   rerankerRevision?: string;
   rerankerManifestSha256?: string;
+  rerankerInitialCandidateLimit?: number;
   rerankerCandidateLimit?: number;
+  rerankerMmrLambda?: number;
+  rerankerTopK?: number;
 }
 
 export interface RetrievalMetricsSnapshot {

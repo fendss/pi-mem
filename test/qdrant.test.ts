@@ -208,6 +208,7 @@ describe("Qdrant server client", () => {
     expect(upsert.points[0].payload).not.toHaveProperty("content");
 
     const search = JSON.parse(String(fetchImpl.mock.calls[1]?.[1]?.body));
+    expect(search.with_vector).toBe(false);
     expect(search.filter.must).toEqual([
       { key: "generation_id", match: { value: "generation-a" } },
       { key: "scope_id", match: { value: "scope-a" } },
@@ -234,6 +235,41 @@ describe("Qdrant server client", () => {
       profileId: "profile-a",
       contentHash: "hash-a",
     }]);
+  });
+
+  it("returns bounded semantic vectors only when MMR explicitly requests them", async () => {
+    const fetchImpl = vi.fn<typeof fetch>(async () => jsonResponse({
+      result: [{
+        id: "00000000-0000-4000-8000-000000000001",
+        score: 0.91,
+        vector: [1, 0],
+        payload: {
+          generation_id: "generation-a",
+          scope_id: "scope-a",
+          memory_id: "memory-a",
+          session_id: "session-a",
+          role: "user",
+          profile_id: "profile-a",
+          content_hash: "hash-a",
+        },
+      }],
+      status: "ok",
+    }));
+
+    const hits = await client(fetchImpl).search({
+      collection: SPEC.name,
+      vector: [1, 0],
+      generationId: "generation-a",
+      scopeId: "scope-a",
+      profileId: "profile-a",
+      limit: 20,
+      hnswEf: 256,
+      withVector: true,
+    });
+
+    expect(JSON.parse(String(fetchImpl.mock.calls[0]?.[1]?.body)).with_vector)
+      .toBe(true);
+    expect(hits[0]?.vector).toEqual([1, 0]);
   });
 
   it("uses exact generation/profile/scope filters when counting points", async () => {

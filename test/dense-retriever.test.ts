@@ -170,6 +170,33 @@ describe("Qdrant dense retriever", () => {
     }
   });
 
+  it("hydrates semantic vectors for MMR and rejects missing vectors", async () => {
+    const { store, client, retriever } = await fixture(true);
+    try {
+      client.hits = [{ ...hit("memory-a", "user", 0.9), vector: [1, 0] }];
+      const rankings = await retriever.search({
+        scopeId: "scope-a",
+        profile,
+        queryVectors: [[1, 0]],
+        limit: 20,
+        includeVectors: true,
+      });
+      expect(client.requests[0]?.withVector).toBe(true);
+      expect(rankings[0]?.[0]?.vector).toEqual([1, 0]);
+
+      client.hits = [hit("memory-a", "user", 0.9)];
+      await expect(retriever.search({
+        scopeId: "scope-a",
+        profile,
+        queryVectors: [[1, 0]],
+        limit: 20,
+        includeVectors: true,
+      })).rejects.toThrow(/vectors do not match/u);
+    } finally {
+      store.close();
+    }
+  });
+
   it("fails closed on Qdrant-to-SQLite provenance mismatch", async () => {
     const { store, client, retriever } = await fixture(true);
     try {

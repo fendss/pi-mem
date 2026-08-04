@@ -4,6 +4,7 @@ import {
 } from "./dense-retriever.js";
 import type { Embedder } from "./embedding.js";
 import { embeddingProfile } from "./embedding-index.js";
+import { maximalMarginalRelevance } from "./mmr.js";
 import {
   bm25Scores,
   PIMEM_HYBRID_BM25_OPTIONS,
@@ -63,6 +64,13 @@ export interface HybridRawStore {
   close?(): void | Promise<void>;
 }
 
+export interface HybridRerankerOptions {
+  initialCandidateLimit?: number;
+  mmrCandidateLimit?: number;
+  mmrLambda?: number;
+  topK?: number;
+}
+
 interface RankedHybridHit extends StoreSearchHit {
   denseRank: number;
   queryIndex: number;
@@ -108,7 +116,10 @@ export class HybridMemoryStore {
   readonly embedder: Embedder;
   readonly denseRetriever: DenseRetriever;
   readonly reranker: Reranker | undefined;
+  readonly rerankerInitialCandidateLimit: number;
   readonly rerankerCandidateLimit: number;
+  readonly rerankerMmrLambda: number;
+  readonly rerankerTopK: number;
 
   private denseCandidateCount = 0;
   private rerankCandidateCount = 0;
@@ -118,19 +129,47 @@ export class HybridMemoryStore {
     embedder: Embedder,
     denseRetriever?: DenseRetriever,
     reranker?: Reranker,
-    rerankerCandidateLimit = 100,
+    rerankerOptions: HybridRerankerOptions = {},
   ) {
     this.rawStore = rawStore;
     this.embedder = embedder;
     this.reranker = reranker;
+    this.rerankerInitialCandidateLimit =
+      rerankerOptions.initialCandidateLimit ?? 800;
+    this.rerankerCandidateLimit = rerankerOptions.mmrCandidateLimit ?? 100;
+    this.rerankerMmrLambda = rerankerOptions.mmrLambda ?? 0.8;
+    this.rerankerTopK = rerankerOptions.topK ?? 30;
     if (
-      !Number.isSafeInteger(rerankerCandidateLimit) ||
-      rerankerCandidateLimit <= 0 ||
-      rerankerCandidateLimit > 100
+      !Number.isSafeInteger(this.rerankerInitialCandidateLimit) ||
+      this.rerankerInitialCandidateLimit <= 0 ||
+      this.rerankerInitialCandidateLimit > 1_000
     ) {
-      throw new Error("rerankerCandidateLimit must be an integer from 1 to 100");
+      throw new Error("reranker initialCandidateLimit must be an integer from 1 to 1000");
     }
-    this.rerankerCandidateLimit = rerankerCandidateLimit;
+    if (
+      !Number.isSafeInteger(this.rerankerCandidateLimit) ||
+      this.rerankerCandidateLimit <= 0 ||
+      this.rerankerCandidateLimit > 100
+    ) {
+      throw new Error("reranker mmrCandidateLimit must be an integer from 1 to 100");
+    }
+    if (
+      !Number.isFinite(this.rerankerMmrLambda) ||
+      this.rerankerMmrLambda < 0 ||
+      this.rerankerMmrLambda > 1
+    ) {
+      throw new Error("reranker mmrLambda must be between 0 and 1");
+    }
+    if (
+      !Number.isSafeInteger(this.rerankerTopK) ||
+      this.rerankerTopK <= 0 ||
+      this.rerankerTopK > this.rerankerCandidateLimit
+    ) {
+      throw new Error("reranker topK must be between 1 and mmrCandidateLimit");
+    }
+    if (this.rerankerInitialCandidateLimit < this.rerankerCandidateLimit) {
+      throw new Error("reranker initialCandidateLimit must cover mmrCandidateLimit");
+    }
     if (denseRetriever !== undefined) {
       this.denseRetriever = denseRetriever;
     } else {
@@ -158,7 +197,11 @@ export class HybridMemoryStore {
                   rerankerManifestSha256:
                     this.reranker.metadata.manifestSha256,
                 }),
+            rerankerInitialCandidateLimit:
+              this.rerankerInitialCandidateLimit,
             rerankerCandidateLimit: this.rerankerCandidateLimit,
+            rerankerMmrLambda: this.rerankerMmrLambda,
+            rerankerTopK: this.rerankerTopK,
           }),
     };
   }
@@ -202,7 +245,10 @@ export class HybridMemoryStore {
     if (queryVectors.length !== request.queries.length) {
       throw new Error("Query embedding count does not match query count");
     }
-    const headroom = Math.max(20, 4 * limit);
+    const baseHeadroom = Math.max(20, 4 * limit);
+    const headroom = this.reranker === undefined
+      ? baseHeadroom
+      : Math.max(baseHeadroom, this.rerankerInitialCandidateLimit);
     const densePromise = this.denseRetriever.search({
       scopeId,
       profile,
@@ -216,6 +262,7 @@ export class HybridMemoryStore {
         ...(request.after === undefined ? {} : { after: request.after }),
         ...(request.before === undefined ? {} : { before: request.before }),
       },
+      ...(this.reranker === undefined ? {} : { includeVectors: true }),
       ...(signal === undefined ? {} : { signal }),
     });
     const {
@@ -256,13 +303,19 @@ export class HybridMemoryStore {
     for (let queryIndex = 0; queryIndex < request.queries.length; queryIndex += 1) {
       const query = request.queries[queryIndex]!;
       const denseCandidates = denseRankings[queryIndex]!.map((hit) => ({
-        candidate: { record: hit.record },
+        candidate: {
+          record: hit.record,
+          ...(hit.vector === undefined ? {} : { vector: hit.vector }),
+        },
         cosine: hit.score,
       }));
       const lexicalHits = lexicalRankings[queryIndex]!;
       this.denseCandidateCount += denseCandidates.length;
 
-      const union = new Map<string, { record: MemoryRecord }>();
+      const union = new Map<string, {
+        record: MemoryRecord;
+        vector?: ArrayLike<number>;
+      }>();
       for (const { candidate } of denseCandidates) {
         union.set(candidate.record.memoryId, candidate);
       }
@@ -298,28 +351,36 @@ export class HybridMemoryStore {
         60,
         candidates.length,
       );
+      const mmrIndexes = this.reranker === undefined
+        ? []
+        : maximalMarginalRelevance(
+            candidates.map((candidate, index) => ({
+              id: candidate.record.memoryId,
+              relevance: fused[index]!,
+              text: candidateText(candidate),
+              ...(candidate.vector === undefined
+                ? {}
+                : { vector: candidate.vector }),
+            })),
+            this.rerankerCandidateLimit,
+            this.rerankerMmrLambda,
+          );
       const rerankerScores = this.reranker === undefined
         ? undefined
         : await this.reranker.rerank(
             query,
-            candidates
-              .map((candidate, index) => ({ candidate, index }))
-              .sort((left, right) =>
-                fused[right.index]! - fused[left.index]! ||
-                left.candidate.record.memoryId.localeCompare(
-                  right.candidate.record.memoryId,
-                )
-              )
-              .slice(0, this.rerankerCandidateLimit)
-              .map(({ candidate }) => ({
-                id: candidate.record.memoryId,
-                text: rerankerDocumentText(candidate.record),
-              })),
+            mmrIndexes.map((index) => ({
+              id: candidates[index]!.record.memoryId,
+              text: rerankerDocumentText(candidates[index]!.record),
+            })),
             signal,
           );
       const denseRanks = new Map(
         denseRanking.map((candidateIndex, index) => [candidateIndex, index + 1]),
       );
+      const effectivePerQueryLimit = this.reranker === undefined
+        ? perQueryLimit
+        : Math.min(perQueryLimit, this.rerankerTopK);
       const queryHits: RankedHybridHit[] = candidates
         .map((candidate, index) => ({
           record: candidate.record,
@@ -335,7 +396,7 @@ export class HybridMemoryStore {
             : {}),
         }))
         .sort(compareFinal)
-        .slice(0, perQueryLimit)
+        .slice(0, effectivePerQueryLimit)
         .map((hit, index) => ({ ...hit, rank: index + 1 }));
 
       if (queryHits[0]) queryCoverageHits.push(queryHits[0]);

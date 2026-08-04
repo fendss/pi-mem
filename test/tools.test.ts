@@ -328,6 +328,48 @@ describe("PiMem tools", () => {
       .toEqual(new Set(["session-1"]));
   });
 
+  it("enforces the configured reranker top-k after cross-query coverage fusion", async () => {
+    const store: MemoryToolStore = {
+      getRetrievalMetadata() {
+        return {
+          retrievalProfile: "pimem-hybrid-qdrant-hnsw-v1",
+          rerankerTopK: 30,
+        };
+      },
+      search(_scopeId, request) {
+        const prefix = request.queries[0] === "first need" ? "a" : "b";
+        return Array.from({ length: 30 }, (_, index) => {
+          const item = record(`${prefix}${index + 1}`, index * 2);
+          return {
+            record: item,
+            query: request.queries[0] ?? "",
+            retriever: "pimem-hybrid",
+            rank: index + 1,
+            score: 1 / (61 + index),
+            preview: item.content,
+          };
+        });
+      },
+      read() {
+        return [];
+      },
+    };
+    const tools = createPiMemTools({
+      store,
+      scopeId: "scope-1",
+      ledger: new MemoryLedger("scope-1"),
+    });
+
+    const result = await tools.search.execute("coverage-top-k", {
+      operator: "coverage",
+      queries: ["first need", "second need"],
+      limit: 100,
+    });
+
+    expect(result.details.request.limit).toBe(30);
+    expect(result.details.candidates).toHaveLength(30);
+  });
+
   it("audits punctuation-only query repeats without rejecting them", async () => {
     const searched = record("m-repeat", 0);
     const tools = createPiMemTools({

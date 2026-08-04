@@ -206,19 +206,19 @@ describe("PiMem hybrid search", () => {
         ])));
       },
     };
-    const hybrid = new HybridMemoryStore(raw, embedder, undefined, reranker, 4);
+    const hybrid = new HybridMemoryStore(raw, embedder, undefined, reranker, {
+      initialCandidateLimit: 4,
+      mmrCandidateLimit: 4,
+      mmrLambda: 1,
+      topK: 2,
+    });
     try {
       const hits = await hybrid.search("scope-1", {
         queries: ["needle"],
         limit: 4,
       });
 
-      expect(hits.map((hit) => hit.record.memoryId)).toEqual([
-        "m4",
-        "m3",
-        "m1",
-        "m2",
-      ]);
+      expect(hits.map((hit) => hit.record.memoryId)).toEqual(["m4", "m3"]);
       expect(hits.every((hit) => hit.retriever === "pimem-hybrid")).toBe(true);
       expect(calls).toHaveLength(1);
       expect(calls[0]?.query).toBe("needle");
@@ -228,7 +228,10 @@ describe("PiMem hybrid search", () => {
       expect(hybrid.getRetrievalMetadata()).toMatchObject({
         rerankerModel: "reranker-model",
         rerankerRevision: "reranker-revision",
+        rerankerInitialCandidateLimit: 4,
         rerankerCandidateLimit: 4,
+        rerankerMmrLambda: 1,
+        rerankerTopK: 2,
       });
     } finally {
       raw.close();

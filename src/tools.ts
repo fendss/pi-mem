@@ -19,6 +19,7 @@ import type {
   MemoryCandidate,
   MemoryRecord,
   PiMemSelection,
+  RetrievalMetadata,
   SearchOperator,
   SearchOrder,
   SearchRequest,
@@ -157,6 +158,7 @@ export interface BashRoToolDetails {
 }
 
 export interface MemoryToolStore {
+  getRetrievalMetadata?(): RetrievalMetadata;
   search(
     scopeId: string,
     request: SearchRequest,
@@ -567,6 +569,7 @@ export function createSearchTool(
     async execute(_toolCallId, params, signal) {
       const operator: SearchOperator = params.operator ?? "hybrid";
       const limit = params.limit ?? options.searchDefaults?.limit ?? 20;
+      const rerankerTopK = options.store.getRetrievalMetadata?.().rerankerTopK;
       let request = makeSearchRequest({
         queries: params.queries,
         limit,
@@ -589,7 +592,9 @@ export function createSearchTool(
       } else if (operator === "coverage") {
         request = makeSearchRequest({
           queries: request.queries,
-          limit: Math.max(60, limit),
+          limit: rerankerTopK === undefined
+            ? Math.max(60, limit)
+            : Math.min(rerankerTopK, Math.max(60, limit)),
           order: "relevance",
           maxPerSession: 4,
         });
@@ -637,6 +642,12 @@ export function createSearchTool(
           : buildAggregateOperatorResult(databaseHits);
       } else {
         hits = await options.store.search(options.scopeId, request, signal);
+      }
+      if (
+        rerankerTopK !== undefined &&
+        (operator === "hybrid" || operator === "coverage")
+      ) {
+        hits = hits.slice(0, rerankerTopK);
       }
 
       const candidates = options.ledger.recordSearchHits(hits);

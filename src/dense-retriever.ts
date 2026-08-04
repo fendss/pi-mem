@@ -18,6 +18,7 @@ export interface DenseSearchHit {
   record: MemoryRecord;
   score: number;
   rank: number;
+  vector?: ArrayLike<number>;
 }
 
 export interface DenseSearchBatchRequest {
@@ -26,6 +27,7 @@ export interface DenseSearchBatchRequest {
   queryVectors: readonly (readonly number[])[];
   limit: number;
   filters?: Omit<SearchRequest, "queries" | "limit">;
+  includeVectors?: boolean;
   signal?: AbortSignal;
 }
 
@@ -103,6 +105,7 @@ export class SqliteExactDenseRetriever implements DenseRetriever {
         .map((candidate) => ({
           record: candidate.record,
           score: cosineSimilarity(queryVector, candidate.vector),
+          ...(request.includeVectors ? { vector: candidate.vector } : {}),
         }))
         .sort((left, right) => {
           const score = right.score - left.score;
@@ -176,7 +179,12 @@ export class QdrantDenseRetriever implements DenseRetriever {
       ) {
         throw new Error(`Qdrant provenance mismatch for memory: ${hit.memoryId}`);
       }
-      return { record, score: hit.score, rank: 0 };
+      return {
+        record,
+        score: hit.score,
+        rank: 0,
+        ...(hit.vector === undefined ? {} : { vector: hit.vector }),
+      };
     }).sort((left, right) => {
       const score = right.score - left.score;
       return score !== 0
@@ -222,8 +230,18 @@ export class QdrantDenseRetriever implements DenseRetriever {
         ...(filters?.before === undefined ? {} : { before: filters.before }),
         limit: request.limit,
         hnswEf: Math.min(10_000, Math.max(this.hnswEf, request.limit * 2)),
+        ...(request.includeVectors ? { withVector: true } : {}),
         ...(request.signal === undefined ? {} : { signal: request.signal }),
       });
+      if (
+        request.includeVectors &&
+        hits.some((hit) =>
+          hit.vector === undefined ||
+          hit.vector.length !== request.profile.dimensions
+        )
+      ) {
+        throw new Error("Qdrant dense vectors do not match the embedding profile");
+      }
       return this.hydrate(
         request.scopeId,
         hits,
