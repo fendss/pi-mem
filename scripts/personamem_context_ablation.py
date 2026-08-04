@@ -10,6 +10,7 @@ from __future__ import annotations
 import argparse
 import concurrent.futures
 import hashlib
+import http.client
 import json
 import math
 import os
@@ -33,6 +34,11 @@ MCQ_PROMPT_TEMPLATE = """Please choose the best answer from the following option
 Think step by step about which answer best fits the user's query and conversation context.
 Provide your reasoning first, then give your final answer as 'Final Answer: [Letter]'"""
 CONTEXT_HEADER = "Retrieved conversation evidence:\n"
+MEMORY_PREFIX_RE = re.compile(
+    r"^\s*\[personamem[^\]]*\]\[session_[^\]]+\]\[D\d+:\d+\]\[text\]\s*"
+    r"(?:User|Assistant|System):\s*",
+    flags=re.IGNORECASE,
+)
 LETTER_PATTERNS = [
     re.compile(r"Final Answer:\s*\[?([A-Z])\]?", re.I),
     re.compile(r"final answer:\s*\[?([A-Z])\]?", re.I),
@@ -170,6 +176,124 @@ def prepare(args: argparse.Namespace) -> None:
         "official_source_commit": "48dbfff3cb56838ebdc8fc514dd9953f9097ba0a",
         "official_personamem_prompt_sha256": "075d4aadf336f9af0ada074f14c7a70882f419c37d9c0b90ef7652a6477d8950",
         "context_wrapper_sha256": sha256_text(CONTEXT_HEADER),
+    }
+    args.manifest.write_text(json.dumps(manifest, sort_keys=True, indent=2) + "\n", encoding="utf-8")
+    print(json.dumps(manifest, sort_keys=True))
+
+
+def history_answer_messages(
+    question: str,
+    options: list[str],
+    history: list[dict[str, str]],
+) -> list[dict[str, str]]:
+    option_text = "\n".join(f"{chr(65 + index)}. {option}" for index, option in enumerate(options))
+    return [
+        *history,
+        {"role": "user", "content": question + RECALL_SUFFIX},
+        {"role": "system", "content": MCQ_PROMPT_TEMPLATE.format(options=option_text)},
+    ]
+
+
+def prepare_upper_bound(args: argparse.Namespace) -> None:
+    answer_inputs = [row for row in read_json(args.chunk_dir / "answer_input.json") if row.get("dataset") == DATASET]
+    answer_inputs.sort(key=lambda row: row["qa_id"])
+    marker = f":{DATASET}:"
+    artifacts: dict[tuple[str, str], dict[str, Any]] = {}
+    if args.mode == "retrieved":
+        for path in sorted(args.artifact_dir.glob("*.json")):
+            row = read_json(path)
+            user_id = str(row.get("search", {}).get("user_id", ""))
+            if marker in user_id:
+                artifacts[(user_id.split(marker, 1)[1], normalize_question(row["search"]["query"]))] = row
+
+    gold: dict[str, list[dict[str, str]]] = {}
+    if args.mode == "gold":
+        # This is the explicit oracle-only boundary. No retrieval request is made here.
+        for sample in read_json(args.chunk_dir / "scriptmem_raw_for_eval" / f"{DATASET}.json"):
+            for index, qa in enumerate(sample["qa"]):
+                qa_id = f"{DATASET}:{sample['sample_id']}#q{index:04d}"
+                seen: set[tuple[str, str]] = set()
+                evidence: list[dict[str, str]] = []
+                for item in qa.get("evidence", []):
+                    role = str(item.get("role", "user")).lower()
+                    content = str(item.get("content", "")).strip()
+                    key = (role, " ".join(content.split()).casefold())
+                    if not content or key in seen:
+                        continue
+                    seen.add(key)
+                    evidence.append({"role": role, "content": content})
+                gold[qa_id] = evidence
+
+    rows: list[dict[str, Any]] = []
+    for ai in answer_inputs:
+        if args.mode == "retrieved":
+            artifact = artifacts.get((ai["speaker_a_name"], normalize_question(ai["question"])))
+            if artifact is None:
+                raise RuntimeError(f"missing sealed retrieval artifact for {ai['qa_id']}")
+            deduplicated: list[dict[str, Any]] = []
+            seen_ids: set[str] = set()
+            for item in artifact["agent"]["memory"].get("searched_memories", []):
+                ident = str(item["memoryId"])
+                if ident in seen_ids:
+                    continue
+                seen_ids.add(ident)
+                deduplicated.append(item)
+            selected = deduplicated[: args.top_k]
+            selected.sort(key=lambda item: (
+                str(item.get("timestamp") or ""),
+                str(item.get("sessionId") or ""),
+                int(item.get("turnIndex") or 0),
+                str(item.get("memoryId") or ""),
+            ))
+            history = [
+                {
+                    "role": str(item.get("role") or "user").lower(),
+                    "content": MEMORY_PREFIX_RE.sub("", str(item.get("content") or "")).strip(),
+                }
+                for item in selected
+                if str(item.get("content") or "").strip()
+            ]
+            variant = "retrieved_session_dedup_top30"
+            oracle = False
+        else:
+            history = list(gold.get(ai["qa_id"], []))
+            if not history:
+                raise RuntimeError(f"missing gold memories for {ai['qa_id']}")
+            variant = "gold_memories_oracle"
+            oracle = True
+        messages = history_answer_messages(
+            ai["question"], [str(option) for option in ai.get("option", [])], history
+        )
+        request = {"model": args.model, "messages": messages, "temperature": 0}
+        rows.append({
+            "experiment_key": f"{ai['qa_id']}::{variant}",
+            "qa_id": ai["qa_id"],
+            "variant": variant,
+            "oracle": oracle,
+            "memory_count": len(history),
+            "memory_chars": sum(len(item["content"]) for item in history),
+            "request_sha256": sha256_text(canonical(request)),
+            "request": request,
+        })
+
+    args.output.parent.mkdir(parents=True, exist_ok=True)
+    with args.output.open("w", encoding="utf-8") as handle:
+        for row in rows:
+            handle.write(canonical(row) + "\n")
+    manifest = {
+        "schema_version": "pimem-personamem-upper-bound-requests-v1",
+        "dataset": DATASET,
+        "mode": args.mode,
+        "variant": rows[0]["variant"],
+        "oracle": args.mode == "gold",
+        "gold_access": args.mode == "gold",
+        "question_count": len(rows),
+        "model": args.model,
+        "temperature": 0,
+        "top_k": args.top_k if args.mode == "retrieved" else None,
+        "history_projection": "role-preserving original conversation messages; retrieved Top-K reordered chronologically",
+        "official_source_commit": "48dbfff3cb56838ebdc8fc514dd9953f9097ba0a",
+        "official_personamem_prompt_sha256": "075d4aadf336f9af0ada074f14c7a70882f419c37d9c0b90ef7652a6477d8950",
     }
     args.manifest.write_text(json.dumps(manifest, sort_keys=True, indent=2) + "\n", encoding="utf-8")
     print(json.dumps(manifest, sort_keys=True))
@@ -327,7 +451,17 @@ def run(args: argparse.Namespace) -> None:
                     "predicted_letter": extract_letter(text),
                     "duration_ms": round((time.monotonic() - started) * 1000, 3),
                 }
-            except (urllib.error.HTTPError, urllib.error.URLError, TimeoutError, RuntimeError, KeyError, ValueError) as exc:
+            except (
+                urllib.error.HTTPError,
+                urllib.error.URLError,
+                http.client.RemoteDisconnected,
+                TimeoutError,
+                ConnectionError,
+                OSError,
+                RuntimeError,
+                KeyError,
+                ValueError,
+            ) as exc:
                 last_error = f"{type(exc).__name__}: {exc}"
                 if attempt < args.attempts:
                     time.sleep(min(8, 2 ** attempt))
@@ -469,6 +603,114 @@ def score(args: argparse.Namespace) -> None:
     print(json.dumps(summary, ensure_ascii=False, sort_keys=True, indent=2))
 
 
+def score_upper_bound(args: argparse.Namespace) -> None:
+    requests = {row["experiment_key"]: row for row in read_jsonl(args.requests)}
+    attempt_rows = read_jsonl(args.answers)
+    successful = {row["experiment_key"]: row for row in attempt_rows if row.get("status") == "ok"}
+    if set(successful) != set(requests):
+        missing = sorted(set(requests) - set(successful))
+        raise RuntimeError(f"upper-bound Answer run incomplete: {missing[:5]}")
+    details = {
+        row["qa_id"]: row
+        for row in read_json(args.chunk_dir / "official_details.json")
+        if row.get("dataset") == DATASET
+    }
+    raw_category: dict[str, str] = {}
+    for sample in read_json(args.chunk_dir / "scriptmem_raw_for_eval" / f"{DATASET}.json"):
+        for index, qa in enumerate(sample["qa"]):
+            raw_category[f"{DATASET}:{sample['sample_id']}#q{index:04d}"] = qa.get("category", "unknown")
+
+    rows: list[dict[str, Any]] = []
+    for key, answer in successful.items():
+        request = requests[key]
+        gold_letter = details[answer["qa_id"]]["gold"][0]
+        rows.append({
+            **answer,
+            "gold": gold_letter,
+            "correct": answer["predicted_letter"] == gold_letter,
+            "category": raw_category[answer["qa_id"]],
+            "memory_count": request["memory_count"],
+            "memory_chars": request["memory_chars"],
+            "oracle": request.get("oracle", False),
+        })
+    variants: dict[str, list[dict[str, Any]]] = {}
+    for row in rows:
+        variants.setdefault(row["variant"], []).append(row)
+
+    summary: dict[str, Any] = {
+        "schema_version": "pimem-personamem-upper-bound-result-v1",
+        "dataset": DATASET,
+        "question_count": len({row["qa_id"] for row in rows}),
+        "answer_count": len(rows),
+        "official_leaderboard_accuracy": sum(item["score"] for item in details.values()) / len(details),
+        "provider_reliability": {
+            "attempt_records": len(attempt_rows),
+            "recovered_error_records": sum(row.get("status") != "ok" for row in attempt_rows),
+            "successful_experiment_keys": len(successful),
+            "successful_records_requiring_retry": sum(int(row.get("attempts", 1)) > 1 for row in successful.values()),
+            "recorded_provider_attempts": sum(int(row.get("attempts", 1)) for row in successful.values()),
+        },
+        "variants": {},
+    }
+    for variant, group in sorted(variants.items()):
+        summary["variants"][variant] = {
+            "oracle": all(row["oracle"] for row in group),
+            "count": len(group),
+            "correct": sum(row["correct"] for row in group),
+            "accuracy": sum(row["correct"] for row in group) / len(group),
+            "mean_memory_count": sum(row["memory_count"] for row in group) / len(group),
+            "min_memory_count": min(row["memory_count"] for row in group),
+            "max_memory_count": max(row["memory_count"] for row in group),
+            "mean_memory_chars": sum(row["memory_chars"] for row in group) / len(group),
+            "mean_duration_ms": sum(row["duration_ms"] for row in group) / len(group),
+            "actual_models": sorted({row["actual_model"] for row in group}),
+            "missing_final_letter": sum(not row["predicted_letter"] for row in group),
+            "by_category": {
+                category: {
+                    "count": len(category_rows),
+                    "correct": sum(row["correct"] for row in category_rows),
+                    "accuracy": sum(row["correct"] for row in category_rows) / len(category_rows),
+                    "mean_memory_count": sum(row["memory_count"] for row in category_rows) / len(category_rows),
+                }
+                for category in sorted({row["category"] for row in group})
+                if (category_rows := [row for row in group if row["category"] == category])
+            },
+        }
+    summary["paired_with_official"] = {}
+    for variant, group in sorted(variants.items()):
+        official_only = sum(bool(details[row["qa_id"]]["score"]) and not row["correct"] for row in group)
+        variant_only = sum(not bool(details[row["qa_id"]]["score"]) and row["correct"] for row in group)
+        summary["paired_with_official"][variant] = {
+            "count": len(group),
+            "official_correct_variant_wrong": official_only,
+            "official_wrong_variant_correct": variant_only,
+            "same_correctness": len(group) - official_only - variant_only,
+            "mcnemar_exact_p": exact_mcnemar_p(official_only, variant_only),
+        }
+
+    pairs: dict[str, dict[str, dict[str, Any]]] = {}
+    for row in rows:
+        pairs.setdefault(row["qa_id"], {})[row["variant"]] = row
+    left = "retrieved_session_dedup_top30"
+    right = "gold_memories_oracle"
+    eligible = [pair for pair in pairs.values() if left in pair and right in pair]
+    if eligible:
+        left_only = sum(pair[left]["correct"] and not pair[right]["correct"] for pair in eligible)
+        right_only = sum(not pair[left]["correct"] and pair[right]["correct"] for pair in eligible)
+        summary["paired"] = {
+            "count": len(eligible),
+            "retrieved_correct_gold_wrong": left_only,
+            "retrieved_wrong_gold_correct": right_only,
+            "same_prediction": sum(pair[left]["predicted_letter"] == pair[right]["predicted_letter"] for pair in eligible),
+            "mcnemar_exact_p": exact_mcnemar_p(left_only, right_only),
+        }
+    args.output.write_text(json.dumps(summary, ensure_ascii=False, sort_keys=True, indent=2) + "\n", encoding="utf-8")
+    with args.cases.open("w", encoding="utf-8") as handle:
+        for row in sorted(rows, key=lambda item: item["experiment_key"]):
+            handle.write(canonical(row) + "\n")
+    print(json.dumps(summary, ensure_ascii=False, sort_keys=True, indent=2))
+
+
 def main() -> None:
     parser = argparse.ArgumentParser()
     sub = parser.add_subparsers(dest="command", required=True)
@@ -482,6 +724,16 @@ def main() -> None:
     prep.add_argument("--top-k", type=int, default=30)
     prep.add_argument("--model", default="gpt-4o-mini")
     prep.set_defaults(func=prepare)
+
+    upper_prep = sub.add_parser("prepare-upper-bound")
+    upper_prep.add_argument("--artifact-dir", type=Path, required=True)
+    upper_prep.add_argument("--chunk-dir", type=Path, required=True)
+    upper_prep.add_argument("--output", type=Path, required=True)
+    upper_prep.add_argument("--manifest", type=Path, required=True)
+    upper_prep.add_argument("--mode", choices=["retrieved", "gold"], required=True)
+    upper_prep.add_argument("--top-k", type=int, default=30)
+    upper_prep.add_argument("--model", default="gpt-4o-mini")
+    upper_prep.set_defaults(func=prepare_upper_bound)
 
     rerank_prep = sub.add_parser("prepare-reranked")
     rerank_prep.add_argument("--artifact-dir", type=Path, required=True)
@@ -514,6 +766,14 @@ def main() -> None:
     scorer.add_argument("--output", type=Path, required=True)
     scorer.add_argument("--cases", type=Path, required=True)
     scorer.set_defaults(func=score)
+
+    upper_scorer = sub.add_parser("score-upper-bound")
+    upper_scorer.add_argument("--requests", type=Path, required=True)
+    upper_scorer.add_argument("--answers", type=Path, required=True)
+    upper_scorer.add_argument("--chunk-dir", type=Path, required=True)
+    upper_scorer.add_argument("--output", type=Path, required=True)
+    upper_scorer.add_argument("--cases", type=Path, required=True)
+    upper_scorer.set_defaults(func=score_upper_bound)
 
     args = parser.parse_args()
     args.func(args)

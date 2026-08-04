@@ -83,9 +83,67 @@ Blindly increasing context from 3.45 to 13.12 memories did not improve aggregate
 
 Category movement is heterogeneous. For example, all-Candidate context improved `ask_to_forget` from 13.04% to 30.43% on 23 pilot questions, but reduced health/medical from 70.59% to 52.94%, neutral preferences from 61.54% to 46.15%, and therapy background from 28.57% to 14.29%. These cells are small, but the direction is consistent with PersonaMem's design: additional semantically relevant memory can be harmful when it refers to another person, has been superseded or forgotten, or contains sensitive information that should not drive personalization.
 
+## Full 600-question retrieved-session and Gold-oracle experiment
+
+A follow-up full-suite experiment used the upstream PersonaMem-v2 role-preserving message contract instead of the pilot's bullet-list evidence wrapper.
+
+- `retrieved_session_dedup_top30`: all immutable memories discovered during the one Retrieval Agent run, deduplicated by ID, truncated to the first 30 in retrieval order, then ordered chronologically for Answer.
+- `gold_memories_oracle`: every annotated PersonaMem gold memory, with original roles and contents, passed directly to Answer. Gold was accessed only by this explicit oracle branch after Search had already completed.
+
+All 1,200 Answer calls returned `gpt-4o-mini-2024-07-18`; temperature was 0. No best-of selection was performed.
+
+| Condition | Correct | Accuracy | Mean memories | Mean memory chars |
+|---|---:|---:|---:|---:|
+| Official Leaderboard cited-only | 206/600 | 34.33% | 3.43 | 4,986 |
+| Retrieved session, dedup, Top-30 | 267/600 | 44.50% | 13.99 | 10,011 |
+| All Gold memories oracle | 336/600 | 56.00% | 2.95 | 1,736 |
+
+Paired transitions:
+
+```text
+Official → retrieved-session Top-30:
+  official wrong → retrieved correct: 106
+  official correct → retrieved wrong: 45
+  net: +61 questions / +10.17 points
+  McNemar exact p = 7.49e-7
+
+Retrieved-session Top-30 → Gold oracle:
+  retrieved wrong → Gold correct: 111
+  retrieved correct → Gold wrong: 42
+  net: +69 questions / +11.50 points
+  McNemar exact p = 2.25e-8
+
+Official → Gold oracle:
+  official wrong → Gold correct: 156
+  official correct → Gold wrong: 26
+  net: +130 questions / +21.67 points
+  McNemar exact p = 8.57e-24
+```
+
+Category accuracy:
+
+| Category | Official | Retrieved Top-30 | Gold oracle |
+|---|---:|---:|---:|
+| anti-stereotypical preference | 41.51% | 49.06% | 66.98% |
+| ask to forget | 9.65% | 15.79% | 33.33% |
+| health/medical | 50.00% | 65.28% | 72.22% |
+| neutral preferences | 40.82% | 43.88% | 71.43% |
+| sensitive information | 29.17% | 40.28% | 30.56% |
+| stereotypical preference | 50.00% | 65.28% | 68.06% |
+| therapy background | 27.27% | 46.97% | 51.52% |
+
+The Gold condition is an empirical oracle score, not a mathematical upper bound: the model can still misuse gold evidence, especially for forgetting and sensitive-information questions. Gold even underperforms the broader retrieved context on sensitive information, showing that relevance alone does not tell the model whether information is permitted to influence personalization.
+
 ## Conclusion
 
-PersonaMem does confirm that the cited-only Answer projection is too lossy: exact gold-message recall falls from 35.41% in Candidates to 16.97% in Answer context. It does **not** support a blanket policy of sending every Candidate to Answer.
+The full experiment changes the diagnosis:
+
+1. **Answer projection/context packaging is a major loss.** Returning all deduplicated retrieved memories with roles and chronology improves 34.33% to 44.50%.
+2. **Retrieval/evidence quality remains comparably important.** Replacing retrieved context with exact Gold memories improves another 11.50 points to 56.00%.
+3. **Context length alone is not the key variable.** Gold uses only 2.95 memories and 1,736 characters on average, yet substantially outperforms the 13.99-memory retrieved context. Relevance, state, ownership, and policy correctness matter more than raw length.
+4. **The Answer model/prompt has a large residual ceiling.** Even with exact Gold memories, `gpt-4o-mini` misses 44% of PersonaMem questions, especially forgetting and sensitive-information cases.
+
+PersonaMem therefore confirms that cited-only projection is too lossy, but the correct replacement is a state-aware final evidence packager rather than unconditional context expansion.
 
 The current final reranker scores direct relevance, but PersonaMem requires more than relevance:
 
@@ -114,4 +172,5 @@ No production change is justified by the current pilot.
 ```text
 /data/zhaogangyi/pi-mem-eval/personamem-v2-32k-attribution-20260804/
 /data/zhaogangyi/pi-mem-eval/personamem-v2-32k-context-ablation-20260804/
+/data/zhaogangyi/pi-mem-eval/personamem-v2-32k-upper-bound-20260804/
 ```
