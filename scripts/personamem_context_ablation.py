@@ -185,13 +185,85 @@ def history_answer_messages(
     question: str,
     options: list[str],
     history: list[dict[str, str]],
+    supplemental_products: str | None = None,
 ) -> list[dict[str, str]]:
     option_text = "\n".join(f"{chr(65 + index)}. {option}" for index, option in enumerate(options))
+    supplemental = (
+        [{"role": "system", "content": supplemental_products}]
+        if supplemental_products
+        else []
+    )
     return [
         *history,
+        *supplemental,
         {"role": "user", "content": question + RECALL_SUFFIX},
         {"role": "system", "content": MCQ_PROMPT_TEMPLATE.format(options=option_text)},
     ]
+
+
+def render_pimem_products(
+    artifact: dict[str, Any],
+    selected: list[dict[str, Any]],
+    labels: dict[str, str],
+) -> str:
+    agent = artifact["agent"]
+    selection = agent["selection"]
+    candidates = {item["memoryId"]: item for item in agent["memory"].get("candidates", [])}
+    query_order: list[str] = []
+    seen_queries: set[str] = set()
+    for step in agent.get("reasoning_trace", []):
+        if step.get("toolName") != "search":
+            continue
+        for raw_query in step.get("args", {}).get("queries", []):
+            query = str(raw_query).strip()
+            if query and query not in seen_queries:
+                seen_queries.add(query)
+                query_order.append(query)
+    for item in selected:
+        for discovery in candidates.get(item["memoryId"], {}).get("discoveries", []):
+            query = str(discovery.get("query") or "").strip()
+            if query and query not in seen_queries:
+                seen_queries.add(query)
+                query_order.append(query)
+
+    lines = [
+        "<pimem_retrieval_products_v1>",
+        "These are Pi-Mem Agent products derived only from the retrieved memories above. "
+        "Treat generated summaries and support statements as navigation hints and verify them against raw memories.",
+        f"selection_status: {selection.get('status', 'unknown')}",
+        f"evidence_summary: {selection.get('evidence_summary', '')}",
+        "counts: "
+        f"candidates={agent['metrics'].get('candidateCount', 0)}, "
+        f"read={agent['metrics'].get('evidenceCount', 0)}, "
+        f"cited={agent['metrics'].get('citedCount', 0)}, "
+        f"search_calls={agent['metrics'].get('searchCalls', 0)}",
+        "planned_queries:",
+    ]
+    lines.extend(f"- {query}" for query in query_order)
+    lines.append("agent_citation_support:")
+    if selection.get("citations"):
+        for citation in selection["citations"]:
+            label = labels.get(citation["memoryId"], "not_in_top30")
+            lines.append(f"- {label}: {citation.get('supports', '')}")
+    else:
+        lines.append("- none")
+    lines.append("top30_inventory:")
+    for item in selected:
+        candidate = candidates.get(item["memoryId"], {})
+        discoveries = candidate.get("discoveries", [])
+        hit_text = "; ".join(
+            f"rank={hit.get('rank')}, query={hit.get('query', '')}"
+            for hit in discoveries
+            if hit.get("rank") is not None or hit.get("query")
+        ) or "context_expansion_or_no_search_hit"
+        lines.append(
+            f"- {labels[item['memoryId']]}: time={item.get('timestamp')}, "
+            f"turn={item.get('turnIndex')}, role={item.get('role')}, "
+            f"read={str(bool(candidate.get('read'))).lower()}, "
+            f"cited={str(bool(candidate.get('cited'))).lower()}, hits=[{hit_text}]"
+        )
+    lines.append("</pimem_retrieval_products_v1>")
+    return "\n".join(lines)
 
 
 def prepare_upper_bound(args: argparse.Namespace) -> None:
@@ -199,7 +271,7 @@ def prepare_upper_bound(args: argparse.Namespace) -> None:
     answer_inputs.sort(key=lambda row: row["qa_id"])
     marker = f":{DATASET}:"
     artifacts: dict[tuple[str, str], dict[str, Any]] = {}
-    if args.mode == "retrieved":
+    if args.mode in {"retrieved", "products"}:
         for path in sorted(args.artifact_dir.glob("*.json")):
             row = read_json(path)
             user_id = str(row.get("search", {}).get("user_id", ""))
@@ -226,7 +298,7 @@ def prepare_upper_bound(args: argparse.Namespace) -> None:
 
     rows: list[dict[str, Any]] = []
     for ai in answer_inputs:
-        if args.mode == "retrieved":
+        if args.mode in {"retrieved", "products"}:
             artifact = artifacts.get((ai["speaker_a_name"], normalize_question(ai["question"])))
             if artifact is None:
                 raise RuntimeError(f"missing sealed retrieval artifact for {ai['qa_id']}")
@@ -245,15 +317,28 @@ def prepare_upper_bound(args: argparse.Namespace) -> None:
                 int(item.get("turnIndex") or 0),
                 str(item.get("memoryId") or ""),
             ))
+            labels = {
+                item["memoryId"]: f"P{index:02d}"
+                for index, item in enumerate(selected, start=1)
+            }
             history = [
                 {
                     "role": str(item.get("role") or "user").lower(),
-                    "content": MEMORY_PREFIX_RE.sub("", str(item.get("content") or "")).strip(),
+                    "content": (
+                        f"[Pi-Mem memory {labels[item['memoryId']]}]\n"
+                        if args.mode == "products"
+                        else ""
+                    ) + MEMORY_PREFIX_RE.sub("", str(item.get("content") or "")).strip(),
                 }
                 for item in selected
                 if str(item.get("content") or "").strip()
             ]
-            variant = "retrieved_session_dedup_top30"
+            if args.mode == "products":
+                supplemental_products = render_pimem_products(artifact, selected, labels)
+                variant = "retrieved_top30_plus_pimem_products"
+            else:
+                supplemental_products = None
+                variant = "retrieved_session_dedup_top30"
             oracle = False
         else:
             history = list(gold.get(ai["qa_id"], []))
@@ -261,8 +346,12 @@ def prepare_upper_bound(args: argparse.Namespace) -> None:
                 raise RuntimeError(f"missing gold memories for {ai['qa_id']}")
             variant = "gold_memories_oracle"
             oracle = True
+            supplemental_products = None
         messages = history_answer_messages(
-            ai["question"], [str(option) for option in ai.get("option", [])], history
+            ai["question"],
+            [str(option) for option in ai.get("option", [])],
+            history,
+            supplemental_products,
         )
         request = {"model": args.model, "messages": messages, "temperature": 0}
         rows.append({
@@ -271,7 +360,8 @@ def prepare_upper_bound(args: argparse.Namespace) -> None:
             "variant": variant,
             "oracle": oracle,
             "memory_count": len(history),
-            "memory_chars": sum(len(item["content"]) for item in history),
+            "memory_chars": sum(len(item["content"]) for item in history) + len(supplemental_products or ""),
+            "supplemental_product_chars": len(supplemental_products or ""),
             "request_sha256": sha256_text(canonical(request)),
             "request": request,
         })
@@ -290,8 +380,13 @@ def prepare_upper_bound(args: argparse.Namespace) -> None:
         "question_count": len(rows),
         "model": args.model,
         "temperature": 0,
-        "top_k": args.top_k if args.mode == "retrieved" else None,
+        "top_k": args.top_k if args.mode in {"retrieved", "products"} else None,
         "history_projection": "role-preserving original conversation messages; retrieved Top-K reordered chronologically",
+        "supplemental_products": (
+            ["selection status", "evidence summary", "candidate/read/cited/search counts", "planned queries", "citation support", "Top-30 inventory with read/cited flags and discovery ranks"]
+            if args.mode == "products"
+            else []
+        ),
         "official_source_commit": "48dbfff3cb56838ebdc8fc514dd9953f9097ba0a",
         "official_personamem_prompt_sha256": "075d4aadf336f9af0ada074f14c7a70882f419c37d9c0b90ef7652a6477d8950",
     }
@@ -631,6 +726,7 @@ def score_upper_bound(args: argparse.Namespace) -> None:
             "category": raw_category[answer["qa_id"]],
             "memory_count": request["memory_count"],
             "memory_chars": request["memory_chars"],
+            "supplemental_product_chars": request.get("supplemental_product_chars", 0),
             "oracle": request.get("oracle", False),
         })
     variants: dict[str, list[dict[str, Any]]] = {}
@@ -662,6 +758,7 @@ def score_upper_bound(args: argparse.Namespace) -> None:
             "min_memory_count": min(row["memory_count"] for row in group),
             "max_memory_count": max(row["memory_count"] for row in group),
             "mean_memory_chars": sum(row["memory_chars"] for row in group) / len(group),
+            "mean_supplemental_product_chars": sum(row.get("supplemental_product_chars", 0) for row in group) / len(group),
             "mean_duration_ms": sum(row["duration_ms"] for row in group) / len(group),
             "actual_models": sorted({row["actual_model"] for row in group}),
             "missing_final_letter": sum(not row["predicted_letter"] for row in group),
@@ -691,6 +788,33 @@ def score_upper_bound(args: argparse.Namespace) -> None:
     pairs: dict[str, dict[str, dict[str, Any]]] = {}
     for row in rows:
         pairs.setdefault(row["qa_id"], {})[row["variant"]] = row
+    summary["paired_variants"] = {}
+    variant_names = sorted(variants)
+    for left_index, left_name in enumerate(variant_names):
+        for right_name in variant_names[left_index + 1:]:
+            eligible_pair = [
+                pair for pair in pairs.values()
+                if left_name in pair and right_name in pair
+            ]
+            left_only_pair = sum(
+                pair[left_name]["correct"] and not pair[right_name]["correct"]
+                for pair in eligible_pair
+            )
+            right_only_pair = sum(
+                not pair[left_name]["correct"] and pair[right_name]["correct"]
+                for pair in eligible_pair
+            )
+            summary["paired_variants"][f"{left_name}__vs__{right_name}"] = {
+                "count": len(eligible_pair),
+                "left_correct_right_wrong": left_only_pair,
+                "left_wrong_right_correct": right_only_pair,
+                "same_prediction": sum(
+                    pair[left_name]["predicted_letter"] == pair[right_name]["predicted_letter"]
+                    for pair in eligible_pair
+                ),
+                "mcnemar_exact_p": exact_mcnemar_p(left_only_pair, right_only_pair),
+            }
+
     left = "retrieved_session_dedup_top30"
     right = "gold_memories_oracle"
     eligible = [pair for pair in pairs.values() if left in pair and right in pair]
@@ -730,7 +854,7 @@ def main() -> None:
     upper_prep.add_argument("--chunk-dir", type=Path, required=True)
     upper_prep.add_argument("--output", type=Path, required=True)
     upper_prep.add_argument("--manifest", type=Path, required=True)
-    upper_prep.add_argument("--mode", choices=["retrieved", "gold"], required=True)
+    upper_prep.add_argument("--mode", choices=["retrieved", "products", "gold"], required=True)
     upper_prep.add_argument("--top-k", type=int, default=30)
     upper_prep.add_argument("--model", default="gpt-4o-mini")
     upper_prep.set_defaults(func=prepare_upper_bound)

@@ -134,16 +134,62 @@ Category accuracy:
 
 The Gold condition is an empirical oracle score, not a mathematical upper bound: the model can still misuse gold evidence, especially for forgetting and sensitive-information questions. Gold even underperforms the broader retrieved context on sensitive information, showing that relevance alone does not tell the model whether information is permitted to influence personalization.
 
+## Top-30 plus additional Pi-Mem products
+
+A second 600-question condition kept exactly the same deduplicated Top-30 raw memories and supplemented them with all bounded Pi-Mem products available in the sealed trace:
+
+- selection status;
+- `evidenceSummary`;
+- candidate/read/cited/search counts;
+- planned retrieval queries;
+- Agent citation-support statements;
+- Top-30 inventory with role, time, turn, read/cited flags, query, and discovery rank.
+
+No Gold field was used. Generated summaries and support statements were explicitly labeled as navigation hints that must be checked against raw memories.
+
+| Condition | Correct | Accuracy | Mean total context chars |
+|---|---:|---:|---:|
+| Retrieved session Top-30 | 267/600 | 44.50% | 10,011 |
+| Top-30 + Pi-Mem products | 223/600 | 37.17% | 14,135 |
+| Gold memories oracle | 336/600 | 56.00% | 1,736 |
+
+The added Pi-Mem block averaged 3,845 characters. Paired against raw Top-30:
+
+```text
+Top-30 correct → products wrong: 88
+Top-30 wrong → products correct: 44
+net: -44 questions / -7.33 points
+same answer letter: 402/600
+McNemar exact p = 1.60e-4
+```
+
+Category accuracy:
+
+| Category | Raw Top-30 | Top-30 + products | Change |
+|---|---:|---:|---:|
+| anti-stereotypical preference | 49.06% | 45.28% | -3.78 |
+| ask to forget | 15.79% | 15.79% | 0.00 |
+| health/medical | 65.28% | 54.17% | -11.11 |
+| neutral preferences | 43.88% | 40.82% | -3.06 |
+| sensitive information | 40.28% | 23.61% | -16.67 |
+| stereotypical preference | 65.28% | 56.94% | -8.34 |
+| therapy background | 46.97% | 30.30% | -16.67 |
+
+The regression is not explained by Pi-Mem's `insufficient` status: 86 of the 88 degraded questions had status `sufficient`. Qualitative inspection shows that evidence summaries often restate sensitive attributes or directly personalize from medically or therapeutically related memories. This makes generated retrieval products more authoritative and salient even when PersonaMem expects the model not to use that information.
+
+This condition intentionally combines all products, so it does not identify whether the main harm comes from `evidenceSummary`, citation support, or inventory clutter. A component ablation would be required for that attribution.
+
 ## Conclusion
 
-The full experiment changes the diagnosis:
+The full experiments change the diagnosis:
 
 1. **Answer projection/context packaging is a major loss.** Returning all deduplicated retrieved memories with roles and chronology improves 34.33% to 44.50%.
 2. **Retrieval/evidence quality remains comparably important.** Replacing retrieved context with exact Gold memories improves another 11.50 points to 56.00%.
 3. **Context length alone is not the key variable.** Gold uses only 2.95 memories and 1,736 characters on average, yet substantially outperforms the 13.99-memory retrieved context. Relevance, state, ownership, and policy correctness matter more than raw length.
 4. **The Answer model/prompt has a large residual ceiling.** Even with exact Gold memories, `gpt-4o-mini` misses 44% of PersonaMem questions, especially forgetting and sensitive-information cases.
+5. **Generated Pi-Mem products must not be appended wholesale.** Adding summary, citation, query, count, and inventory products to the same Top-30 significantly reduces accuracy from 44.50% to 37.17%.
 
-PersonaMem therefore confirms that cited-only projection is too lossy, but the correct replacement is a state-aware final evidence packager rather than unconditional context expansion.
+PersonaMem therefore confirms that cited-only projection is too lossy, but the correct replacement is a state-aware final evidence packager rather than unconditional context expansion or wholesale serialization of internal retrieval products.
 
 The current final reranker scores direct relevance, but PersonaMem requires more than relevance:
 
@@ -173,4 +219,5 @@ No production change is justified by the current pilot.
 /data/zhaogangyi/pi-mem-eval/personamem-v2-32k-attribution-20260804/
 /data/zhaogangyi/pi-mem-eval/personamem-v2-32k-context-ablation-20260804/
 /data/zhaogangyi/pi-mem-eval/personamem-v2-32k-upper-bound-20260804/
+/data/zhaogangyi/pi-mem-eval/personamem-v2-32k-top30-plus-products-20260804/
 ```
