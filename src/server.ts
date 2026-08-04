@@ -31,6 +31,7 @@ import {
   AsyncKeyedRequestGate,
   AsyncRequestGate,
 } from "./request-gate.js";
+import { HttpReranker, type Reranker } from "./reranker.js";
 import {
   PIMEM_HARNESS_VERSION,
   PI_MEM_SYSTEM_PROMPT,
@@ -116,6 +117,8 @@ export interface PiMemLeaderboardBackendOptions {
   modelRuntime: PiModelRuntime;
   retrievalStore?: HybridRawStore;
   denseRetriever?: DenseRetriever;
+  reranker?: Reranker;
+  rerankerCandidateLimit?: number;
   vectorSynchronizer?: QdrantVectorSynchronizer;
   vectorGenerationId?: string;
   maxConcurrentAdds?: number;
@@ -542,6 +545,8 @@ export class PiMemLeaderboardBackend implements LeaderboardApiBackend {
       this.retrievalStore,
       options.embedder,
       options.denseRetriever,
+      options.reranker,
+      options.rerankerCandidateLimit,
     );
     this.addGate = new AsyncRequestGate(options.maxConcurrentAdds ?? 1, 1_000);
     this.searchGate = new AsyncRequestGate(
@@ -906,6 +911,37 @@ function modelRuntimeFromEnvironment(): PiModelRuntime {
   });
 }
 
+function rerankerFromEnvironment(): {
+  reranker?: Reranker;
+  candidateLimit?: number;
+} {
+  const baseUrl = process.env.PIMEM_RERANKER_BASE_URL?.trim();
+  if (!baseUrl) return {};
+  const candidateLimit = positiveEnvironmentInteger(
+    "PIMEM_RERANKER_CANDIDATE_LIMIT",
+    100,
+    100,
+  );
+  return {
+    reranker: new HttpReranker({
+      baseUrl,
+      model: process.env.PIMEM_RERANKER_MODEL?.trim() ||
+        "Qwen/Qwen3-Reranker-4B",
+      revision: process.env.PIMEM_RERANKER_REVISION?.trim() ||
+        "22e683669bc0f0bd69640a1354a6d0aebcfeede5",
+      manifestSha256: process.env.PIMEM_RERANKER_MANIFEST_SHA256?.trim() ||
+        "11159710006fbde455370d2bdd4b8d5d46620c14631d3f8c30781ee83ce4652f",
+      timeoutMs: positiveEnvironmentInteger(
+        "PIMEM_RERANKER_TIMEOUT_MS",
+        120_000,
+        600_000,
+      ),
+      maxDocuments: candidateLimit,
+    }),
+    candidateLimit,
+  };
+}
+
 function retrievalHarnessFromEnvironment(): {
   version: string;
   systemPrompt: string;
@@ -941,6 +977,7 @@ export async function startLeaderboardServer(): Promise<void> {
   const embedder = OpenAICompatibleEmbedder.fromEnvironment();
   const modelRuntime = modelRuntimeFromEnvironment();
   const retrievalHarness = retrievalHarnessFromEnvironment();
+  const reranker = rerankerFromEnvironment();
   const denseBackend = process.env.PIMEM_DENSE_BACKEND?.trim() || "sqlite-exact";
   if (!new Set(["sqlite-exact", "qdrant-hnsw"]).has(denseBackend)) {
     throw new Error("PIMEM_DENSE_BACKEND must be sqlite-exact or qdrant-hnsw");
@@ -1029,6 +1066,10 @@ export async function startLeaderboardServer(): Promise<void> {
     modelRuntime,
     ...(retrievalStore === undefined ? {} : { retrievalStore }),
     ...(denseRetriever === undefined ? {} : { denseRetriever }),
+    ...(reranker.reranker === undefined ? {} : { reranker: reranker.reranker }),
+    ...(reranker.candidateLimit === undefined
+      ? {}
+      : { rerankerCandidateLimit: reranker.candidateLimit }),
     ...(vectorSynchronizer === undefined ? {} : { vectorSynchronizer }),
     ...(vectorGenerationId === undefined ? {} : { vectorGenerationId }),
     maxConcurrentAdds: positiveEnvironmentInteger(

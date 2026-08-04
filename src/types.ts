@@ -160,6 +160,10 @@ export interface RetrievalMetadata {
   embeddingProfileId?: string;
   embeddingModel?: string;
   embeddingDimensions?: number;
+  rerankerModel?: string;
+  rerankerRevision?: string;
+  rerankerManifestSha256?: string;
+  rerankerCandidateLimit?: number;
 }
 
 export interface RetrievalMetricsSnapshot {

@@ -1,0 +1,18 @@
+[Unit]
+Description=PiMem Qwen3 4B reranker
+After=docker.service network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+ExecStartPre=-/usr/bin/docker rm -f pimem-qwen3-reranker
+ExecStart=%h/.local/bin/run-pimem-qwen3-reranker
+ExecStop=-/usr/bin/docker stop -t 30 pimem-qwen3-reranker
+Restart=always
+RestartSec=15
+TimeoutStartSec=300
+TimeoutStopSec=45
+UMask=0077
+
+[Install]
+WantedBy=default.target

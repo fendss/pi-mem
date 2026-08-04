@@ -1,0 +1,81 @@
+#!/usr/bin/env bash
+set -Eeuo pipefail
+
+readonly BASE="${PIMEM_RERANKER_DEPLOY_DIR:-/data/zhaogangyi/pi-mem-reranker}"
+readonly IMAGE="${PIMEM_RERANKER_IMAGE:-local/reljudge-qwen3-4b-t2:b014596458f9}"
+readonly GPU_UUID="${PIMEM_RERANKER_GPU_UUID:-GPU-1eb8c67a-72a2-89cf-b65b-9ddb0fd3be1e}"
+readonly MODEL_ID="Qwen/Qwen3-Reranker-4B"
+readonly REVISION="22e683669bc0f0bd69640a1354a6d0aebcfeede5"
+readonly MODEL_DIR="$BASE/models/Qwen3-Reranker-4B"
+readonly MODEL_MANIFEST="$BASE/MODEL_MANIFEST.json"
+readonly SERVER_DIR="$BASE/server"
+readonly MIN_FREE_MIB="${PIMEM_RERANKER_MIN_FREE_MIB:-100000}"
+readonly MAX_LENGTH="${PIMEM_RERANKER_MAX_LENGTH:-1024}"
+readonly BATCH_SIZE="${PIMEM_RERANKER_BATCH_SIZE:-16}"
+
+[[ -r "$MODEL_DIR/config.json" ]] || {
+  echo "Missing reranker model at $MODEL_DIR" >&2
+  exit 1
+}
+[[ -r "$MODEL_MANIFEST" ]] || {
+  echo "Missing reranker model manifest at $MODEL_MANIFEST" >&2
+  exit 1
+}
+[[ -r "$SERVER_DIR/qwen3_reranker_server.py" ]] || {
+  echo "Missing reranker server at $SERVER_DIR" >&2
+  exit 1
+}
+install -d -m 700 "$BASE/runtime-cache"
+
+free_mib="$(
+  /usr/bin/nvidia-smi \
+    --query-gpu=uuid,memory.free \
+    --format=csv,noheader,nounits |
+    awk -F', ' -v uuid="$GPU_UUID" '$1 == uuid { print $2 }'
+)"
+[[ "${free_mib:-0}" -ge "$MIN_FREE_MIB" ]] || {
+  echo "Refusing to start: GPU $GPU_UUID has only ${free_mib:-unknown} MiB free" >&2
+  exit 1
+}
+
+exec /usr/bin/docker run --rm --name pimem-qwen3-reranker \
+  --device "nvidia.com/gpu=$GPU_UUID" \
+  --network pimem-leaderboard-net \
+  -p 127.0.0.1:18090:8090 \
+  --read-only \
+  --tmpfs /tmp:rw,exec,nosuid,size=8g \
+  --shm-size=2g \
+  --security-opt no-new-privileges \
+  --cap-drop ALL \
+  -e HOME=/tmp \
+  -e XDG_CACHE_HOME=/cache \
+  -e FLASHINFER_WORKSPACE_DIR=/cache/flashinfer \
+  -e TORCHINDUCTOR_CACHE_DIR=/cache/torchinductor \
+  -e TRITON_CACHE_DIR=/cache/triton \
+  -e HF_HUB_OFFLINE=1 \
+  -e TRANSFORMERS_OFFLINE=1 \
+  -e HF_HUB_DISABLE_TELEMETRY=1 \
+  -e PYTHONDONTWRITEBYTECODE=1 \
+  -e TOKENIZERS_PARALLELISM=false \
+  -e VLLM_ENABLE_V1_MULTIPROCESSING=0 \
+  -e "RERANKER_MODEL_ID=$MODEL_ID" \
+  -e "RERANKER_MODEL_REVISION=$REVISION" \
+  -e RERANKER_MODEL_PATH=/models/Qwen3-Reranker-4B \
+  -e RERANKER_MODEL_MANIFEST_PATH=/models/MODEL_MANIFEST.json \
+  -e RERANKER_MAX_DOCUMENTS=100 \
+  -e RERANKER_BACKEND=vllm \
+  -e RERANKER_GPU_MEMORY_UTILIZATION=0.25 \
+  -e RERANKER_MAX_NUM_BATCHED_TOKENS=65536 \
+  -e "RERANKER_MAX_LENGTH=$MAX_LENGTH" \
+  -e "RERANKER_BATCH_SIZE=$BATCH_SIZE" \
+  --mount "type=bind,src=$MODEL_DIR,dst=/models/Qwen3-Reranker-4B,readonly" \
+  --mount "type=bind,src=$MODEL_MANIFEST,dst=/models/MODEL_MANIFEST.json,readonly" \
+  --mount "type=bind,src=$SERVER_DIR,dst=/service,readonly" \
+  --mount "type=bind,src=$BASE/runtime-cache,dst=/cache" \
+  --health-cmd='python3 -c "import urllib.request; urllib.request.urlopen('\''http://127.0.0.1:8090/health'\'',timeout=3)"' \
+  --health-interval=15s \
+  --health-timeout=5s \
+  --health-retries=4 \
+  --health-start-period=180s \
+  --entrypoint python3 \
+  "$IMAGE" /service/qwen3_reranker_server.py

@@ -9,6 +9,7 @@ import {
   PIMEM_HYBRID_BM25_OPTIONS,
   reciprocalRankFusion,
 } from "./ranking.js";
+import type { Reranker } from "./reranker.js";
 import { finalizeSearchHits } from "./search-results.js";
 import {
   MemoryStore,
@@ -65,9 +66,16 @@ export interface HybridRawStore {
 interface RankedHybridHit extends StoreSearchHit {
   denseRank: number;
   queryIndex: number;
+  rerankerScore?: number;
 }
 
 function compareFinal(left: RankedHybridHit, right: RankedHybridHit): number {
+  if (left.rerankerScore !== undefined || right.rerankerScore !== undefined) {
+    if (left.rerankerScore === undefined) return 1;
+    if (right.rerankerScore === undefined) return -1;
+    const rerankerScore = right.rerankerScore - left.rerankerScore;
+    if (rerankerScore !== 0) return rerankerScore;
+  }
   const score = right.score - left.score;
   if (score !== 0) return score;
   const denseRank = left.denseRank - right.denseRank;
@@ -79,10 +87,28 @@ function candidateText(candidate: { record: MemoryRecord }): string {
   return `${candidate.record.role}: ${candidate.record.content}`;
 }
 
+function rerankerDocumentText(record: MemoryRecord, maxLength = 30_000): string {
+  const header = [
+    `timestamp: ${record.timestamp}`,
+    `role: ${record.role}`,
+    "memory:",
+  ].join("\n");
+  const available = Math.max(0, maxLength - header.length - 1);
+  if (record.content.length <= available) return `${header}\n${record.content}`;
+  const separator = "\n… [middle truncated by PiMem] …\n";
+  const contentLength = Math.max(0, available - separator.length);
+  const headLength = Math.ceil(contentLength / 2);
+  const tailLength = Math.floor(contentLength / 2);
+  return `${header}\n${record.content.slice(0, headLength)}${separator}` +
+    record.content.slice(-tailLength);
+}
+
 export class HybridMemoryStore {
   readonly rawStore: HybridRawStore;
   readonly embedder: Embedder;
   readonly denseRetriever: DenseRetriever;
+  readonly reranker: Reranker | undefined;
+  readonly rerankerCandidateLimit: number;
 
   private denseCandidateCount = 0;
   private rerankCandidateCount = 0;
@@ -91,9 +117,20 @@ export class HybridMemoryStore {
     rawStore: HybridRawStore,
     embedder: Embedder,
     denseRetriever?: DenseRetriever,
+    reranker?: Reranker,
+    rerankerCandidateLimit = 100,
   ) {
     this.rawStore = rawStore;
     this.embedder = embedder;
+    this.reranker = reranker;
+    if (
+      !Number.isSafeInteger(rerankerCandidateLimit) ||
+      rerankerCandidateLimit <= 0 ||
+      rerankerCandidateLimit > 100
+    ) {
+      throw new Error("rerankerCandidateLimit must be an integer from 1 to 100");
+    }
+    this.rerankerCandidateLimit = rerankerCandidateLimit;
     if (denseRetriever !== undefined) {
       this.denseRetriever = denseRetriever;
     } else {
@@ -110,6 +147,19 @@ export class HybridMemoryStore {
       embeddingProfileId: this.embedder.profileId,
       embeddingModel: this.embedder.model,
       embeddingDimensions: this.embedder.dimensions,
+      ...(this.reranker === undefined
+        ? {}
+        : {
+            rerankerModel: this.reranker.metadata.model,
+            rerankerRevision: this.reranker.metadata.revision,
+            ...(this.reranker.metadata.manifestSha256 === undefined
+              ? {}
+              : {
+                  rerankerManifestSha256:
+                    this.reranker.metadata.manifestSha256,
+                }),
+            rerankerCandidateLimit: this.rerankerCandidateLimit,
+          }),
     };
   }
 
@@ -203,7 +253,8 @@ export class HybridMemoryStore {
       request.maxPerSession === undefined ? limit : headroom;
     const merged = new Map<string, RankedHybridHit>();
     const queryCoverageHits: RankedHybridHit[] = [];
-    request.queries.forEach((query, queryIndex) => {
+    for (let queryIndex = 0; queryIndex < request.queries.length; queryIndex += 1) {
+      const query = request.queries[queryIndex]!;
       const denseCandidates = denseRankings[queryIndex]!.map((hit) => ({
         candidate: { record: hit.record },
         cosine: hit.score,
@@ -247,6 +298,25 @@ export class HybridMemoryStore {
         60,
         candidates.length,
       );
+      const rerankerScores = this.reranker === undefined
+        ? undefined
+        : await this.reranker.rerank(
+            query,
+            candidates
+              .map((candidate, index) => ({ candidate, index }))
+              .sort((left, right) =>
+                fused[right.index]! - fused[left.index]! ||
+                left.candidate.record.memoryId.localeCompare(
+                  right.candidate.record.memoryId,
+                )
+              )
+              .slice(0, this.rerankerCandidateLimit)
+              .map(({ candidate }) => ({
+                id: candidate.record.memoryId,
+                text: rerankerDocumentText(candidate.record),
+              })),
+            signal,
+          );
       const denseRanks = new Map(
         denseRanking.map((candidateIndex, index) => [candidateIndex, index + 1]),
       );
@@ -260,6 +330,9 @@ export class HybridMemoryStore {
           preview: episodicPreview(candidate.record.content),
           denseRank: denseRanks.get(index) ?? Number.MAX_SAFE_INTEGER,
           queryIndex,
+          ...(rerankerScores?.has(candidate.record.memoryId)
+            ? { rerankerScore: rerankerScores.get(candidate.record.memoryId)! }
+            : {}),
         }))
         .sort(compareFinal)
         .slice(0, perQueryLimit)
@@ -268,25 +341,23 @@ export class HybridMemoryStore {
       if (queryHits[0]) queryCoverageHits.push(queryHits[0]);
       for (const hit of queryHits) {
         const existing = merged.get(hit.record.memoryId);
-        if (
-          !existing ||
-          hit.score > existing.score ||
-          (hit.score === existing.score && hit.denseRank < existing.denseRank) ||
-          (hit.score === existing.score &&
-            hit.denseRank === existing.denseRank &&
-            hit.queryIndex < existing.queryIndex)
-        ) {
+        if (!existing || compareFinal(hit, existing) < 0) {
           merged.set(hit.record.memoryId, hit);
         }
       }
-    });
+    }
 
     const ordered = [
       ...(request.queries.length > 1 ? queryCoverageHits : []),
       ...[...merged.values()].sort(compareFinal),
     ];
     const unique = new Map<string, StoreSearchHit>();
-    for (const { denseRank: _denseRank, queryIndex: _queryIndex, ...hit } of ordered) {
+    for (const {
+      denseRank: _denseRank,
+      queryIndex: _queryIndex,
+      rerankerScore: _rerankerScore,
+      ...hit
+    } of ordered) {
       if (!unique.has(hit.record.memoryId)) unique.set(hit.record.memoryId, hit);
     }
     return finalizeSearchHits([...unique.values()], request, limit);

@@ -16,6 +16,7 @@ import type {
 import { embeddingProfile } from "../src/embedding-index.js";
 import { HybridMemoryStore } from "../src/hybrid-search.js";
 import { ingestMemorySessions } from "../src/ingest.js";
+import type { RerankDocument, Reranker } from "../src/reranker.js";
 import { MemoryStore } from "../src/store.js";
 
 const temporaryPaths: string[] = [];
@@ -187,6 +188,48 @@ describe("PiMem hybrid search", () => {
       expect(hits[0]?.score).toBeCloseTo(1 / 63 + 1 / 61 + 1 / 61);
       expect(hits[1]?.score).toBeCloseTo(1 / 61 + 1 / 62);
       expect(hits.every((hit) => !("vector" in hit))).toBe(true);
+    } finally {
+      raw.close();
+    }
+  });
+
+  it("optionally reranks the bounded fused pool without changing source provenance", async () => {
+    const { raw, embedder } = await createStore();
+    const calls: Array<{ query: string; documents: readonly RerankDocument[] }> = [];
+    const reranker: Reranker = {
+      metadata: { model: "reranker-model", revision: "reranker-revision" },
+      rerank(query, documents) {
+        calls.push({ query, documents });
+        return Promise.resolve(new Map(documents.map((document) => [
+          document.id,
+          document.id === "m4" ? 1 : 0,
+        ])));
+      },
+    };
+    const hybrid = new HybridMemoryStore(raw, embedder, undefined, reranker, 4);
+    try {
+      const hits = await hybrid.search("scope-1", {
+        queries: ["needle"],
+        limit: 4,
+      });
+
+      expect(hits.map((hit) => hit.record.memoryId)).toEqual([
+        "m4",
+        "m3",
+        "m1",
+        "m2",
+      ]);
+      expect(hits.every((hit) => hit.retriever === "pimem-hybrid")).toBe(true);
+      expect(calls).toHaveLength(1);
+      expect(calls[0]?.query).toBe("needle");
+      expect(calls[0]?.documents).toHaveLength(4);
+      expect(calls[0]?.documents[0]?.text).toContain("timestamp:");
+      expect(calls[0]?.documents[0]?.text).toContain("memory:");
+      expect(hybrid.getRetrievalMetadata()).toMatchObject({
+        rerankerModel: "reranker-model",
+        rerankerRevision: "reranker-revision",
+        rerankerCandidateLimit: 4,
+      });
     } finally {
       raw.close();
     }
