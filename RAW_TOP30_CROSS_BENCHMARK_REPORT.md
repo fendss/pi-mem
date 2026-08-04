@@ -19,7 +19,7 @@ Both experiments reuse sealed retrieval artifacts. No Add, Search, retrieval Age
 
 - Retrieval source: `full-qdrant-slots16-prompt-v4-r1`.
 - Select the first 30 unique immutable `searchedMemories` in existing retrieval order.
-- Answer input contains only raw memory role/speaker, timestamp, immutable content, and the question.
+- Primary Answer input contains only raw memory role/speaker, timestamp, immutable content, and the question. Pi-Mem memory IDs are excluded because they are not useful language evidence.
 - No selection package, `evidenceSummary`, citation support, count, inventory, or reasoning trace.
 - Answer model: `gpt-4o-mini-2024-07-18`.
 - Judge: `Qwen/Qwen3-14B`, same strict prompt hash as the historical run.
@@ -42,38 +42,41 @@ All Agent citations were already inside the raw Top-30 for both benchmarks: 1,10
 | Answer evidence surface | Correct | Accuracy |
 |---|---:|---:|
 | Agent selection package + cited raw | 348/500 | 69.60% |
-| All searched raw memories | 316/500 | 63.20% |
-| Raw searched memories Top-30 | 318/500 | 63.60% |
+| All searched raw memories, historical ID-labelled replay | 316/500 | 63.20% |
+| Raw Top-30, ID-labelled diagnostic | 318/500 | 63.60% |
+| **Strict textual raw Top-30, no Pi-Mem IDs** | **328/500** | **65.60%** |
 
-Raw-all versus raw Top-30:
-
-```text
-raw-all correct, Top-30 wrong: 15
-raw-all wrong, Top-30 correct: 17
-net: +2 / +0.40 points
-McNemar exact p = 0.860
-```
-
-Agent package versus raw Top-30:
+Historical raw-all versus strict textual raw Top-30:
 
 ```text
-Agent correct, Top-30 wrong: 63
-Agent wrong, Top-30 correct: 33
-net Agent advantage: 30 / 6.00 points
-McNemar exact p = 0.00288
+raw-all correct, strict Top-30 wrong: 9
+raw-all wrong, strict Top-30 correct: 21
+net strict Top-30 advantage: 12 / +2.40 points
+McNemar exact p = 0.0428
 ```
 
-| LongMemEval category | Agent package | Raw all | Raw Top-30 |
-|---|---:|---:|---:|
-| abstention | 63.33% | 33.33% | 36.67% |
-| knowledge update | 76.92% | 75.64% | 76.92% |
-| multi-session | 63.16% | 52.63% | 54.89% |
-| single-session assistant | 89.29% | 92.86% | 92.86% |
-| single-session preference | 26.67% | 43.33% | 33.33% |
-| single-session user | 91.43% | 88.57% | 88.57% |
-| temporal reasoning | 61.65% | 45.11% | 45.86% |
+Agent package versus strict textual raw Top-30:
 
-Top-30 does not solve LongMemEval's raw-context weakness. The Agent package's main advantage is in abstention, multi-session, and temporal reasoning; raw context is better in some single-session categories.
+```text
+Agent correct, strict Top-30 wrong: 60
+Agent wrong, strict Top-30 correct: 40
+net numerical Agent advantage: 20 / 4.00 points
+McNemar exact p = 0.0569
+```
+
+The Agent advantage is no longer significant at the conventional 0.05 threshold after removing non-semantic Pi-Mem IDs. The ID-labelled and no-ID Top-30 runs differ by +10 questions for no-ID text (p=0.087), so some of the gain may be prompt-surface noise rather than Top-K alone.
+
+| LongMemEval category | Agent package | Strict raw Top-30 |
+|---|---:|---:|
+| abstention | 63.33% | 33.33% |
+| knowledge update | 76.92% | 76.92% |
+| multi-session | 63.16% | 55.64% |
+| single-session assistant | 89.29% | 94.64% |
+| single-session preference | 26.67% | 40.00% |
+| single-session user | 91.43% | 91.43% |
+| temporal reasoning | 61.65% | 48.87% |
+
+The Agent package remains numerically stronger on abstention, multi-session, and temporal reasoning; strict raw context is stronger on preference and single-session assistant questions. The aggregate evidence is suggestive, not conclusive.
 
 ## ScriptMem-v19 results
 
@@ -108,7 +111,7 @@ Raw Top-30 wins every ScriptMem question type and script. It also exceeds the di
 The corrected result is benchmark-dependent:
 
 - **ScriptMem:** raw Top-30 is significantly better than Agent package plus cited memories.
-- **LongMemEval:** Agent package plus cited memories remains significantly better than raw Top-30.
+- **LongMemEval:** Agent package is numerically 4 points better than strict textual raw Top-30, but the paired difference is not significant at 0.05 (`p=0.0569`).
 - **PersonaMem:** the separate raw Top-30 experiment also outperforms cited-only, while generated summaries hurt.
 
 There is no valid universal conclusion that Agent products should always accompany memories. The evidence supports a versioned Answer projection and benchmark/task-sensitive component ablations, not wholesale serialization of Agent products.

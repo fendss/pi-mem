@@ -136,7 +136,7 @@ def parse_args() -> argparse.Namespace:
     reanswer.add_argument("--slots", type=int, default=32)
     reanswer.add_argument(
         "--mode",
-        choices=("exact-searched-memories", "selection-aware-v3"),
+        choices=("exact-searched-memories", "raw-text-memories", "selection-aware-v3"),
         default="exact-searched-memories",
     )
 
@@ -291,8 +291,8 @@ def validate_reanswer_source(
     selection_data_present = source.get("selection_data_present") is True
     if mode == "selection-aware-v3" and not selection_data_present:
         raise ValueError("selection-aware-v3 mode requires prepared selection data")
-    if mode == "exact-searched-memories" and selection_data_present:
-        raise ValueError("Exact mode requires input without selection data")
+    if mode in {"exact-searched-memories", "raw-text-memories"} and selection_data_present:
+        raise ValueError("Raw-memory modes require input without selection data")
     if source.get("question_count") != len(records):
         raise ValueError("Frozen answer input question count is inconsistent")
     return records
@@ -305,6 +305,14 @@ def render_memory(memory: dict[str, Any]) -> str:
     timestamp = memory.get("timestamp") or "unknown-time"
     memory_id = memory["memoryId"]
     return f"- [{timestamp}] [{memory_id}] {speaker}: {memory['content']}"
+
+
+def render_raw_text_memory(memory: dict[str, Any]) -> str:
+    metadata = memory.get("metadata") or {}
+    turn = metadata.get("turn") or {}
+    speaker = turn.get("sourceSpeaker") or memory.get("role") or "unknown"
+    timestamp = memory.get("timestamp") or "unknown-time"
+    return f"- [{timestamp}] {speaker}: {memory['content']}"
 
 
 def render_selection_v3_memory(memory: dict[str, Any]) -> str:
@@ -371,7 +379,11 @@ def answer_prompt(record: dict[str, Any], mode: str) -> str:
         session = metadata.get("session") or {}
         source_speaker = (metadata.get("turn") or {}).get("sourceSpeaker")
         role = memory.get("role")
-        rendered = render_memory(memory)
+        rendered = (
+            render_raw_text_memory(memory)
+            if mode == "raw-text-memories"
+            else render_memory(memory)
+        )
         if source_speaker == session.get("speakerA") or role == "user":
             first.append(rendered)
         else:
@@ -493,6 +505,7 @@ async def run_reanswer(args: argparse.Namespace) -> None:
     )
     run_modes = {
         "exact-searched-memories": "frozen-searched-memories-reanswer",
+        "raw-text-memories": "raw-text-memories-reanswer",
         "selection-aware-v3": "selection-aware-v3-reanswer",
     }
     config = {
