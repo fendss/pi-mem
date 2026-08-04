@@ -201,6 +201,28 @@ def history_answer_messages(
     ]
 
 
+def render_pimem_text_products(artifact: dict[str, Any]) -> str:
+    selection = artifact["agent"]["selection"]
+    lines = [
+        "Pi-Mem also produced the following natural-language synthesis from the retrieved memories. "
+        "Use it as a reading aid, but verify it against the original conversation memories above.",
+        "",
+        "Pi-Mem evidence summary:",
+        str(selection.get("evidence_summary") or "No summary was produced."),
+        "",
+        "Pi-Mem supporting notes:",
+    ]
+    supports = [
+        str(citation.get("supports") or "").strip()
+        for citation in selection.get("citations", [])
+        if str(citation.get("supports") or "").strip()
+    ]
+    lines.extend(f"- {support}" for support in supports)
+    if not supports:
+        lines.append("- No supporting notes were produced.")
+    return "\n".join(lines)
+
+
 def render_pimem_products(
     artifact: dict[str, Any],
     selected: list[dict[str, Any]],
@@ -271,7 +293,7 @@ def prepare_upper_bound(args: argparse.Namespace) -> None:
     answer_inputs.sort(key=lambda row: row["qa_id"])
     marker = f":{DATASET}:"
     artifacts: dict[tuple[str, str], dict[str, Any]] = {}
-    if args.mode in {"retrieved", "products"}:
+    if args.mode in {"retrieved", "products", "text_products"}:
         for path in sorted(args.artifact_dir.glob("*.json")):
             row = read_json(path)
             user_id = str(row.get("search", {}).get("user_id", ""))
@@ -298,7 +320,7 @@ def prepare_upper_bound(args: argparse.Namespace) -> None:
 
     rows: list[dict[str, Any]] = []
     for ai in answer_inputs:
-        if args.mode in {"retrieved", "products"}:
+        if args.mode in {"retrieved", "products", "text_products"}:
             artifact = artifacts.get((ai["speaker_a_name"], normalize_question(ai["question"])))
             if artifact is None:
                 raise RuntimeError(f"missing sealed retrieval artifact for {ai['qa_id']}")
@@ -336,6 +358,9 @@ def prepare_upper_bound(args: argparse.Namespace) -> None:
             if args.mode == "products":
                 supplemental_products = render_pimem_products(artifact, selected, labels)
                 variant = "retrieved_top30_plus_pimem_products"
+            elif args.mode == "text_products":
+                supplemental_products = render_pimem_text_products(artifact)
+                variant = "retrieved_top30_plus_pimem_text"
             else:
                 supplemental_products = None
                 variant = "retrieved_session_dedup_top30"
@@ -380,11 +405,13 @@ def prepare_upper_bound(args: argparse.Namespace) -> None:
         "question_count": len(rows),
         "model": args.model,
         "temperature": 0,
-        "top_k": args.top_k if args.mode in {"retrieved", "products"} else None,
+        "top_k": args.top_k if args.mode in {"retrieved", "products", "text_products"} else None,
         "history_projection": "role-preserving original conversation messages; retrieved Top-K reordered chronologically",
         "supplemental_products": (
             ["selection status", "evidence summary", "candidate/read/cited/search counts", "planned queries", "citation support", "Top-30 inventory with read/cited flags and discovery ranks"]
             if args.mode == "products"
+            else ["natural-language evidence summary", "natural-language citation support"]
+            if args.mode == "text_products"
             else []
         ),
         "official_source_commit": "48dbfff3cb56838ebdc8fc514dd9953f9097ba0a",
@@ -854,7 +881,7 @@ def main() -> None:
     upper_prep.add_argument("--chunk-dir", type=Path, required=True)
     upper_prep.add_argument("--output", type=Path, required=True)
     upper_prep.add_argument("--manifest", type=Path, required=True)
-    upper_prep.add_argument("--mode", choices=["retrieved", "products", "gold"], required=True)
+    upper_prep.add_argument("--mode", choices=["retrieved", "products", "text_products", "gold"], required=True)
     upper_prep.add_argument("--top-k", type=int, default=30)
     upper_prep.add_argument("--model", default="gpt-4o-mini")
     upper_prep.set_defaults(func=prepare_upper_bound)

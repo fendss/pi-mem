@@ -134,9 +134,11 @@ Category accuracy:
 
 The Gold condition is an empirical oracle score, not a mathematical upper bound: the model can still misuse gold evidence, especially for forgetting and sensitive-information questions. Gold even underperforms the broader retrieved context on sensitive information, showing that relevance alone does not tell the model whether information is permitted to influence personalization.
 
-## Top-30 plus additional Pi-Mem products
+## Metadata-inclusive negative control
 
-A second 600-question condition kept exactly the same deduplicated Top-30 raw memories and supplemented them with all bounded Pi-Mem products available in the sealed trace:
+An initial follow-up incorrectly serialized both textual and non-text retrieval metadata into the Answer context. This is retained only as a negative control and is not the intended Answer contract.
+
+This condition kept exactly the same deduplicated Top-30 raw memories and supplemented them with all bounded Pi-Mem products available in the sealed trace:
 
 - selection status;
 - `evidenceSummary`;
@@ -177,7 +179,46 @@ Category accuracy:
 
 The regression is not explained by Pi-Mem's `insufficient` status: 86 of the 88 degraded questions had status `sufficient`. Qualitative inspection shows that evidence summaries often restate sensitive attributes or directly personalize from medically or therapeutically related memories. This makes generated retrieval products more authoritative and salient even when PersonaMem expects the model not to use that information.
 
-This condition intentionally combines all products, so it does not identify whether the main harm comes from `evidenceSummary`, citation support, or inventory clutter. A component ablation would be required for that attribution.
+This condition intentionally combines all products, so it does not identify whether the main harm comes from `evidenceSummary`, citation support, or inventory clutter. It must not be used as the primary answer to the text-product question.
+
+## Corrected natural-language-only Pi-Mem products
+
+The corrected 600-question experiment preserved the raw Top-30 messages exactly and added only natural-language content intended for the Answer model:
+
+- the Agent's `evidenceSummary` text;
+- the Agent's citation `supports` text.
+
+It excluded IDs, counts, ranks, status, queries, inventories, read/cited flags, and all other retrieval metadata. The additional text averaged 1,271 characters.
+
+| Condition | Correct | Accuracy | Mean total context chars |
+|---|---:|---:|---:|
+| Retrieved session Top-30 | 267/600 | 44.50% | 10,011 |
+| Top-30 + Pi-Mem natural-language text | 227/600 | 37.83% | 11,282 |
+| Gold memories oracle | 336/600 | 56.00% | 1,736 |
+
+Paired against the raw Top-30 condition:
+
+```text
+Top-30 correct → text-products wrong: 81
+Top-30 wrong → text-products correct: 41
+net: -40 questions / -6.67 points
+same answer letter: 412/600
+McNemar exact p = 3.71e-4
+```
+
+Category accuracy:
+
+| Category | Raw Top-30 | + textual products | Change |
+|---|---:|---:|---:|
+| anti-stereotypical preference | 49.06% | 42.45% | -6.61 |
+| ask to forget | 15.79% | 14.04% | -1.75 |
+| health/medical | 65.28% | 58.33% | -6.95 |
+| neutral preferences | 43.88% | 42.86% | -1.02 |
+| sensitive information | 40.28% | 22.22% | -18.06 |
+| stereotypical preference | 65.28% | 58.33% | -6.95 |
+| therapy background | 46.97% | 36.36% | -10.61 |
+
+Even the text-only synthesis significantly hurts accuracy. The largest regression remains sensitive information, where generated summaries and support statements make retrieved personal details more salient and encourage inappropriate personalization. This is not a metadata-format effect.
 
 ## Conclusion
 
@@ -187,7 +228,7 @@ The full experiments change the diagnosis:
 2. **Retrieval/evidence quality remains comparably important.** Replacing retrieved context with exact Gold memories improves another 11.50 points to 56.00%.
 3. **Context length alone is not the key variable.** Gold uses only 2.95 memories and 1,736 characters on average, yet substantially outperforms the 13.99-memory retrieved context. Relevance, state, ownership, and policy correctness matter more than raw length.
 4. **The Answer model/prompt has a large residual ceiling.** Even with exact Gold memories, `gpt-4o-mini` misses 44% of PersonaMem questions, especially forgetting and sensitive-information cases.
-5. **Generated Pi-Mem products must not be appended wholesale.** Adding summary, citation, query, count, and inventory products to the same Top-30 significantly reduces accuracy from 44.50% to 37.17%.
+5. **Generated Pi-Mem text must not be appended wholesale.** Even after removing all non-text metadata, adding only `evidenceSummary` and citation-support prose reduces accuracy from 44.50% to 37.83%.
 
 PersonaMem therefore confirms that cited-only projection is too lossy, but the correct replacement is a state-aware final evidence packager rather than unconditional context expansion or wholesale serialization of internal retrieval products.
 
@@ -219,5 +260,6 @@ No production change is justified by the current pilot.
 /data/zhaogangyi/pi-mem-eval/personamem-v2-32k-attribution-20260804/
 /data/zhaogangyi/pi-mem-eval/personamem-v2-32k-context-ablation-20260804/
 /data/zhaogangyi/pi-mem-eval/personamem-v2-32k-upper-bound-20260804/
-/data/zhaogangyi/pi-mem-eval/personamem-v2-32k-top30-plus-products-20260804/
+/data/zhaogangyi/pi-mem-eval/personamem-v2-32k-top30-plus-products-20260804/  # metadata negative control
+/data/zhaogangyi/pi-mem-eval/personamem-v2-32k-top30-plus-text-20260804/      # corrected text-only test
 ```
