@@ -414,7 +414,9 @@ python3 scripts/longmemeval_frozen_eval.py prepare-frozen-input \
   --output /path/to/replay/input.json \
   --include-selection-data
 
-# Load the protected answer environment before this command.
+# Load the protected answer environment before this command and pin the exact
+# provider response model identity observed in the acceptance manifest.
+export PIMEM_EXPECTED_RESPONSE_MODEL=gpt-4o-mini-2024-07-18
 python3 scripts/longmemeval_frozen_eval.py reanswer \
   --input /path/to/replay/input.json \
   --output-dir /path/to/replay \

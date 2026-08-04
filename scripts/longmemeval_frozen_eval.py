@@ -422,11 +422,14 @@ def blocking_chat(
     with urllib.request.urlopen(request, timeout=timeout) as response:
         payload = json.loads(response.read().decode("utf-8"))
     content = payload.get("choices", [{}])[0].get("message", {}).get("content")
+    response_model = payload.get("model")
     if not isinstance(content, str) or not content.strip():
         raise ValueError("Chat endpoint returned no answer content")
+    if not isinstance(response_model, str) or not response_model.strip():
+        raise ValueError("Chat endpoint returned no response model")
     return {
         "content": content.strip(),
-        "model": payload.get("model", model),
+        "model": response_model.strip(),
         "usage": payload.get("usage") or {},
     }
 
@@ -440,6 +443,8 @@ async def chat_with_retries(**kwargs: Any) -> dict[str, Any]:
             raise
         except Exception as error:
             status = error.code if isinstance(error, urllib.error.HTTPError) else None
+            if status in {401, 403} or isinstance(error, (ValueError, KeyError, TypeError)):
+                raise
             kind = f"HTTP {status}" if status is not None else type(error).__name__
             print(f"chat retry after {kind}; waiting {delay}s", file=sys.stderr)
             await asyncio.sleep(delay)
@@ -468,8 +473,9 @@ async def run_reanswer(args: argparse.Namespace) -> None:
     api_key = os.environ.get("OPENAI_API_KEY", "")
     base_url = os.environ.get("OPENAI_API_BASE", "")
     model = os.environ.get("OPENAI_MODEL", "")
-    if not api_key or not base_url or not model:
-        raise ValueError("answer.env variables are required")
+    expected_response_model = os.environ.get("PIMEM_EXPECTED_RESPONSE_MODEL", "")
+    if not api_key or not base_url or not model or not expected_response_model:
+        raise ValueError("answer.env variables and PIMEM_EXPECTED_RESPONSE_MODEL are required")
 
     source = read_json(args.input)
     records = validate_reanswer_source(source, args.mode)
@@ -495,6 +501,7 @@ async def run_reanswer(args: argparse.Namespace) -> None:
         "input_hash": sha256_json(source),
         "prompt_hash": hashlib.sha256(prompt_template.encode()).hexdigest(),
         "model": model,
+        "expected_response_model": expected_response_model,
         "slots": args.slots,
         "gold_visible_to_answer_stage": False,
         "original_answer_visible_to_answer_stage": False,
@@ -511,23 +518,19 @@ async def run_reanswer(args: argparse.Namespace) -> None:
             return
         prompt = answer_prompt(record, args.mode)
         started = time.monotonic()
-        while True:
-            async with semaphore:
-                response = await chat_with_retries(
-                    base_url=base_url,
-                    api_key=api_key,
-                    model=model,
-                    prompt=prompt,
-                    max_tokens=512,
-                    timeout=360,
-                )
-            if returned_model_matches(model, response["model"]):
-                break
-            print(
-                "answer retry after provider model substitution; waiting 5s",
-                file=sys.stderr,
+        async with semaphore:
+            response = await chat_with_retries(
+                base_url=base_url,
+                api_key=api_key,
+                model=model,
+                prompt=prompt,
+                max_tokens=512,
+                timeout=360,
             )
-            await asyncio.sleep(5)
+        if response["model"] != expected_response_model:
+            raise ValueError(
+                f"Answer response model {response['model']} does not match expected {expected_response_model}"
+            )
         write_atomic_json(
             path,
             {
@@ -558,10 +561,17 @@ async def run_reanswer(args: argparse.Namespace) -> None:
         )
 
     tasks = [asyncio.create_task(process(record)) for record in records]
+    task_errors: list[str] = []
     with tqdm(total=len(tasks), desc="Frozen re-answer", unit="q") as progress:
         for task in asyncio.as_completed(tasks):
-            await task
+            try:
+                await task
+            except Exception as error:
+                task_errors.append(f"{type(error).__name__}: {error}")
+                print(f"frozen answer record rejected: {task_errors[-1]}", file=sys.stderr)
             progress.update(1)
+    if task_errors:
+        print(f"frozen answer rejected records: {len(task_errors)}", file=sys.stderr)
 
     by_id = {}
     for path in records_dir.glob("*.json"):
@@ -612,8 +622,9 @@ async def run_judge(args: argparse.Namespace) -> None:
     api_key = os.environ.get("JUDGER_API_KEY") or os.environ.get("PIMEM_JUDGER_API_KEY", "")
     base_url = os.environ.get("JUDGER_API_BASE") or os.environ.get("PIMEM_JUDGER_BASE_URL", "")
     model = os.environ.get("JUDGER_MODEL") or os.environ.get("PIMEM_JUDGER_MODEL", "")
-    if not api_key or not base_url or not model:
-        raise ValueError("judger.env variables are required")
+    expected_response_model = os.environ.get("PIMEM_EXPECTED_JUDGER_RESPONSE_MODEL", "")
+    if not api_key or not base_url or not model or not expected_response_model:
+        raise ValueError("judger.env variables and PIMEM_EXPECTED_JUDGER_RESPONSE_MODEL are required")
     items = read_json(args.input)
     if not isinstance(items, list) or len(items) == 0:
         raise ValueError("Judge input must contain at least one record")
@@ -631,6 +642,7 @@ async def run_judge(args: argparse.Namespace) -> None:
         "input_hash": sha256_json(items),
         "prompt_hash": hashlib.sha256(JUDGE_PROMPT.encode()).hexdigest(),
         "model": model,
+        "expected_response_model": expected_response_model,
         "slots": args.slots,
     }
     ensure_manifest(output_dir / "run-manifest.json", config)
@@ -655,6 +667,10 @@ async def run_judge(args: argparse.Namespace) -> None:
                     prompt=prompt,
                     max_tokens=256,
                     timeout=60,
+                )
+            if response["model"] != expected_response_model:
+                raise ValueError(
+                    f"Judge response model {response['model']} does not match expected {expected_response_model}"
                 )
             try:
                 label = parse_label(response["content"])
