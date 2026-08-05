@@ -357,13 +357,13 @@ def prepare_upper_bound(args: argparse.Namespace) -> None:
             ]
             if args.mode == "products":
                 supplemental_products = render_pimem_products(artifact, selected, labels)
-                variant = "retrieved_top30_plus_pimem_products"
+                variant = f"retrieved_top{args.top_k}_plus_pimem_products"
             elif args.mode == "text_products":
                 supplemental_products = render_pimem_text_products(artifact)
-                variant = "retrieved_top30_plus_pimem_text"
+                variant = f"retrieved_top{args.top_k}_plus_pimem_text"
             else:
                 supplemental_products = None
-                variant = "retrieved_session_dedup_top30"
+                variant = f"retrieved_session_dedup_top{args.top_k}"
             oracle = False
         else:
             history = list(gold.get(ai["qa_id"], []))
