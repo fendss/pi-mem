@@ -177,9 +177,9 @@ def score_scriptmem(args: argparse.Namespace) -> None:
     baseline = {row["question_id"]: bool(row["correct"]) for row in gold_rows}
     current = {row["question_id"]: bool(row["correct"]) for row in rows}
     result = {
-        "schema_version": "pimem-scriptmem-raw-top30-score/v1",
+        "schema_version": "pimem-scriptmem-answer-ablation-score/v1",
         "benchmark": "ScriptMem-v19",
-        "variant": "raw-retrieved-memories-top30",
+        "variant": args.variant,
         "summary": summary,
         "paired_against_agent_package_cited_raw": paired(baseline, current),
         "rows": rows,
@@ -237,6 +237,7 @@ def main() -> None:
     scriptmem.add_argument("--predictions", type=Path, required=True)
     scriptmem.add_argument("--gold-score", type=Path, required=True)
     scriptmem.add_argument("--output", type=Path, required=True)
+    scriptmem.add_argument("--variant", default="raw-retrieved-memories-top30")
     scriptmem.set_defaults(func=score_scriptmem)
 
     lme = sub.add_parser("compare-longmemeval")

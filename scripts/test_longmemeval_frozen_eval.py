@@ -83,6 +83,35 @@ class FrozenInputPreparationTest(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "requires prepared selection data"):
             EVAL.validate_reanswer_source(prepared, "selection-aware-v3")
 
+    def test_raw_text_plus_products_contains_only_natural_language_products(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            results = root / "results.json"
+            raw_input = root / "raw.json"
+            output = root / "products.json"
+            results.write_text(json.dumps(fixture()), encoding="utf-8")
+            EVAL.prepare_frozen_input(results, raw_input)
+            EVAL.attach_text_products(raw_input, results, output)
+            prepared = json.loads(output.read_text(encoding="utf-8"))
+
+        EVAL.validate_reanswer_source(prepared, "raw-text-plus-agent-products")
+        record = prepared["records"][0]
+        self.assertEqual(
+            record["agent_text_products"],
+            {
+                "evidence_summary": "One source fact was selected.",
+                "supports": ["the selected fact"],
+            },
+        )
+        prompt = EVAL.answer_prompt(record, "raw-text-plus-agent-products")
+        self.assertIn("source fact", prompt)
+        self.assertIn("One source fact was selected.", prompt)
+        self.assertIn("the selected fact", prompt)
+        self.assertNotIn("m-1", prompt)
+        self.assertNotIn("status=sufficient", prompt)
+        with self.assertRaisesRegex(ValueError, "without selection data"):
+            EVAL.validate_reanswer_source(prepared, "raw-text-memories")
+
 
 if __name__ == "__main__":
     unittest.main()

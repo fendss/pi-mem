@@ -115,3 +115,14 @@ The corrected result is benchmark-dependent:
 - **PersonaMem:** the separate raw Top-30 experiment also outperforms cited-only, while generated summaries hurt.
 
 There is no valid universal conclusion that Agent products should always accompany memories. The evidence supports a versioned Answer projection and benchmark/task-sensitive component ablations, not wholesale serialization of Agent products.
+
+## Raw Top-30 plus Agent text follow-up
+
+A subsequent Answer-only experiment kept every raw Top-30 memory and its order/hash identical, then added only natural-language `evidenceSummary` and citation `supports`. It did not rerun Add, Search, Read, Finish, or reranking, and excluded IDs, status, count, inventory, queries, ranks, and reasoning traces.
+
+| Benchmark | Raw Top-30 | Raw Top-30 + Agent text | Paired result |
+|---|---:|---:|---|
+| LongMemEval-S | 328/500 (65.60%) | 343/500 (68.60%) | +15 / +3.00 points; p=0.1100 |
+| ScriptMem-v19 | 321/457 (70.24%) | 318/457 (69.58%) | -3 / -0.66 points; p=0.7948 |
+
+LongMemEval transitions were 31 raw-only wins versus 46 Agent-text wins. ScriptMem transitions were 31 raw-only wins versus 28 Agent-text wins. Neither paired difference is statistically significant. Agent text therefore shows task-dependent signal but no reliable aggregate improvement over raw Top-30 in these experiments.

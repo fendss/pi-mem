@@ -5,7 +5,8 @@ import path from "node:path";
 import { createHash } from "node:crypto";
 import { pathToFileURL } from "node:url";
 
-const PROMPT_VERSION = "scriptmem-answer-raw-top30-v1";
+const RAW_PROMPT_VERSION = "scriptmem-answer-raw-top30-v1";
+const PRODUCTS_PROMPT_VERSION = "scriptmem-answer-raw-top30-plus-agent-text-v1";
 const PROMPT_TEMPLATE = `You answer a ScriptMem question using only the retrieved raw conversation memories.
 
 <instructions>
@@ -19,9 +20,20 @@ const PROMPT_TEMPLATE = `You answer a ScriptMem question using only the retrieve
 <retrieved_raw_memories>
 {{memories}}
 </retrieved_raw_memories>
-
+{{agent_products_block}}
 Question: {{question}}
 Answer:`;
+
+const AGENT_PRODUCTS_TEMPLATE = `<agent_products>
+Pi-Mem also produced the following natural-language synthesis from the retrieved memories. Use it as a reading aid, but verify it against the original conversation memories above.
+
+Pi-Mem evidence summary:
+{{evidence_summary}}
+
+Pi-Mem supporting notes:
+{{supports}}
+</agent_products>
+`;
 
 const requiredEnv = (name) => {
   const value = process.env[name]?.trim();
@@ -40,6 +52,8 @@ const slots = Number(process.env.SLOTS ?? "16");
 const topK = Number(process.env.TOP_K ?? "30");
 const maxRunMs = Number(process.env.MAX_RUN_MS ?? "600000");
 const maxAttempts = Number(process.env.MAX_ATTEMPTS ?? "4");
+const includeAgentProducts = process.env.INCLUDE_AGENT_PRODUCTS === "true";
+const promptVersion = includeAgentProducts ? PRODUCTS_PROMPT_VERSION : RAW_PROMPT_VERSION;
 if (!Number.isSafeInteger(slots) || slots < 1 || slots > 128) {
   throw new Error("SLOTS must be an integer between 1 and 128");
 }
@@ -70,6 +84,15 @@ async function writeAtomic(file, content) {
   await fsp.rename(temporary, file);
 }
 const writeJson = (file, value) => writeAtomic(file, `${JSON.stringify(value, null, 2)}\n`);
+
+function renderAgentProducts(products) {
+  const supports = products.supports.length
+    ? products.supports.map((support) => `- ${support}`).join("\n")
+    : "- No supporting notes were produced.";
+  return AGENT_PRODUCTS_TEMPLATE
+    .replace("{{evidence_summary}}", products.evidenceSummary)
+    .replace("{{supports}}", supports);
+}
 
 function renderMemory(memory) {
   const metadata = memory.metadata ?? {};
@@ -121,12 +144,26 @@ const jobs = sourceRecords.map(({ file, value }) => {
     return true;
   });
   const selected = deduplicated.slice(0, topK);
+  const evidenceSummary = value.retrieval.evidenceSummary;
+  if (typeof evidenceSummary !== "string" || !evidenceSummary.trim()) {
+    throw new Error(`Missing Agent evidence summary for ${value.question_id}`);
+  }
+  const supports = (value.retrieval.citations ?? [])
+    .map((citation) => citation.supports?.trim())
+    .filter(Boolean);
+  const agentProducts = { evidenceSummary: evidenceSummary.trim(), supports };
   const prompt = {
-    adapterId: "scriptmem-v19-raw-top30",
-    promptVersion: PROMPT_VERSION,
+    adapterId: includeAgentProducts
+      ? "scriptmem-v19-raw-top30-plus-agent-text"
+      : "scriptmem-v19-raw-top30",
+    promptVersion,
     systemPrompt: "",
     userPrompt: PROMPT_TEMPLATE
       .replace("{{memories}}", selected.map(renderMemory).join("\n\n"))
+      .replace(
+        "{{agent_products_block}}",
+        includeAgentProducts ? `\n${renderAgentProducts(agentProducts)}\n` : "\n",
+      )
       .replace("{{question}}", value.retrieval.question),
   };
   return {
@@ -134,6 +171,7 @@ const jobs = sourceRecords.map(({ file, value }) => {
     script: value.script,
     sourceStatus: value.retrieval.status,
     selected,
+    agentProducts,
     searchedCount: deduplicated.length,
     prompt,
     sourceRecord: file,
@@ -147,7 +185,9 @@ await fsp.mkdir(recordsDir, { recursive: true, mode: 0o700 });
 await fsp.mkdir(failuresDir, { recursive: true, mode: 0o700 });
 const promptLengths = jobs.map((job) => job.prompt.userPrompt.length);
 await writeJson(path.join(outputRoot, "run-manifest.json"), {
-  schema_version: "pimem-scriptmem-raw-top30-answer/v1",
+  schema_version: includeAgentProducts
+    ? "pimem-scriptmem-raw-top30-plus-agent-text-answer/v1"
+    : "pimem-scriptmem-raw-top30-answer/v1",
   created_at: new Date().toISOString(),
   question_count: jobs.length,
   retrieval_source: retrievalRecordsRoot,
@@ -155,11 +195,17 @@ await writeJson(path.join(outputRoot, "run-manifest.json"), {
     provider: providerId,
     model: modelId,
     thinking_level: thinkingLevel,
-    prompt_version: PROMPT_VERSION,
-    prompt_template_sha256: sha256Buffer(PROMPT_TEMPLATE),
+    prompt_version: promptVersion,
+    prompt_template_sha256: sha256Buffer(
+      includeAgentProducts ? `${PROMPT_TEMPLATE}\n${AGENT_PRODUCTS_TEMPLATE}` : PROMPT_TEMPLATE,
+    ),
     top_k: topK,
     raw_memory_fields_in_prompt: ["source session", "source turn", "source speaker", "immutable content"],
-    excluded_from_prompt: ["selection status", "evidence summary", "citations", "citation supports", "count", "inventory", "candidate metadata", "reasoning trace"],
+    agent_products_included: includeAgentProducts,
+    included_agent_product_fields: includeAgentProducts ? ["evidenceSummary", "citation supports"] : [],
+    excluded_from_prompt: includeAgentProducts
+      ? ["selection status", "memory IDs", "count", "inventory", "queries", "ranks", "candidate metadata", "reasoning trace"]
+      : ["selection status", "evidence summary", "citations", "citation supports", "count", "inventory", "candidate metadata", "reasoning trace"],
     slots,
     max_run_ms: maxRunMs,
     max_attempts: maxAttempts,
@@ -188,7 +234,12 @@ async function runJob(job, worker) {
     const existing = JSON.parse(await fsp.readFile(recordPath, "utf8"));
     if (
       existing?.answer?.answer && existing?.question_id === job.questionId &&
-      existing?.answer_input?.raw_memory_hash === sha256Json(job.selected)
+      existing?.answer_input?.raw_memory_hash === sha256Json(job.selected) &&
+      (
+        includeAgentProducts
+          ? existing?.answer_input?.agent_products_hash === sha256Json(job.agentProducts)
+          : existing?.answer_input?.agent_products_included === false
+      )
     ) {
       skipped += 1;
       return;
@@ -229,7 +280,10 @@ async function runJob(job, worker) {
           raw_memory_count: job.selected.length,
           raw_memory_hash: sha256Json(job.selected),
           raw_memories: job.selected,
-          agent_products_included: false,
+          agent_products_included: includeAgentProducts,
+          agent_product_fields: includeAgentProducts ? ["evidenceSummary", "citation supports"] : [],
+          agent_products_hash: includeAgentProducts ? sha256Json(job.agentProducts) : null,
+          agent_products: includeAgentProducts ? job.agentProducts : null,
           gold_fields_present: false,
         },
         answer,

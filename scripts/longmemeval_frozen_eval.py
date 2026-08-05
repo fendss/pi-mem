@@ -48,6 +48,14 @@ Memories for user {{speaker_2_name}}:
 Question: {{question}}
 Answer with the shortest correct phrase or sentence. No preamble, no fluff:"""
 
+AGENT_TEXT_PRODUCTS_TEMPLATE = """Pi-Mem also produced the following natural-language synthesis from the retrieved memories. Use it as a reading aid, but verify it against the original conversation memories above.
+
+Pi-Mem evidence summary:
+{{evidence_summary}}
+
+Pi-Mem supporting notes:
+{{supports}}"""
+
 SELECTION_V3_ANSWER_PROMPT = """You are asked to answer a question based on your memories of a conversation.
 
 <instructions>
@@ -136,9 +144,19 @@ def parse_args() -> argparse.Namespace:
     reanswer.add_argument("--slots", type=int, default=32)
     reanswer.add_argument(
         "--mode",
-        choices=("exact-searched-memories", "raw-text-memories", "selection-aware-v3"),
+        choices=(
+            "exact-searched-memories",
+            "raw-text-memories",
+            "raw-text-plus-agent-products",
+            "selection-aware-v3",
+        ),
         default="exact-searched-memories",
     )
+
+    attach_products = subparsers.add_parser("attach-text-products")
+    attach_products.add_argument("--raw-input", type=Path, required=True)
+    attach_products.add_argument("--results", type=Path, required=True)
+    attach_products.add_argument("--output", type=Path, required=True)
 
     judge = subparsers.add_parser("judge")
     judge.add_argument("--input", type=Path, required=True)
@@ -279,6 +297,79 @@ def prepare_frozen_input(
     )
 
 
+def attach_text_products(
+    raw_input_path: Path,
+    results_path: Path,
+    output_path: Path,
+) -> None:
+    raw_input = read_json(raw_input_path)
+    if raw_input.get("gold_fields_present") is not False:
+        raise ValueError("Raw input must explicitly exclude gold")
+    records = raw_input.get("records")
+    results = read_json(results_path).get("results")
+    if not isinstance(records, list) or not isinstance(results, list):
+        raise ValueError("Expected raw records and PiMem result records")
+    retrieval_by_id: dict[str, dict[str, Any]] = {}
+    for row in results:
+        retrieval = row.get("result") or row.get("retrieval")
+        question_id = row.get("question_id")
+        if not isinstance(question_id, str) or not isinstance(retrieval, dict):
+            raise ValueError("Invalid PiMem result record")
+        if question_id in retrieval_by_id:
+            raise ValueError(f"Duplicate PiMem result question ID: {question_id}")
+        retrieval_by_id[question_id] = retrieval
+    if {record["question_id"] for record in records} != set(retrieval_by_id):
+        raise ValueError("Raw input and PiMem result question IDs differ")
+
+    prepared = []
+    for record in records:
+        retrieval = retrieval_by_id[record["question_id"]]
+        evidence_summary = retrieval.get("evidenceSummary")
+        citations = retrieval.get("citations") or []
+        supports = [
+            citation.get("supports").strip()
+            for citation in citations
+            if isinstance(citation.get("supports"), str)
+            and citation.get("supports").strip()
+        ]
+        if not isinstance(evidence_summary, str) or not evidence_summary.strip():
+            raise ValueError(f"Missing Agent evidence summary: {record['question_id']}")
+        products = {
+            "evidence_summary": evidence_summary.strip(),
+            "supports": supports,
+        }
+        prepared.append(
+            {
+                **record,
+                "agent_text_products": products,
+                "agent_text_products_hash": sha256_json(products),
+            }
+        )
+    write_atomic_json(
+        output_path,
+        {
+            **{key: value for key, value in raw_input.items() if key != "records"},
+            "created_at": datetime.now(timezone.utc).isoformat(),
+            "created_from_raw_input": str(raw_input_path),
+            "created_from_results": str(results_path),
+            "raw_input_sha256": hashlib.sha256(raw_input_path.read_bytes()).hexdigest(),
+            "results_sha256": hashlib.sha256(results_path.read_bytes()).hexdigest(),
+            "agent_text_products_present": True,
+            "agent_text_product_fields": ["evidenceSummary", "citation supports"],
+            "excluded_agent_fields": [
+                "status",
+                "count",
+                "inventory",
+                "memory IDs",
+                "queries",
+                "ranks",
+                "reasoning trace",
+            ],
+            "records": prepared,
+        },
+    )
+
+
 def validate_reanswer_source(
     source: dict[str, Any],
     mode: str,
@@ -289,10 +380,15 @@ def validate_reanswer_source(
     if not isinstance(records, list) or not records:
         raise ValueError("Frozen answer input must contain a non-empty record set")
     selection_data_present = source.get("selection_data_present") is True
+    products_present = source.get("agent_text_products_present") is True
     if mode == "selection-aware-v3" and not selection_data_present:
         raise ValueError("selection-aware-v3 mode requires prepared selection data")
-    if mode in {"exact-searched-memories", "raw-text-memories"} and selection_data_present:
-        raise ValueError("Raw-memory modes require input without selection data")
+    if mode == "raw-text-plus-agent-products" and not products_present:
+        raise ValueError("raw-text-plus-agent-products mode requires text products")
+    if mode in {"exact-searched-memories", "raw-text-memories"} and (
+        selection_data_present or products_present
+    ):
+        raise ValueError("Raw-memory modes require input without selection data or Agent products")
     if source.get("question_count") != len(records):
         raise ValueError("Frozen answer input question count is inconsistent")
     return records
@@ -319,6 +415,22 @@ def render_selection_v3_memory(memory: dict[str, Any]) -> str:
     timestamp = memory.get("timestamp")
     time_suffix = "" if timestamp is None else f" time={timestamp}"
     return f"[memoryId={memory['memoryId']}{time_suffix}]\n{memory['content']}"
+
+
+def render_agent_text_products(record: dict[str, Any]) -> str:
+    products = record.get("agent_text_products") or {}
+    summary = products.get("evidence_summary")
+    supports = products.get("supports") or []
+    if not isinstance(summary, str) or not summary.strip():
+        raise ValueError(f"Missing Agent evidence summary: {record.get('question_id')}")
+    if not isinstance(supports, list) or any(not isinstance(item, str) for item in supports):
+        raise ValueError(f"Invalid Agent citation supports: {record.get('question_id')}")
+    support_text = "\n".join(f"- {item}" for item in supports) or "- No supporting notes were produced."
+    return (
+        AGENT_TEXT_PRODUCTS_TEMPLATE
+        .replace("{{evidence_summary}}", summary.strip())
+        .replace("{{supports}}", support_text)
+    )
 
 
 def selection_v3_answer_prompt(record: dict[str, Any]) -> str:
@@ -381,20 +493,27 @@ def answer_prompt(record: dict[str, Any], mode: str) -> str:
         role = memory.get("role")
         rendered = (
             render_raw_text_memory(memory)
-            if mode == "raw-text-memories"
+            if mode in {"raw-text-memories", "raw-text-plus-agent-products"}
             else render_memory(memory)
         )
         if source_speaker == session.get("speakerA") or role == "user":
             first.append(rendered)
         else:
             second.append(rendered)
-    return (
+    prompt = (
         ANSWER_PROMPT.replace("{{speaker_1_name}}", speaker_1)
         .replace("{{speaker_1_memories}}", "\n".join(first) or "(none retrieved)")
         .replace("{{speaker_2_name}}", speaker_2)
         .replace("{{speaker_2_memories}}", "\n".join(second) or "(none retrieved)")
         .replace("{{question}}", record["question"])
     )
+    if mode == "raw-text-plus-agent-products":
+        products = render_agent_text_products(record)
+        prompt = prompt.replace(
+            "</memories>\n\nQuestion:",
+            f"</memories>\n\n<agent_products>\n{products}\n</agent_products>\n\nQuestion:",
+        )
+    return prompt
 
 
 def endpoint(base_url: str) -> str:
@@ -501,11 +620,16 @@ async def run_reanswer(args: argparse.Namespace) -> None:
     prompt_template = (
         SELECTION_V3_ANSWER_PROMPT
         if args.mode == "selection-aware-v3"
-        else ANSWER_PROMPT
+        else (
+            f"{ANSWER_PROMPT}\n{AGENT_TEXT_PRODUCTS_TEMPLATE}"
+            if args.mode == "raw-text-plus-agent-products"
+            else ANSWER_PROMPT
+        )
     )
     run_modes = {
         "exact-searched-memories": "frozen-searched-memories-reanswer",
         "raw-text-memories": "raw-text-memories-reanswer",
+        "raw-text-plus-agent-products": "raw-text-plus-agent-products-reanswer",
         "selection-aware-v3": "selection-aware-v3-reanswer",
     }
     config = {
@@ -568,7 +692,14 @@ async def run_reanswer(args: argparse.Namespace) -> None:
                         "mode": args.mode,
                     }
                     if args.mode == "selection-aware-v3"
-                    else {}
+                    else (
+                        {
+                            "agent_text_products_hash": record["agent_text_products_hash"],
+                            "mode": args.mode,
+                        }
+                        if args.mode == "raw-text-plus-agent-products"
+                        else {}
+                    )
                 ),
             },
         )
@@ -776,6 +907,8 @@ def main() -> None:
             args.output,
             args.include_selection_data,
         )
+    elif args.command == "attach-text-products":
+        attach_text_products(args.raw_input, args.results, args.output)
     else:
         asyncio.run(async_main(args))
 
