@@ -173,6 +173,54 @@ _No top-level functions, classes, or class methods._
 | `writeAtomicJson(path: string, value: unknown): Promise<void>` | Serializes a value as formatted JSON and writes it atomically. | function | exported | [line 21](../../src/entrypoints/cli/workflow-files.ts#L21) |
 | `readJsonFileIfPresent(path: string): Promise<T \| undefined>` | Reads a JSON file, returning undefined only when the file is absent. | function | exported | [line 29](../../src/entrypoints/cli/workflow-files.ts#L29) |
 | `executeArchiveCommand(file: string, args: string[]): Promise<void>` | Executes a command used to create an archive and normalizes its error. | function | exported | [line 43](../../src/entrypoints/cli/workflow-files.ts#L43) |
+## `src/entrypoints/ldbd-api/contracts.ts`
+
+| Symbol | Purpose | Kind | Visibility | Source |
+|---|---|---|---|---|
+| `objectValue(value: unknown, label: string): Record<string, unknown>` | Implements the object value operation. | function | internal | [line 21](../../src/entrypoints/ldbd-api/contracts.ts#L21) |
+| `stringValue(value: unknown, label: string, maximum = 20_000): string` | Implements the string value operation. | function | internal | [line 28](../../src/entrypoints/ldbd-api/contracts.ts#L28) |
+| `parseAddRequest(value: unknown): LdbdAddRequest` | Validates one synchronous LDBD Add request and keeps only the memory contract fields. | function | exported | [line 37](../../src/entrypoints/ldbd-api/contracts.ts#L37) |
+| `parseSearchRequest(value: unknown): LdbdSearchRequest` | Validates one LDBD Search request with a bounded top-k and optional choices. | function | exported | [line 69](../../src/entrypoints/ldbd-api/contracts.ts#L69) |
+| `renderRetrievalQuestion(request: LdbdSearchRequest): string` | Adds benchmark options to the retrieval question without persisting them as memory. | function | exported | [line 91](../../src/entrypoints/ldbd-api/contracts.ts#L91) |
+## `src/entrypoints/ldbd-api/inbox-store.ts`
+
+| Symbol | Purpose | Kind | Visibility | Source |
+|---|---|---|---|---|
+| `requestHash(request: LdbdAddRequest): string` | Implements the request hash operation. | function | internal | [line 18](../../src/entrypoints/ldbd-api/inbox-store.ts#L18) |
+| `LdbdInboxStore` | Implements ldbd inbox store. | class | exported | [line 22](../../src/entrypoints/ldbd-api/inbox-store.ts#L22) |
+| `LdbdInboxStore.constructor(databasePath: string)` | Creates a ldbd inbox store instance. | method | public | [line 25](../../src/entrypoints/ldbd-api/inbox-store.ts#L25) |
+| `LdbdInboxStore.close(): void` | Closes owned resources. | method | public | [line 43](../../src/entrypoints/ldbd-api/inbox-store.ts#L43) |
+| `LdbdInboxStore.put(request: LdbdAddRequest): "inserted" \| "unchanged"` | Persists an Add request idempotently and rejects request-ID content conflicts. | method | public | [line 47](../../src/entrypoints/ldbd-api/inbox-store.ts#L47) |
+| `LdbdInboxStore.listForUser(userId: string): StoredAddRequest[]` | Returns one user's Add requests in durable insertion order. | method | public | [line 73](../../src/entrypoints/ldbd-api/inbox-store.ts#L73) |
+## `src/entrypoints/ldbd-api/main.ts`
+
+| Symbol | Purpose | Kind | Visibility | Source |
+|---|---|---|---|---|
+| `requiredEnvironment(name: string): string` | Implements the required environment operation. | function | internal | [line 13](../../src/entrypoints/ldbd-api/main.ts#L13) |
+| `integerEnvironment(name: string, fallback: number): number` | Implements the integer environment operation. | function | internal | [line 19](../../src/entrypoints/ldbd-api/main.ts#L19) |
+| `tokenDigest(value: string): Buffer` | Converts ken digest. | function | internal | [line 29](../../src/entrypoints/ldbd-api/main.ts#L29) |
+| `authorized(request: IncomingMessage, expectedToken: string \| undefined): boolean` | Implements the authorized operation. | function | internal | [line 33](../../src/entrypoints/ldbd-api/main.ts#L33) |
+| `jsonBody(request: IncomingMessage): Promise<unknown>` | Implements the json body operation. | function | internal | [line 42](../../src/entrypoints/ldbd-api/main.ts#L42) |
+| `respond(response: ServerResponse, status: number, body: unknown): void` | Implements the respond operation. | function | internal | [line 59](../../src/entrypoints/ldbd-api/main.ts#L59) |
+| `shutdown(): void` | Implements the shutdown operation. | function | internal | [line 115](../../src/entrypoints/ldbd-api/main.ts#L115) |
+## `src/entrypoints/ldbd-api/pimem-runtime.ts`
+
+| Symbol | Purpose | Kind | Visibility | Source |
+|---|---|---|---|---|
+| `sha256(value: string): string` | Implements the sha256 operation. | function | internal | [line 19](../../src/entrypoints/ldbd-api/pimem-runtime.ts#L19) |
+| `snapshotScopeId(userId: string, adds: readonly StoredAddRequest[]): string` | Implements the snapshot scope id operation. | function | internal | [line 23](../../src/entrypoints/ldbd-api/pimem-runtime.ts#L23) |
+| `sessionsForSnapshot(scopeId: string, adds: readonly StoredAddRequest[]): MemorySessionInput[]` | Implements the sessions for snapshot operation. | function | internal | [line 28](../../src/entrypoints/ldbd-api/pimem-runtime.ts#L28) |
+| `PiMemLdbdRuntime` | Implements pi mem ldbd runtime. | class | exported | [line 56](../../src/entrypoints/ldbd-api/pimem-runtime.ts#L56) |
+| `PiMemLdbdRuntime.constructor(private readonly inbox: LdbdInboxStore, private readonly store: MemoryStore, private readonly modelRuntime: PiModelRuntime)` | Creates a pi mem ldbd runtime instance. | method | public | [line 57](../../src/entrypoints/ldbd-api/pimem-runtime.ts#L57) |
+| `PiMemLdbdRuntime.search(request: LdbdSearchRequest): Promise<LdbdSearchItem[]>` | Builds an immutable user snapshot, runs PiMem, and returns cited memories in LDBD form. | method | public | [line 63](../../src/entrypoints/ldbd-api/pimem-runtime.ts#L63) |
+## `src/entrypoints/ldbd-api/service.ts`
+
+| Symbol | Purpose | Kind | Visibility | Source |
+|---|---|---|---|---|
+| `LdbdApiService` | Implements ldbd api service. | class | exported | [line 9](../../src/entrypoints/ldbd-api/service.ts#L9) |
+| `LdbdApiService.constructor(private readonly inbox: LdbdInboxStore, private readonly searchEngine: LdbdSearchEngine)` | Creates a ldbd api service instance. | method | public | [line 10](../../src/entrypoints/ldbd-api/service.ts#L10) |
+| `LdbdApiService.add(value: unknown): Record<string, unknown>` | Handles the synchronous LDBD Add operation. | method | public | [line 15](../../src/entrypoints/ldbd-api/service.ts#L15) |
+| `LdbdApiService.search(value: unknown): Promise<{ data: LdbdSearchItem[] }>` | Handles the LDBD Search operation through the injected search engine. | method | public | [line 27](../../src/entrypoints/ldbd-api/service.ts#L27) |
 ## `src/evidence-agent/adapters/docker/read-only-shell.ts`
 
 | Symbol | Purpose | Kind | Visibility | Source |

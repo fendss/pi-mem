@@ -1,0 +1,5 @@
+{
+  "defaultProvider": "pimem-openai",
+  "defaultModel": "gpt-4o-mini",
+  "defaultThinkingLevel": "off"
+}
