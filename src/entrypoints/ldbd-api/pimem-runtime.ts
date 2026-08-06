@@ -1,90 +1,150 @@
-import { createHash } from "node:crypto";
+import type { OnlineMemoryStore } from "../../memory/index.js";
 import { createRetrievalContext } from "../../composition/create-retrieval-context.js";
 import { runPiMem } from "../../evidence-agent/run-pimem.js";
-import { ingestMemorySessions } from "../../memory/ingest-memory-sessions.js";
-import type { MemorySessionInput } from "../../memory/model/memory.js";
 import type { PiModelRuntime } from "../../platform/pi/load-model-runtime.js";
 import type { MemoryStore } from "../../platform/sqlite/pimem-store.js";
-import type { LdbdSearchRequest } from "./contracts.js";
-import { renderRetrievalQuestion } from "./contracts.js";
-import type { LdbdInboxStore, StoredAddRequest } from "./inbox-store.js";
+import {
+  embeddingProfile,
+  indexScopeEmbeddings,
+  type Embedder,
+} from "../../retrieval/index.js";
+import { sha256 } from "../../util.js";
+import {
+  LdbdContractError,
+  renderRetrievalQuestion,
+  type LdbdAddRequest,
+  type LdbdSearchRequest,
+} from "./contracts.js";
+import {
+  LdbdConflictError,
+  type LdbdMemoryApplication,
+  type LdbdSearchItem,
+  LdbdUnavailableError,
+  onlineScopeId,
+} from "./service.js";
 
-export interface LdbdSearchItem {
-  id: string;
-  content: string;
-  score: number;
-  created_at?: string;
-}
+class KeyedSerialExecutor {
+  private readonly tails = new Map<string, Promise<void>>();
 
-function sha256(value: string): string {
-  return createHash("sha256").update(value).digest("hex");
-}
-
-function snapshotScopeId(userId: string, adds: readonly StoredAddRequest[]): string {
-  const snapshot = adds.map(({ sequence: _sequence, ...request }) => request);
-  return `ldbd-${sha256(userId).slice(0, 12)}-${sha256(JSON.stringify(snapshot)).slice(0, 20)}`;
-}
-
-function sessionsForSnapshot(
-  scopeId: string,
-  adds: readonly StoredAddRequest[],
-): MemorySessionInput[] {
-  const bySession = new Map<string, StoredAddRequest[]>();
-  for (const request of adds) {
-    const bucket = bySession.get(request.sessionId) ?? [];
-    bucket.push(request);
-    bySession.set(request.sessionId, bucket);
+  async run<T>(key: string, operation: () => Promise<T>): Promise<T> {
+    const predecessor = this.tails.get(key) ?? Promise.resolve();
+    let release!: () => void;
+    const current = new Promise<void>((resolve) => { release = resolve; });
+    const tail = predecessor.then(() => current);
+    this.tails.set(key, tail);
+    await predecessor;
+    try {
+      return await operation();
+    } finally {
+      release();
+      if (this.tails.get(key) === tail) this.tails.delete(key);
+    }
   }
-  return [...bySession.entries()].map(([sessionId, requests]) => {
-    const messages = requests.flatMap((request) => request.messages);
-    const firstTimestamp = messages.find((message) => message.timestamp !== undefined)?.timestamp;
-    return {
-      scopeId,
-      sessionId,
-      ...(firstTimestamp === undefined
-        ? {}
-        : { timestamp: new Date(firstTimestamp).toISOString() }),
-      turns: messages.map((message) => ({
-        role: message.role,
-        content: message.content,
-      })),
-      metadata: { source: "ldbd-add-api" },
-    };
-  });
 }
 
-export class PiMemLdbdRuntime {
+function requestHash(request: LdbdAddRequest): string {
+  return sha256(JSON.stringify(request));
+}
+
+function timestamp(value: number | undefined): string | undefined {
+  if (value === undefined) return undefined;
+  const parsed = new Date(value);
+  if (!Number.isFinite(parsed.getTime())) {
+    throw new Error("message timestamp is outside the supported date range");
+  }
+  return parsed.toISOString();
+}
+
+export class PiMemLdbdApplication implements LdbdMemoryApplication {
+  private readonly serial = new KeyedSerialExecutor();
+
   constructor(
-    private readonly inbox: LdbdInboxStore,
-    private readonly store: MemoryStore,
+    private readonly store: MemoryStore & OnlineMemoryStore,
+    private readonly embedder: Embedder,
     private readonly modelRuntime: PiModelRuntime,
   ) {}
 
-  async search(request: LdbdSearchRequest): Promise<LdbdSearchItem[]> {
-    const adds = this.inbox.listForUser(request.userId);
-    if (adds.length === 0) throw new Error("No memories have been added for user_id");
-    const scopeId = snapshotScopeId(request.userId, adds);
-    await ingestMemorySessions(this.store, sessionsForSnapshot(scopeId, adds));
-    const retrieval = createRetrievalContext(this.store, "fts5");
+  async add(request: LdbdAddRequest): Promise<"inserted" | "unchanged"> {
+    const scopeId = onlineScopeId(request.userId);
+    return this.serial.run(scopeId, async () => {
+      const hash = requestHash(request);
+      let appended;
+      try {
+        appended = this.store.appendMemoryRequest({
+          requestId: request.requestId,
+          requestHash: hash,
+          scopeId,
+          sourceSessionId: request.sessionId,
+          messages: request.messages.map((message) => ({
+            role: message.role,
+            content: message.content,
+            ...(message.timestamp === undefined
+              ? {}
+              : { timestamp: timestamp(message.timestamp)! }),
+          })),
+        });
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        if (/conflict|sealed/iu.test(message)) throw new LdbdConflictError(message);
+        throw error;
+      }
+      if (appended.status === "complete") return "unchanged";
+
+      const indexed = await indexScopeEmbeddings(this.store, scopeId, this.embedder);
+      if (indexed.missing !== 0) {
+        throw new LdbdUnavailableError(
+          `Embedding index is incomplete for scope ${scopeId}: ${indexed.indexed}/${indexed.total}`,
+        );
+      }
+      this.store.markAppendRequestComplete(request.requestId, hash);
+      return "inserted";
+    });
+  }
+
+  async search(request: LdbdSearchRequest, _signal?: AbortSignal): Promise<LdbdSearchItem[]> {
+    const scopeId = onlineScopeId(request.userId);
+    await this.serial.run(scopeId, async () => {
+      try {
+        this.store.sealOnlineScope(scopeId);
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        if (/No memories/iu.test(message)) throw new LdbdContractError(message);
+        if (/incomplete/iu.test(message)) throw new LdbdUnavailableError(message);
+        throw error;
+      }
+      const status = this.store.getEmbeddingIndexStatus(
+        scopeId,
+        embeddingProfile(this.embedder),
+      );
+      if (status.total === 0 || status.missing !== 0) {
+        throw new LdbdUnavailableError(
+          `Embedding index is incomplete for scope ${scopeId}: ${status.indexed}/${status.total}`,
+        );
+      }
+    });
+
+    const retrieval = createRetrievalContext(this.store, "pimem-hybrid", this.embedder);
     const result = await runPiMem({
       store: retrieval.store,
       modelRuntime: this.modelRuntime,
       scopeId,
       question: renderRetrievalQuestion(request),
-      maxRunMs: 300_000,
-      maxTurns: 64,
-      maxToolCalls: 80,
+      maxRunMs: 120_000,
+      maxTurns: 16,
+      maxToolCalls: 40,
     });
     const evidence = new Map(result.evidence.map((memory) => [memory.memoryId, memory]));
-    return result.citations
-      .map((citation) => evidence.get(citation.memoryId))
-      .filter((memory) => memory !== undefined)
-      .slice(0, request.topK)
-      .map((memory, index) => ({
+    const output: LdbdSearchItem[] = [];
+    for (const citation of result.citations) {
+      const memory = evidence.get(citation.memoryId);
+      if (!memory || output.some((item) => item.id === memory.memoryId)) continue;
+      output.push({
         id: memory.memoryId,
         content: memory.content,
-        score: 1 / (index + 1),
         ...(memory.timestamp === undefined ? {} : { created_at: memory.timestamp }),
-      }));
+      });
+      if (output.length >= request.topK) break;
+    }
+    return output;
   }
 }

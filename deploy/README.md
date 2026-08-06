@@ -1,30 +1,44 @@
-# LDBD deployment
+# Leaderboard API deployment
 
-PiMem exposes the synchronous LDBD memory contract without changing its retrieval core:
+PiMem exposes the synchronous Leaderboard memory contract on the existing service port:
 
 - `GET /health`
 - `POST /v1/memories/add`
 - `POST /v1/memories/search`
 
-Build and start the container with secrets supplied only at runtime:
+The HTTP entrypoint delegates to an application service. The application service uses the memory and retrieval domain ports; SQLite and the Pi provider are infrastructure adapters.
+
+## Lifecycle
+
+Each `user_id` maps to one stable, opaque PiMem scope. Add appends immutable source messages directly to SQLite and completes only after FTS5 and embedding indexing are complete. Repeating the same `request_id` and payload is idempotent; conflicting reuse returns `409`.
+
+The first Search atomically seals the user's scope. Search fails closed while an Add is incomplete, and every later Add for that user returns `409`. Search uses uncapped `pimem-hybrid` retrieval and returns only immutable raw memories cited by the evidence agent. It never returns benchmark questions, Gold fields, retrieval traces, ranks, or synthetic scores.
+
+## Container
+
+Secrets are supplied only at runtime. Persist all model/cache and PiMem data under `/data`.
 
 ```bash
-docker build -t pimem-ldbd:niko .
-docker run --rm -p 8787:8787 \
-  -v pimem-data:/data \
-  -e OPENAI_API_BASE=https://provider.example/v1 \
-  -e OPENAI_API_KEY=replace-at-runtime \
-  -e PIMEM_API_TOKEN=replace-at-runtime \
-  pimem-ldbd:niko
+docker build -t pimem-ldbd:replacement .
+docker run --rm -p 18088:8787 \
+  -v /data/zhaogangyi/pi-mem-live/leaderboard-live-v2:/data \
+  --env-file /home/zhaogangyi/.config/pi-mem/embedding.env \
+  --env-file /home/zhaogangyi/.config/pi-mem/answer.env \
+  -e PIMEM_API_TOKEN= \
+  pimem-ldbd:replacement
 ```
 
-Use these LDBD settings:
+The public service intentionally permits unauthenticated HTTP when `PIMEM_API_TOKEN` is unset. When set, Token, Bearer, and `x-api-key` headers are accepted.
+
+Default runtime policy:
 
 ```text
-health:      http://HOST:8787/health
-add:         http://HOST:8787/v1/memories/add
-search:      http://HOST:8787/v1/memories/search
-auth scheme: token
+container port:    8787
+host replacement: 18088
+Add concurrency:  8
+Search concurrency: 16
+retrieval:         pimem-hybrid
+maxPerSession:     unset
+model:             gpt-4o-mini
+transport:         non-stream with actual-response-model validation
 ```
-
-Add requests are persisted without any benchmark question or gold fields. On the first Search for a user, the complete set of that user's Add messages is materialized as one content-addressed immutable PiMem scope. Search runs the existing FTS5 Pi evidence agent and returns only its cited source memories. Repeated byte-identical Add requests are idempotent; reusing a request ID with different content is rejected.

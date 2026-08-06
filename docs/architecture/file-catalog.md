@@ -36,7 +36,6 @@ Compatibility facades preserve old import paths during the structural migration.
 | [`src/entrypoints/cli/parse-command.ts`](../../src/entrypoints/cli/parse-command.ts) | entrypoints | entrypoint support | internal | Parses CLI arguments, validates flags, and derives model and retrieval options. |
 | [`src/entrypoints/cli/workflow-files.ts`](../../src/entrypoints/cli/workflow-files.ts) | entrypoints | entrypoint support | internal | Provides atomic workflow file writes, optional JSON reads, and archive command execution. |
 | [`src/entrypoints/ldbd-api/contracts.ts`](../../src/entrypoints/ldbd-api/contracts.ts) | entrypoints | entrypoint support | internal | Validates and normalizes the LDBD Add/Search wire contracts. |
-| [`src/entrypoints/ldbd-api/inbox-store.ts`](../../src/entrypoints/ldbd-api/inbox-store.ts) | entrypoints | entrypoint support | internal | Persists idempotent LDBD Add requests without benchmark questions or gold fields. |
 | [`src/entrypoints/ldbd-api/main.ts`](../../src/entrypoints/ldbd-api/main.ts) | entrypoints | entrypoint support | internal | Starts the authenticated HTTP server for the LDBD memory API. |
 | [`src/entrypoints/ldbd-api/pimem-runtime.ts`](../../src/entrypoints/ldbd-api/pimem-runtime.ts) | entrypoints | entrypoint support | internal | Materializes LDBD user messages as immutable scopes and runs PiMem retrieval. |
 | [`src/entrypoints/ldbd-api/service.ts`](../../src/entrypoints/ldbd-api/service.ts) | entrypoints | entrypoint support | internal | Maps validated LDBD requests to inbox persistence and PiMem search. |

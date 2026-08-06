@@ -1,20 +1,47 @@
-import type { LdbdSearchItem } from "./pimem-runtime.js";
-import { parseAddRequest, parseSearchRequest } from "./contracts.js";
-import type { LdbdInboxStore } from "./inbox-store.js";
+import { sha256 } from "../../util.js";
+import {
+  LdbdContractError,
+  parseAddRequest,
+  parseSearchRequest,
+  type LdbdAddRequest,
+  type LdbdSearchRequest,
+} from "./contracts.js";
 
-export interface LdbdSearchEngine {
-  search(request: ReturnType<typeof parseSearchRequest>): Promise<LdbdSearchItem[]>;
+export interface LdbdSearchItem {
+  id: string;
+  content: string;
+  created_at?: string;
+}
+
+export interface LdbdMemoryApplication {
+  add(request: LdbdAddRequest): Promise<"inserted" | "unchanged">;
+  search(request: LdbdSearchRequest, signal?: AbortSignal): Promise<LdbdSearchItem[]>;
+}
+
+export class LdbdConflictError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "LdbdConflictError";
+  }
+}
+
+export class LdbdUnavailableError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "LdbdUnavailableError";
+  }
+}
+
+export function onlineScopeId(userId: string): string {
+  return `leaderboard-${sha256(userId).slice(0, 24)}`;
 }
 
 export class LdbdApiService {
-  constructor(
-    private readonly inbox: LdbdInboxStore,
-    private readonly searchEngine: LdbdSearchEngine,
-  ) {}
+  constructor(private readonly application: LdbdMemoryApplication) {}
 
-  add(value: unknown): Record<string, unknown> {
+  async add(value: unknown): Promise<Record<string, unknown>> {
     const request = parseAddRequest(value);
-    const status = this.inbox.put(request);
+    const status = await this.application.add(request);
     return {
       success: true,
       request_id: request.requestId,
@@ -24,8 +51,10 @@ export class LdbdApiService {
     };
   }
 
-  async search(value: unknown): Promise<{ data: LdbdSearchItem[] }> {
+  async search(value: unknown, signal?: AbortSignal): Promise<{ data: LdbdSearchItem[] }> {
     const request = parseSearchRequest(value);
-    return { data: await this.searchEngine.search(request) };
+    return { data: await this.application.search(request, signal) };
   }
 }
+
+export { LdbdContractError };

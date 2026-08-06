@@ -7,15 +7,19 @@ import {
   parseSearchRequest,
   renderRetrievalQuestion,
 } from "../src/entrypoints/ldbd-api/contracts.js";
-import { LdbdInboxStore } from "../src/entrypoints/ldbd-api/inbox-store.js";
-import { LdbdApiService } from "../src/entrypoints/ldbd-api/service.js";
+import {
+  LdbdApiService,
+  onlineScopeId,
+} from "../src/entrypoints/ldbd-api/service.js";
+import { MemoryStore } from "../src/platform/sqlite/pimem-store.js";
+import { sha256 } from "../src/util.js";
 
 const temporaryDirectories: string[] = [];
 
-async function inbox(): Promise<{ directory: string; store: LdbdInboxStore }> {
+async function memoryStore(): Promise<MemoryStore> {
   const directory = await mkdtemp(join(tmpdir(), "pimem-ldbd-api-"));
   temporaryDirectories.push(directory);
-  return { directory, store: new LdbdInboxStore(join(directory, "inbox.sqlite")) };
+  return MemoryStore.create(join(directory, "memory.sqlite"));
 }
 
 afterEach(async () => {
@@ -27,23 +31,26 @@ afterEach(async () => {
 });
 
 describe("LDBD API contracts", () => {
-  it("accepts the synchronous Add contract and strips unrelated fields", () => {
+  it("accepts the exact Add contract without rewriting raw content", () => {
     expect(parseAddRequest({
       request_id: "request-1",
       user_id: "user-1",
       session_id: "session-1",
-      messages: [{ role: "user", content: "hello", timestamp: 1_704_067_200_000 }],
-      answer_fixed: "must-not-cross-the-boundary",
+      messages: [{ role: "user", content: "  exact content  ", timestamp: 1_704_067_200_000 }],
     })).toEqual({
       requestId: "request-1",
       userId: "user-1",
       sessionId: "session-1",
-      messages: [{ role: "user", content: "hello", timestamp: 1_704_067_200_000 }],
+      messages: [{ role: "user", content: "  exact content  ", timestamp: 1_704_067_200_000 }],
     });
   });
 
-  it("rejects malformed probes without writing", () => {
+  it("rejects malformed and extra benchmark fields", () => {
     expect(() => parseAddRequest({})).toThrow("messages must be a non-empty array");
+    expect(() => parseAddRequest({
+      request_id: "r", user_id: "u", session_id: "s",
+      messages: [{ role: "user", content: "m" }], answer: "gold",
+    })).toThrow("unsupported fields");
     expect(() => parseSearchRequest({})).toThrow("top_k must be an integer");
   });
 
@@ -54,53 +61,64 @@ describe("LDBD API contracts", () => {
       top_k: 100,
       options: ["first", "second"],
     });
-    expect(renderRetrievalQuestion(request)).toContain("A. first\nB. second");
+    expect(renderRetrievalQuestion(request)).toContain("- first\n- second");
   });
 });
 
-describe("LDBD API persistence and service", () => {
-  it("makes Add idempotent and rejects request ID conflicts", async () => {
-    const fixture = await inbox();
-    try {
-      const request = parseAddRequest({
-        request_id: "request-1",
-        user_id: "user-1",
-        session_id: "session-1",
-        messages: [{ role: "assistant", content: "stored memory" }],
-      });
-      expect(fixture.store.put(request)).toBe("inserted");
-      expect(fixture.store.put(request)).toBe("unchanged");
-      expect(fixture.store.listForUser("user-1")).toHaveLength(1);
-      expect(() => fixture.store.put({
-        ...request,
-        messages: [{ role: "assistant", content: "different memory" }],
-      })).toThrow("request_id already exists with different content");
-    } finally {
-      fixture.store.close();
-    }
+describe("online memory persistence", () => {
+  it("appends idempotently with stable scope/session IDs and seals against later Add", async () => {
+    const store = await memoryStore();
+    const scopeId = onlineScopeId("user-1");
+    const request = {
+      requestId: "request-1",
+      requestHash: sha256("payload-1"),
+      scopeId,
+      sourceSessionId: "session-1",
+      messages: [{ role: "assistant" as const, content: "stored memory" }],
+    };
+    expect(store.appendMemoryRequest(request).status).toBe("pending");
+    store.markAppendRequestComplete(request.requestId, request.requestHash);
+    expect(store.appendMemoryRequest(request).status).toBe("complete");
+    expect(store.listScopeRecords(scopeId)).toHaveLength(1);
+    expect(store.sealOnlineScope(scopeId)).toBe("sealed");
+    expect(() => store.appendMemoryRequest({
+      ...request,
+      requestId: "request-2",
+      requestHash: sha256("payload-2"),
+    })).toThrow("sealed");
+    store.close();
   });
 
-  it("returns the exact LDBD response envelopes", async () => {
-    const fixture = await inbox();
-    const search = vi.fn(async () => [{ id: "memory-1", content: "evidence", score: 1 }]);
-    try {
-      const service = new LdbdApiService(fixture.store, { search });
-      expect(service.add({
-        request_id: "request-1",
-        user_id: "user-1",
-        session_id: "session-1",
-        messages: [{ role: "user", content: "memory" }],
-      })).toMatchObject({
-        success: true,
-        request_id: "request-1",
-        user_id: "user-1",
-        session_id: "session-1",
-      });
-      await expect(service.search({ query: "question", user_id: "user-1", top_k: 100 }))
-        .resolves.toEqual({ data: [{ id: "memory-1", content: "evidence", score: 1 }] });
-      expect(search).toHaveBeenCalledOnce();
-    } finally {
-      fixture.store.close();
-    }
+  it("rejects request ID conflicts and sealing with pending indexing", async () => {
+    const store = await memoryStore();
+    const scopeId = onlineScopeId("user-1");
+    const request = {
+      requestId: "request-1",
+      requestHash: sha256("payload-1"),
+      scopeId,
+      sourceSessionId: "session-1",
+      messages: [{ role: "user" as const, content: "memory" }],
+    };
+    store.appendMemoryRequest(request);
+    expect(() => store.appendMemoryRequest({ ...request, requestHash: sha256("different") }))
+      .toThrow("conflict");
+    expect(() => store.sealOnlineScope(scopeId)).toThrow("incomplete");
+    store.close();
+  });
+});
+
+describe("LDBD service", () => {
+  it("returns exact response envelopes through the application port", async () => {
+    const add = vi.fn(async () => "inserted" as const);
+    const search = vi.fn(async () => [{ id: "memory-1", content: "evidence" }]);
+    const service = new LdbdApiService({ add, search });
+    await expect(service.add({
+      request_id: "request-1",
+      user_id: "user-1",
+      session_id: "session-1",
+      messages: [{ role: "user", content: "memory" }],
+    })).resolves.toMatchObject({ success: true, status: "inserted" });
+    await expect(service.search({ query: "question", user_id: "user-1", top_k: 100 }))
+      .resolves.toEqual({ data: [{ id: "memory-1", content: "evidence" }] });
   });
 });

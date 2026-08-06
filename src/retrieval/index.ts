@@ -29,6 +29,12 @@ export {
   type SearchMemoryResult,
 } from "./search-memory.js";
 export {
+  embeddingInput,
+  embeddingProfile,
+  indexScopeEmbeddings,
+  type EmbeddingIndexResult,
+} from "./index-scope-embeddings.js";
+export {
   parseSourceTimestamp,
   temporalAnnotation,
 } from "./temporal-annotation.js";

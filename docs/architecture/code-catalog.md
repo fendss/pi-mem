@@ -177,50 +177,51 @@ _No top-level functions, classes, or class methods._
 
 | Symbol | Purpose | Kind | Visibility | Source |
 |---|---|---|---|---|
-| `objectValue(value: unknown, label: string): Record<string, unknown>` | Implements the object value operation. | function | internal | [line 21](../../src/entrypoints/ldbd-api/contracts.ts#L21) |
-| `stringValue(value: unknown, label: string, maximum = 20_000): string` | Implements the string value operation. | function | internal | [line 28](../../src/entrypoints/ldbd-api/contracts.ts#L28) |
-| `parseAddRequest(value: unknown): LdbdAddRequest` | Validates one synchronous LDBD Add request and keeps only the memory contract fields. | function | exported | [line 37](../../src/entrypoints/ldbd-api/contracts.ts#L37) |
-| `parseSearchRequest(value: unknown): LdbdSearchRequest` | Validates one LDBD Search request with a bounded top-k and optional choices. | function | exported | [line 69](../../src/entrypoints/ldbd-api/contracts.ts#L69) |
-| `renderRetrievalQuestion(request: LdbdSearchRequest): string` | Adds benchmark options to the retrieval question without persisting them as memory. | function | exported | [line 91](../../src/entrypoints/ldbd-api/contracts.ts#L91) |
-## `src/entrypoints/ldbd-api/inbox-store.ts`
-
-| Symbol | Purpose | Kind | Visibility | Source |
-|---|---|---|---|---|
-| `requestHash(request: LdbdAddRequest): string` | Implements the request hash operation. | function | internal | [line 18](../../src/entrypoints/ldbd-api/inbox-store.ts#L18) |
-| `LdbdInboxStore` | Implements ldbd inbox store. | class | exported | [line 22](../../src/entrypoints/ldbd-api/inbox-store.ts#L22) |
-| `LdbdInboxStore.constructor(databasePath: string)` | Creates a ldbd inbox store instance. | method | public | [line 25](../../src/entrypoints/ldbd-api/inbox-store.ts#L25) |
-| `LdbdInboxStore.close(): void` | Closes owned resources. | method | public | [line 43](../../src/entrypoints/ldbd-api/inbox-store.ts#L43) |
-| `LdbdInboxStore.put(request: LdbdAddRequest): "inserted" \| "unchanged"` | Persists an Add request idempotently and rejects request-ID content conflicts. | method | public | [line 47](../../src/entrypoints/ldbd-api/inbox-store.ts#L47) |
-| `LdbdInboxStore.listForUser(userId: string): StoredAddRequest[]` | Returns one user's Add requests in durable insertion order. | method | public | [line 73](../../src/entrypoints/ldbd-api/inbox-store.ts#L73) |
+| `LdbdContractError` | Implements ldbd contract error. | class | exported | [line 21](../../src/entrypoints/ldbd-api/contracts.ts#L21) |
+| `LdbdContractError.constructor(message: string)` | Creates a ldbd contract error instance. | method | public | [line 22](../../src/entrypoints/ldbd-api/contracts.ts#L22) |
+| `objectValue(value: unknown, label: string): Record<string, unknown>` | Implements the object value operation. | function | internal | [line 28](../../src/entrypoints/ldbd-api/contracts.ts#L28) |
+| `exactFields(value: Record<string, unknown>, allowed: readonly string[], label: string): void` | Implements the exact fields operation. | function | internal | [line 35](../../src/entrypoints/ldbd-api/contracts.ts#L35) |
+| `identifier(value: unknown, label: string): string` | Implements the identifier operation. | function | internal | [line 47](../../src/entrypoints/ldbd-api/contracts.ts#L47) |
+| `text(value: unknown, label: string, maximum: number): string` | Implements the text operation. | function | internal | [line 55](../../src/entrypoints/ldbd-api/contracts.ts#L55) |
+| `parseAddRequest(value: unknown): LdbdAddRequest` | Validates one synchronous LDBD Add request and keeps only the memory contract fields. | function | exported | [line 65](../../src/entrypoints/ldbd-api/contracts.ts#L65) |
+| `parseSearchRequest(value: unknown): LdbdSearchRequest` | Validates one LDBD Search request with a bounded top-k and optional choices. | function | exported | [line 100](../../src/entrypoints/ldbd-api/contracts.ts#L100) |
+| `renderRetrievalQuestion(request: LdbdSearchRequest): string` | Adds benchmark options to the retrieval question without persisting them as memory. | function | exported | [line 128](../../src/entrypoints/ldbd-api/contracts.ts#L128) |
 ## `src/entrypoints/ldbd-api/main.ts`
 
 | Symbol | Purpose | Kind | Visibility | Source |
 |---|---|---|---|---|
-| `requiredEnvironment(name: string): string` | Implements the required environment operation. | function | internal | [line 13](../../src/entrypoints/ldbd-api/main.ts#L13) |
-| `integerEnvironment(name: string, fallback: number): number` | Implements the integer environment operation. | function | internal | [line 19](../../src/entrypoints/ldbd-api/main.ts#L19) |
-| `tokenDigest(value: string): Buffer` | Converts ken digest. | function | internal | [line 29](../../src/entrypoints/ldbd-api/main.ts#L29) |
-| `authorized(request: IncomingMessage, expectedToken: string \| undefined): boolean` | Implements the authorized operation. | function | internal | [line 33](../../src/entrypoints/ldbd-api/main.ts#L33) |
-| `jsonBody(request: IncomingMessage): Promise<unknown>` | Implements the json body operation. | function | internal | [line 42](../../src/entrypoints/ldbd-api/main.ts#L42) |
-| `respond(response: ServerResponse, status: number, body: unknown): void` | Implements the respond operation. | function | internal | [line 59](../../src/entrypoints/ldbd-api/main.ts#L59) |
-| `shutdown(): void` | Implements the shutdown operation. | function | internal | [line 115](../../src/entrypoints/ldbd-api/main.ts#L115) |
+| `requiredEnvironment(name: string): string` | Implements the required environment operation. | function | internal | [line 19](../../src/entrypoints/ldbd-api/main.ts#L19) |
+| `integerEnvironment(name: string, fallback: number): number` | Implements the integer environment operation. | function | internal | [line 25](../../src/entrypoints/ldbd-api/main.ts#L25) |
+| `tokenDigest(value: string): Buffer` | Converts ken digest. | function | internal | [line 35](../../src/entrypoints/ldbd-api/main.ts#L35) |
+| `authorized(request: IncomingMessage, expectedToken: string \| undefined): boolean` | Implements the authorized operation. | function | internal | [line 39](../../src/entrypoints/ldbd-api/main.ts#L39) |
+| `jsonBody(request: IncomingMessage): Promise<unknown>` | Implements the json body operation. | function | internal | [line 48](../../src/entrypoints/ldbd-api/main.ts#L48) |
+| `respond(response: ServerResponse, status: number, body: unknown): void` | Implements the respond operation. | function | internal | [line 65](../../src/entrypoints/ldbd-api/main.ts#L65) |
+| `shutdown(): void` | Implements the shutdown operation. | function | internal | [line 128](../../src/entrypoints/ldbd-api/main.ts#L128) |
 ## `src/entrypoints/ldbd-api/pimem-runtime.ts`
 
 | Symbol | Purpose | Kind | Visibility | Source |
 |---|---|---|---|---|
-| `sha256(value: string): string` | Implements the sha256 operation. | function | internal | [line 19](../../src/entrypoints/ldbd-api/pimem-runtime.ts#L19) |
-| `snapshotScopeId(userId: string, adds: readonly StoredAddRequest[]): string` | Implements the snapshot scope id operation. | function | internal | [line 23](../../src/entrypoints/ldbd-api/pimem-runtime.ts#L23) |
-| `sessionsForSnapshot(scopeId: string, adds: readonly StoredAddRequest[]): MemorySessionInput[]` | Implements the sessions for snapshot operation. | function | internal | [line 28](../../src/entrypoints/ldbd-api/pimem-runtime.ts#L28) |
-| `PiMemLdbdRuntime` | Implements pi mem ldbd runtime. | class | exported | [line 56](../../src/entrypoints/ldbd-api/pimem-runtime.ts#L56) |
-| `PiMemLdbdRuntime.constructor(private readonly inbox: LdbdInboxStore, private readonly store: MemoryStore, private readonly modelRuntime: PiModelRuntime)` | Creates a pi mem ldbd runtime instance. | method | public | [line 57](../../src/entrypoints/ldbd-api/pimem-runtime.ts#L57) |
-| `PiMemLdbdRuntime.search(request: LdbdSearchRequest): Promise<LdbdSearchItem[]>` | Builds an immutable user snapshot, runs PiMem, and returns cited memories in LDBD form. | method | public | [line 63](../../src/entrypoints/ldbd-api/pimem-runtime.ts#L63) |
+| `KeyedSerialExecutor` | Implements keyed serial executor. | class | internal | [line 26](../../src/entrypoints/ldbd-api/pimem-runtime.ts#L26) |
+| `KeyedSerialExecutor.run(key: string, operation: () => Promise<T>): Promise<T>` | Runs the operation. | method | public | [line 29](../../src/entrypoints/ldbd-api/pimem-runtime.ts#L29) |
+| `requestHash(request: LdbdAddRequest): string` | Implements the request hash operation. | function | internal | [line 45](../../src/entrypoints/ldbd-api/pimem-runtime.ts#L45) |
+| `timestamp(value: number \| undefined): string \| undefined` | Implements the timestamp operation. | function | internal | [line 49](../../src/entrypoints/ldbd-api/pimem-runtime.ts#L49) |
+| `PiMemLdbdApplication` | Implements pi mem ldbd application. | class | exported | [line 58](../../src/entrypoints/ldbd-api/pimem-runtime.ts#L58) |
+| `PiMemLdbdApplication.constructor(private readonly store: MemoryStore & OnlineMemoryStore, private readonly embedder: Embedder, private readonly modelRuntime: PiModelRuntime)` | Creates a pi mem ldbd application instance. | method | public | [line 61](../../src/entrypoints/ldbd-api/pimem-runtime.ts#L61) |
+| `PiMemLdbdApplication.add(request: LdbdAddRequest): Promise<"inserted" \| "unchanged">` | Implements the add operation. | method | public | [line 67](../../src/entrypoints/ldbd-api/pimem-runtime.ts#L67) |
+| `PiMemLdbdApplication.search(request: LdbdSearchRequest, _signal?: AbortSignal): Promise<LdbdSearchItem[]>` | Performs a search. | method | public | [line 104](../../src/entrypoints/ldbd-api/pimem-runtime.ts#L104) |
 ## `src/entrypoints/ldbd-api/service.ts`
 
 | Symbol | Purpose | Kind | Visibility | Source |
 |---|---|---|---|---|
-| `LdbdApiService` | Implements ldbd api service. | class | exported | [line 9](../../src/entrypoints/ldbd-api/service.ts#L9) |
-| `LdbdApiService.constructor(private readonly inbox: LdbdInboxStore, private readonly searchEngine: LdbdSearchEngine)` | Creates a ldbd api service instance. | method | public | [line 10](../../src/entrypoints/ldbd-api/service.ts#L10) |
-| `LdbdApiService.add(value: unknown): Record<string, unknown>` | Handles the synchronous LDBD Add operation. | method | public | [line 15](../../src/entrypoints/ldbd-api/service.ts#L15) |
-| `LdbdApiService.search(value: unknown): Promise<{ data: LdbdSearchItem[] }>` | Handles the LDBD Search operation through the injected search engine. | method | public | [line 27](../../src/entrypoints/ldbd-api/service.ts#L27) |
+| `LdbdConflictError` | Implements ldbd conflict error. | class | exported | [line 21](../../src/entrypoints/ldbd-api/service.ts#L21) |
+| `LdbdConflictError.constructor(message: string)` | Creates a ldbd conflict error instance. | method | public | [line 22](../../src/entrypoints/ldbd-api/service.ts#L22) |
+| `LdbdUnavailableError` | Implements ldbd unavailable error. | class | exported | [line 28](../../src/entrypoints/ldbd-api/service.ts#L28) |
+| `LdbdUnavailableError.constructor(message: string)` | Creates a ldbd unavailable error instance. | method | public | [line 29](../../src/entrypoints/ldbd-api/service.ts#L29) |
+| `onlineScopeId(userId: string): string` | Implements the online scope id operation. | function | exported | [line 35](../../src/entrypoints/ldbd-api/service.ts#L35) |
+| `LdbdApiService` | Implements ldbd api service. | class | exported | [line 39](../../src/entrypoints/ldbd-api/service.ts#L39) |
+| `LdbdApiService.constructor(private readonly application: LdbdMemoryApplication)` | Creates a ldbd api service instance. | method | public | [line 40](../../src/entrypoints/ldbd-api/service.ts#L40) |
+| `LdbdApiService.add(value: unknown): Promise<Record<string, unknown>>` | Handles the synchronous LDBD Add operation. | method | public | [line 42](../../src/entrypoints/ldbd-api/service.ts#L42) |
+| `LdbdApiService.search(value: unknown, signal?: AbortSignal): Promise<{ data: LdbdSearchItem[] }>` | Handles the LDBD Search operation through the injected search engine. | method | public | [line 54](../../src/entrypoints/ldbd-api/service.ts#L54) |
 ## `src/evidence-agent/adapters/docker/read-only-shell.ts`
 
 | Symbol | Purpose | Kind | Visibility | Source |
@@ -452,33 +453,39 @@ _No top-level functions, classes, or class methods._
 
 | Symbol | Purpose | Kind | Visibility | Source |
 |---|---|---|---|---|
-| `ftsQuery(text: string): string` | Converts free text into a bounded, escaped SQLite FTS5 OR query. | function | internal | [line 54](../../src/platform/sqlite/pimem-store.ts#L54) |
-| `compareRecords(a: MemoryRecord, b: MemoryRecord): number` | Compares records. | function | internal | [line 65](../../src/platform/sqlite/pimem-store.ts#L65) |
-| `recordFingerprint(record: MemoryRecord): string` | Implements the record fingerprint operation. | function | internal | [line 76](../../src/platform/sqlite/pimem-store.ts#L76) |
-| `isExistingTargetError(error: unknown): boolean` | Checks whether existing target error. | function | internal | [line 90](../../src/platform/sqlite/pimem-store.ts#L90) |
-| `validateEmbeddingProfile(profile: EmbeddingProfile): void` | Validates embedding profile. | function | internal | [line 98](../../src/platform/sqlite/pimem-store.ts#L98) |
-| `encodeVector(vector: readonly number[], dimensions: number): Buffer` | Implements the encode vector operation. | function | internal | [line 106](../../src/platform/sqlite/pimem-store.ts#L106) |
-| `decodeVector(value: Uint8Array, dimensions: number): Float32Array` | Implements the decode vector operation. | function | internal | [line 120](../../src/platform/sqlite/pimem-store.ts#L120) |
-| `sameBytes(left: Uint8Array, right: Uint8Array): boolean` | Implements the same bytes operation. | function | internal | [line 142](../../src/platform/sqlite/pimem-store.ts#L142) |
-| `MemoryStore` | Implements memory store. | class | exported | [line 150](../../src/platform/sqlite/pimem-store.ts#L150) |
-| `MemoryStore.constructor(databasePath: string)` | Creates a memory store instance. | method | public | [line 160](../../src/platform/sqlite/pimem-store.ts#L160) |
-| `MemoryStore.close(): void` | Closes owned resources. | method | public | [line 206](../../src/platform/sqlite/pimem-store.ts#L206) |
-| `MemoryStore.ingestScope(scopeId: string, records: MemoryRecord[]): ScopeIngestStatus` | Atomically persists one immutable memory scope and reports whether it was inserted or reused. | method | public | [line 217](../../src/platform/sqlite/pimem-store.ts#L217) |
-| `MemoryStore.ensureEvidenceFactIndex(scopeId: string): EvidenceFactIndexStatus` | Builds or validates the deterministic sidecar index for one scope. | method | public | [line 288](../../src/platform/sqlite/pimem-store.ts#L288) |
-| `MemoryStore.expandEvidenceOperator(scopeId: string, request: SearchRequest, context: EvidenceOperatorSearchContext, seedHits: readonly StoreSearchHit[]): StoreSearchHit[]` | Expands hybrid/FTS seeds through the versioned database fact index. | method | public | [line 293](../../src/platform/sqlite/pimem-store.ts#L293) |
-| `MemoryStore.searchLexical(scopeId: string, request: SearchRequest): StoreSearchHit[]` | Searches lexical. | method | public | [line 302](../../src/platform/sqlite/pimem-store.ts#L302) |
-| `MemoryStore.search(scopeId: string, request: SearchRequest): StoreSearchHit[]` | Executes filtered FTS5 search and returns finalized retrieval hits. | method | public | [line 306](../../src/platform/sqlite/pimem-store.ts#L306) |
-| `MemoryStore.read(scopeId: string, memoryIds: string[], contextBefore = 0, contextAfter = 0): MemoryRecord[]` | Reads exact memories by ID within one scope. | method | public | [line 385](../../src/platform/sqlite/pimem-store.ts#L385) |
-| `MemoryStore.getRecords(scopeId: string, memoryIds: string[]): MemoryRecord[]` | Returns records. | method | public | [line 430](../../src/platform/sqlite/pimem-store.ts#L430) |
-| `MemoryStore.listScopeRecords(scopeId: string): MemoryRecord[]` | Implements the list scope records operation. | method | public | [line 447](../../src/platform/sqlite/pimem-store.ts#L447) |
-| `MemoryStore.assertEmbeddingProfileConsistent(profile: EmbeddingProfile): void` | Validates embedding profile consistent and throws when invalid. | method | private | [line 461](../../src/platform/sqlite/pimem-store.ts#L461) |
-| `MemoryStore.getEmbeddingIndexStatus(scopeId: string, profile: EmbeddingProfile): EmbeddingIndexStatus` | Returns embedding index status. | method | public | [line 487](../../src/platform/sqlite/pimem-store.ts#L487) |
-| `MemoryStore.listMissingEmbeddingRecords(scopeId: string, profile: EmbeddingProfile): MemoryRecord[]` | Implements the list missing embedding records operation. | method | public | [line 542](../../src/platform/sqlite/pimem-store.ts#L542) |
-| `MemoryStore.storeEmbeddingBatch(records: readonly MemoryRecord[], profile: EmbeddingProfile, vectors: readonly (readonly number[])[]): StoreEmbeddingBatchResult` | Implements the store embedding batch operation. | method | public | [line 561](../../src/platform/sqlite/pimem-store.ts#L561) |
-| `MemoryStore.listStoredEmbeddings(scopeId: string, profile: EmbeddingProfile, request: Omit<SearchRequest, "queries" \| "limit"> = {}): StoredEmbeddingRecord[]` | Implements the list stored embeddings operation. | method | public | [line 648](../../src/platform/sqlite/pimem-store.ts#L648) |
-| `MemoryStore.findMentionedMemoryIds(scopeId: string, text: string): string[]` | Implements the find mentioned memory ids operation. | method | public | [line 700](../../src/platform/sqlite/pimem-store.ts#L700) |
-| `MemoryStore.exportScope(scopeId: string, exportRoot: string): Promise<ScopeExport>` | Writes a sanitized, permission-restricted filesystem export of one scope. | method | public | [line 706](../../src/platform/sqlite/pimem-store.ts#L706) |
-| `MemoryStore.create(databasePath: string): Promise<MemoryStore>` | Implements the create operation. | method | public | [line 783](../../src/platform/sqlite/pimem-store.ts#L783) |
+| `ftsQuery(text: string): string` | Converts free text into a bounded, escaped SQLite FTS5 OR query. | function | internal | [line 72](../../src/platform/sqlite/pimem-store.ts#L72) |
+| `compareRecords(a: MemoryRecord, b: MemoryRecord): number` | Compares records. | function | internal | [line 83](../../src/platform/sqlite/pimem-store.ts#L83) |
+| `recordFingerprint(record: MemoryRecord): string` | Implements the record fingerprint operation. | function | internal | [line 94](../../src/platform/sqlite/pimem-store.ts#L94) |
+| `isExistingTargetError(error: unknown): boolean` | Checks whether existing target error. | function | internal | [line 108](../../src/platform/sqlite/pimem-store.ts#L108) |
+| `validateEmbeddingProfile(profile: EmbeddingProfile): void` | Validates embedding profile. | function | internal | [line 116](../../src/platform/sqlite/pimem-store.ts#L116) |
+| `encodeVector(vector: readonly number[], dimensions: number): Buffer` | Implements the encode vector operation. | function | internal | [line 124](../../src/platform/sqlite/pimem-store.ts#L124) |
+| `decodeVector(value: Uint8Array, dimensions: number): Float32Array` | Implements the decode vector operation. | function | internal | [line 138](../../src/platform/sqlite/pimem-store.ts#L138) |
+| `sameBytes(left: Uint8Array, right: Uint8Array): boolean` | Implements the same bytes operation. | function | internal | [line 160](../../src/platform/sqlite/pimem-store.ts#L160) |
+| `MemoryStore` | Implements memory store. | class | exported | [line 168](../../src/platform/sqlite/pimem-store.ts#L168) |
+| `MemoryStore.constructor(databasePath: string)` | Creates a memory store instance. | method | public | [line 178](../../src/platform/sqlite/pimem-store.ts#L178) |
+| `MemoryStore.close(): void` | Closes owned resources. | method | public | [line 249](../../src/platform/sqlite/pimem-store.ts#L249) |
+| `MemoryStore.ingestScope(scopeId: string, records: MemoryRecord[]): ScopeIngestStatus` | Atomically persists one immutable memory scope and reports whether it was inserted or reused. | method | public | [line 260](../../src/platform/sqlite/pimem-store.ts#L260) |
+| `MemoryStore.appendMemoryRequest(request: AppendMemoryRequest): AppendMemoryResult` | Appends immutable source messages while the online scope is ingesting. | method | public | [line 331](../../src/platform/sqlite/pimem-store.ts#L331) |
+| `MemoryStore.hasPendingAppendRequests(scopeId: string): boolean` | Checks whether pending append requests. | method | public | [line 473](../../src/platform/sqlite/pimem-store.ts#L473) |
+| `MemoryStore.markAppendRequestComplete(requestId: string, requestHash: string): void` | Implements the mark append request complete operation. | method | public | [line 480](../../src/platform/sqlite/pimem-store.ts#L480) |
+| `MemoryStore.getOnlineScopeState(scopeId: string): OnlineScopeState \| undefined` | Returns online scope state. | method | public | [line 490](../../src/platform/sqlite/pimem-store.ts#L490) |
+| `MemoryStore.sealOnlineScope(scopeId: string): OnlineScopeState` | Implements the seal online scope operation. | method | public | [line 497](../../src/platform/sqlite/pimem-store.ts#L497) |
+| `MemoryStore.recordsInTurnRange(scopeId: string, sessionId: string, startTurnIndex: number, count: number): MemoryRecord[]` | Implements the records in turn range operation. | method | private | [line 519](../../src/platform/sqlite/pimem-store.ts#L519) |
+| `MemoryStore.ensureEvidenceFactIndex(scopeId: string): EvidenceFactIndexStatus` | Builds or validates the deterministic sidecar index for one scope. | method | public | [line 545](../../src/platform/sqlite/pimem-store.ts#L545) |
+| `MemoryStore.expandEvidenceOperator(scopeId: string, request: SearchRequest, context: EvidenceOperatorSearchContext, seedHits: readonly StoreSearchHit[]): StoreSearchHit[]` | Expands hybrid/FTS seeds through the versioned database fact index. | method | public | [line 550](../../src/platform/sqlite/pimem-store.ts#L550) |
+| `MemoryStore.searchLexical(scopeId: string, request: SearchRequest): StoreSearchHit[]` | Searches lexical. | method | public | [line 559](../../src/platform/sqlite/pimem-store.ts#L559) |
+| `MemoryStore.search(scopeId: string, request: SearchRequest): StoreSearchHit[]` | Executes filtered FTS5 search and returns finalized retrieval hits. | method | public | [line 563](../../src/platform/sqlite/pimem-store.ts#L563) |
+| `MemoryStore.read(scopeId: string, memoryIds: string[], contextBefore = 0, contextAfter = 0): MemoryRecord[]` | Reads exact memories by ID within one scope. | method | public | [line 642](../../src/platform/sqlite/pimem-store.ts#L642) |
+| `MemoryStore.getRecords(scopeId: string, memoryIds: string[]): MemoryRecord[]` | Returns records. | method | public | [line 687](../../src/platform/sqlite/pimem-store.ts#L687) |
+| `MemoryStore.listScopeRecords(scopeId: string): MemoryRecord[]` | Implements the list scope records operation. | method | public | [line 704](../../src/platform/sqlite/pimem-store.ts#L704) |
+| `MemoryStore.assertEmbeddingProfileConsistent(profile: EmbeddingProfile): void` | Validates embedding profile consistent and throws when invalid. | method | private | [line 718](../../src/platform/sqlite/pimem-store.ts#L718) |
+| `MemoryStore.getEmbeddingIndexStatus(scopeId: string, profile: EmbeddingProfile): EmbeddingIndexStatus` | Returns embedding index status. | method | public | [line 744](../../src/platform/sqlite/pimem-store.ts#L744) |
+| `MemoryStore.listMissingEmbeddingRecords(scopeId: string, profile: EmbeddingProfile): MemoryRecord[]` | Implements the list missing embedding records operation. | method | public | [line 799](../../src/platform/sqlite/pimem-store.ts#L799) |
+| `MemoryStore.storeEmbeddingBatch(records: readonly MemoryRecord[], profile: EmbeddingProfile, vectors: readonly (readonly number[])[]): StoreEmbeddingBatchResult` | Implements the store embedding batch operation. | method | public | [line 818](../../src/platform/sqlite/pimem-store.ts#L818) |
+| `MemoryStore.listStoredEmbeddings(scopeId: string, profile: EmbeddingProfile, request: Omit<SearchRequest, "queries" \| "limit"> = {}): StoredEmbeddingRecord[]` | Implements the list stored embeddings operation. | method | public | [line 905](../../src/platform/sqlite/pimem-store.ts#L905) |
+| `MemoryStore.findMentionedMemoryIds(scopeId: string, text: string): string[]` | Implements the find mentioned memory ids operation. | method | public | [line 957](../../src/platform/sqlite/pimem-store.ts#L957) |
+| `MemoryStore.exportScope(scopeId: string, exportRoot: string): Promise<ScopeExport>` | Writes a sanitized, permission-restricted filesystem export of one scope. | method | public | [line 963](../../src/platform/sqlite/pimem-store.ts#L963) |
+| `MemoryStore.create(databasePath: string): Promise<MemoryStore>` | Implements the create operation. | method | public | [line 1040](../../src/platform/sqlite/pimem-store.ts#L1040) |
 ## `src/protected-env.ts`
 
 _No top-level functions, classes, or class methods._

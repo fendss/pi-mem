@@ -4,9 +4,15 @@ import { createServer, type IncomingMessage, type ServerResponse } from "node:ht
 import { join, resolve } from "node:path";
 import { loadPiModelRuntime } from "../../platform/pi/load-model-runtime.js";
 import { MemoryStore } from "../../platform/sqlite/pimem-store.js";
-import { LdbdInboxStore } from "./inbox-store.js";
-import { PiMemLdbdRuntime } from "./pimem-runtime.js";
-import { LdbdApiService } from "./service.js";
+import { AsyncRequestGate } from "../../platform/concurrency/request-gate.js";
+import { OpenAICompatibleEmbedder } from "../../retrieval/adapters/openai/openai-compatible-embedder.js";
+import { PiMemLdbdApplication } from "./pimem-runtime.js";
+import {
+  LdbdApiService,
+  LdbdConflictError,
+  LdbdContractError,
+  LdbdUnavailableError,
+} from "./service.js";
 
 const MAX_BODY_BYTES = 2 * 1024 * 1024;
 
@@ -66,8 +72,8 @@ function respond(response: ServerResponse, status: number, body: unknown): void 
 
 const dataRoot = resolve(process.env.PIMEM_DATA_DIR?.trim() || "./data/ldbd-api");
 await mkdir(dataRoot, { recursive: true });
-const inbox = new LdbdInboxStore(join(dataRoot, "inbox.sqlite"));
 const store = await MemoryStore.create(join(dataRoot, "memory.sqlite"));
+const embedder = OpenAICompatibleEmbedder.fromEnvironment();
 const modelRuntime = await loadPiModelRuntime({
   agentDir: resolve(process.env.PIMEM_AGENT_DIR?.trim() || "./deploy/agent-config"),
   providerId: process.env.PIMEM_PROVIDER?.trim() || "pimem-openai",
@@ -77,7 +83,11 @@ const modelRuntime = await loadPiModelRuntime({
   apiKeyEnv: "OPENAI_API_KEY",
   transport: process.env.PIMEM_TRANSPORT?.trim() === "sse" ? "sse" : "non-stream",
 });
-const service = new LdbdApiService(inbox, new PiMemLdbdRuntime(inbox, store, modelRuntime));
+const service = new LdbdApiService(
+  new PiMemLdbdApplication(store, embedder, modelRuntime),
+);
+const addGate = new AsyncRequestGate(8, 1_000);
+const searchGate = new AsyncRequestGate(16, 1_000);
 const expectedToken = process.env.PIMEM_API_TOKEN?.trim() || undefined;
 const port = integerEnvironment("PORT", 8787);
 const host = process.env.HOST?.trim() || "0.0.0.0";
@@ -95,18 +105,21 @@ const server = createServer(async (request, response) => {
       return;
     }
     if (request.method === "POST" && path === "/v1/memories/add") {
-      respond(response, 200, service.add(await jsonBody(request)));
+      respond(response, 200, await addGate.run(async () => service.add(await jsonBody(request))));
       return;
     }
     if (request.method === "POST" && path === "/v1/memories/search") {
-      respond(response, 200, await service.search(await jsonBody(request)));
+      respond(response, 200, await searchGate.run(async () => service.search(await jsonBody(request))));
       return;
     }
     respond(response, 404, { error: "Not found" });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unknown error";
-    const clientError = /must|required|too long|exceeds|No memories|already exists/iu.test(message);
-    respond(response, clientError ? 422 : 500, { error: message });
+    const status =
+      error instanceof LdbdContractError ? 422 :
+      error instanceof LdbdConflictError ? 409 :
+      error instanceof LdbdUnavailableError ? 503 : 500;
+    respond(response, status, { error: message });
   } finally {
     process.stdout.write(`${JSON.stringify({ method: request.method, path, status: response.statusCode, duration_ms: Date.now() - started })}\n`);
   }
@@ -114,7 +127,6 @@ const server = createServer(async (request, response) => {
 
 const shutdown = (): void => {
   server.close(() => {
-    inbox.close();
     store.close();
     process.exit(0);
   });
