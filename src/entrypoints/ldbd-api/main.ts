@@ -79,7 +79,9 @@ const modelRuntime = await loadPiModelRuntime({
   providerId: process.env.PIMEM_PROVIDER?.trim() || "pimem-openai",
   modelId: process.env.PIMEM_MODEL?.trim() || "gpt-4o-mini",
   thinkingLevel: "off",
-  baseUrl: requiredEnvironment("OPENAI_API_BASE"),
+  baseUrl:
+    process.env.OPENAI_API_BASE?.trim() ||
+    requiredEnvironment("PIMEM_AGENT_BASE_URL"),
   apiKeyEnv: "OPENAI_API_KEY",
   transport: process.env.PIMEM_TRANSPORT?.trim() === "sse" ? "sse" : "non-stream",
 });

@@ -196,7 +196,7 @@ _No top-level functions, classes, or class methods._
 | `authorized(request: IncomingMessage, expectedToken: string \| undefined): boolean` | Implements the authorized operation. | function | internal | [line 39](../../src/entrypoints/ldbd-api/main.ts#L39) |
 | `jsonBody(request: IncomingMessage): Promise<unknown>` | Implements the json body operation. | function | internal | [line 48](../../src/entrypoints/ldbd-api/main.ts#L48) |
 | `respond(response: ServerResponse, status: number, body: unknown): void` | Implements the respond operation. | function | internal | [line 65](../../src/entrypoints/ldbd-api/main.ts#L65) |
-| `shutdown(): void` | Implements the shutdown operation. | function | internal | [line 128](../../src/entrypoints/ldbd-api/main.ts#L128) |
+| `shutdown(): void` | Implements the shutdown operation. | function | internal | [line 130](../../src/entrypoints/ldbd-api/main.ts#L130) |
 ## `src/entrypoints/ldbd-api/pimem-runtime.ts`
 
 | Symbol | Purpose | Kind | Visibility | Source |
