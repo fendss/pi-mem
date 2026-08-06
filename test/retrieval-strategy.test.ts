@@ -20,7 +20,6 @@ describe("memory retrieval strategy", () => {
     ).toEqual({
       cleanedQuestion: "How long before my current role did I leave?",
       defaultLimit: 20,
-      defaultMaxPerSession: 4,
       defaultOrder: "relevance",
       evidenceFocus: ["knowledge-update", "temporal"],
     });
@@ -33,6 +32,7 @@ describe("memory retrieval strategy", () => {
 
     expect(rendered).toContain("Question-shaped retrieval attention");
     expect(rendered).toContain("query shape, filters, ordering, and search depth remain adaptive");
+    expect(rendered).toContain("no hard per-session candidate cap");
     expect(rendered).toContain("temporal attention");
     expect(rendered).toContain("relation-bearing neighbors");
     expect(rendered).toContain("exact-entity hard negatives");

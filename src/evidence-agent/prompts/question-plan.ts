@@ -8,7 +8,6 @@ export type EvidenceFocus =
 export interface MemoryQuestionGuidance {
   cleanedQuestion: string;
   defaultLimit: 20;
-  defaultMaxPerSession: 4;
   defaultOrder: "relevance";
   evidenceFocus: EvidenceFocus[];
 }
@@ -49,7 +48,6 @@ export function planMemoryQuestion(question: string): MemoryQuestionGuidance {
   return {
     cleanedQuestion,
     defaultLimit: 20,
-    defaultMaxPerSession: 4,
     defaultOrder: "relevance",
     evidenceFocus: inferEvidenceFocus(cleanedQuestion),
   };
@@ -73,7 +71,7 @@ export function renderMemoryQuestionPlan(question: string): string {
   return [
     "Question-shaped retrieval attention:",
     `- suggested broad starting query: ${JSON.stringify(guidance.cleanedQuestion)}`,
-    `- starting defaults: limit ${guidance.defaultLimit}, ${guidance.defaultOrder} order, maxPerSession ${guidance.defaultMaxPerSession}`,
+    `- starting defaults: limit ${guidance.defaultLimit}, ${guidance.defaultOrder} order, no hard per-session candidate cap`,
     "- inspect the first result before expanding; query shape, filters, ordering, and search depth remain adaptive",
     ...guidance.evidenceFocus.map((focus) => `- ${FOCUS_GUIDANCE[focus]}`),
     "- preserve direct source roles and check exact-entity hard negatives when similar memories could transfer a value incorrectly",

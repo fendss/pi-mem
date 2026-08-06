@@ -136,11 +136,41 @@ describe("PiMem tools", () => {
       limit: 40,
       roles: ["user"],
       order: "chronological",
-      maxPerSession: 4,
     });
     expect(JSON.stringify(result.content)).toContain(
       "2 days before question",
     );
+  });
+
+  it("applies a per-session cap only when the caller configures one", async () => {
+    const searched = record("m-capped", 0);
+    let observed: SearchRequest | undefined;
+    const store: MemoryToolStore = {
+      search(_scopeId, request) {
+        observed = request;
+        return [{
+          record: searched,
+          query: request.queries[0] ?? "",
+          retriever: "fts5",
+          rank: 1,
+          score: 1,
+          preview: searched.content,
+        }];
+      },
+      read() {
+        return [searched];
+      },
+    };
+    const tools = createPiMemTools({
+      store,
+      scopeId: "scope-1",
+      ledger: new MemoryLedger("scope-1"),
+      searchDefaults: { limit: 20, order: "relevance", maxPerSession: 4 },
+    });
+
+    await tools.search.execute("search-capped", { queries: ["source"] });
+
+    expect(observed).toMatchObject({ maxPerSession: 4 });
   });
 
   it("awaits asynchronous retrieval without changing the search schema", async () => {

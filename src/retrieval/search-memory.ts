@@ -116,6 +116,7 @@ async function coverageHits(
   scopeId: string,
   queries: readonly string[],
   limit: number,
+  maxPerSession: number | undefined,
   signal?: AbortSignal,
 ): Promise<RetrievalHit[]> {
   const grouped = new Map<string, {
@@ -128,7 +129,7 @@ async function coverageHits(
       queries: [query],
       limit: Math.min(100, Math.max(20, limit * 2)),
       order: "relevance",
-      maxPerSession: 4,
+      ...(maxPerSession === undefined ? {} : { maxPerSession }),
     }, signal);
     for (const hit of hits) {
       const entry = grouped.get(hit.record.sessionId) ?? {
@@ -157,7 +158,7 @@ async function coverageHits(
       selected.set(hit.record.memoryId, hit);
       sessionCount += 1;
       if (selected.size >= limit) return [...selected.values()];
-      if (sessionCount >= 4) break;
+      if (maxPerSession !== undefined && sessionCount >= maxPerSession) break;
     }
   }
   return [...selected.values()];
@@ -171,11 +172,12 @@ export function createSearchMemory(options: SearchMemoryOptions): (
   return async (params, signal) => {
     const operator: SearchOperator = params.operator ?? "hybrid";
     const limit = params.limit ?? options.searchDefaults?.limit ?? 20;
+    const maxPerSession = options.searchDefaults?.maxPerSession;
     let request = makeSearchRequest({
       queries: params.queries,
       limit,
       order: "relevance",
-      maxPerSession: 4,
+      ...(maxPerSession === undefined ? {} : { maxPerSession }),
     });
     const repeatedQueries = request.queries.filter((query) =>
       seenQueryFingerprints.has(searchQueryFingerprint(query))
@@ -195,13 +197,14 @@ export function createSearchMemory(options: SearchMemoryOptions): (
         queries: request.queries,
         limit: Math.max(40, limit),
         order: "relevance",
-        maxPerSession: 4,
+        ...(maxPerSession === undefined ? {} : { maxPerSession }),
       });
       hits = await coverageHits(
         options.store,
         options.scopeId,
         request.queries,
         request.limit ?? 40,
+        maxPerSession,
         signal,
       );
     } else if (operator === "history") {
@@ -210,7 +213,7 @@ export function createSearchMemory(options: SearchMemoryOptions): (
         limit: Math.max(40, limit),
         roles: ["user"],
         order: "chronological",
-        maxPerSession: 4,
+        ...(maxPerSession === undefined ? {} : { maxPerSession }),
       });
       hits = await options.store.search(options.scopeId, request, signal);
     } else if (operator === "temporal" || operator === "numeric") {

@@ -274,10 +274,10 @@ _No top-level functions, classes, or class methods._
 
 | Symbol | Purpose | Kind | Visibility | Source |
 |---|---|---|---|---|
-| `cleanMemoryQuestion(question: string): string` | Implements the clean memory question operation. | function | exported | [line 19](../../src/evidence-agent/prompts/question-plan.ts#L19) |
-| `inferEvidenceFocus(question: string): EvidenceFocus[]` | Implements the infer evidence focus operation. | function | internal | [line 27](../../src/evidence-agent/prompts/question-plan.ts#L27) |
-| `planMemoryQuestion(question: string): MemoryQuestionGuidance` | Implements the plan memory question operation. | function | exported | [line 47](../../src/evidence-agent/prompts/question-plan.ts#L47) |
-| `renderMemoryQuestionPlan(question: string): string` | Renders memory question plan. | function | exported | [line 71](../../src/evidence-agent/prompts/question-plan.ts#L71) |
+| `cleanMemoryQuestion(question: string): string` | Implements the clean memory question operation. | function | exported | [line 18](../../src/evidence-agent/prompts/question-plan.ts#L18) |
+| `inferEvidenceFocus(question: string): EvidenceFocus[]` | Implements the infer evidence focus operation. | function | internal | [line 26](../../src/evidence-agent/prompts/question-plan.ts#L26) |
+| `planMemoryQuestion(question: string): MemoryQuestionGuidance` | Implements the plan memory question operation. | function | exported | [line 46](../../src/evidence-agent/prompts/question-plan.ts#L46) |
+| `renderMemoryQuestionPlan(question: string): string` | Renders memory question plan. | function | exported | [line 69](../../src/evidence-agent/prompts/question-plan.ts#L69) |
 ## `src/evidence-agent/prompts/retrieval-guidance.ts`
 
 _No top-level functions, classes, or class methods._
@@ -591,8 +591,8 @@ _No top-level functions, classes, or class methods._
 | `makeSearchRequest(params: { queries: string[]; limit?: number; sessionIds?: string[]; roles?: MemoryRecord["role"][]; after?: string; before?: string; order?: SearchOrder; maxPerSession?: number; }, defaults: Pick<SearchRequest, "limit" \| "order" \| "maxPerSession"> = {}): SearchRequest` | Builds a normalized retrieval request with stable default limits and ordering. | function | internal | [line 63](../../src/retrieval/search-memory.ts#L63) |
 | `searchQueryFingerprint(query: string): string` | Creates a canonical fingerprint used to detect repeated queries. | function | internal | [line 92](../../src/retrieval/search-memory.ts#L92) |
 | `mergeOperatorHits(preferred: readonly RetrievalHit[], fallback: readonly RetrievalHit[], limit: number): RetrievalHit[]` | Merges operator-preferred and fallback hits without duplicate memories. | function | internal | [line 101](../../src/retrieval/search-memory.ts#L101) |
-| `coverageHits(store: MemoryToolStore, scopeId: string, queries: readonly string[], limit: number, signal?: AbortSignal): Promise<RetrievalHit[]>` | Runs each query separately and merges results to preserve multi-query coverage. | function | internal | [line 114](../../src/retrieval/search-memory.ts#L114) |
-| `createSearchMemory(options: SearchMemoryOptions): ( params: { operator?: SearchOperator; queries: string[]; limit?: number }, signal?: AbortSignal, ) => Promise<SearchMemoryResult>` | Creates the search orchestrator for normalization, routing, coverage, expansion, and hit merging. | function | exported | [line 166](../../src/retrieval/search-memory.ts#L166) |
+| `coverageHits(store: MemoryToolStore, scopeId: string, queries: readonly string[], limit: number, maxPerSession: number \| undefined, signal?: AbortSignal): Promise<RetrievalHit[]>` | Runs each query separately and merges results to preserve multi-query coverage. | function | internal | [line 114](../../src/retrieval/search-memory.ts#L114) |
+| `createSearchMemory(options: SearchMemoryOptions): ( params: { operator?: SearchOperator; queries: string[]; limit?: number }, signal?: AbortSignal, ) => Promise<SearchMemoryResult>` | Creates the search orchestrator for normalization, routing, coverage, expansion, and hit merging. | function | exported | [line 167](../../src/retrieval/search-memory.ts#L167) |
 ## `src/retrieval/temporal-annotation.ts`
 
 | Symbol | Purpose | Kind | Visibility | Source |

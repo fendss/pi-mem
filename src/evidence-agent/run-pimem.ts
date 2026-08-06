@@ -192,7 +192,6 @@ export async function runPiMem(
     searchDefaults: {
       limit: 20,
       order: "relevance",
-      maxPerSession: 4,
     },
     ...(options.scopePath === undefined
       ? {}
