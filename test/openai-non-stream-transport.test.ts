@@ -226,4 +226,46 @@ describe("OpenAI non-stream transport", () => {
       await close(server);
     }
   });
+
+  it("fails closed when the provider substitutes the requested model", async () => {
+    const server = createServer((_request, response) => {
+      response.writeHead(200, { "content-type": "application/json" });
+      response.end(JSON.stringify({
+        id: "chatcmpl-substituted",
+        model: "gpt-4.1-mini-2025-04-14",
+        choices: [{ finish_reason: "stop", message: { content: "No." } }],
+      }));
+    });
+    const baseUrl = await listen(server);
+    try {
+      const model: Model<"openai-completions"> = {
+        id: "gpt-4o-mini",
+        name: "GPT-4o mini",
+        api: "openai-completions",
+        provider: "test-provider",
+        baseUrl,
+        reasoning: false,
+        input: ["text"],
+        cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+        contextWindow: 128_000,
+        maxTokens: 16_384,
+      };
+      const stream = await openAINonStreamingStreamFn(model, {
+        systemPrompt: "Use memory.",
+        messages: [{ role: "user", content: "Question", timestamp: 1 }],
+        tools: [],
+      }, { apiKey: "unit-test-key" });
+      const events = [];
+      for await (const event of stream) events.push(event);
+      const result = await stream.result();
+
+      expect(events.at(-1)?.type).toBe("error");
+      expect(result.stopReason).toBe("error");
+      expect(result.errorMessage).toBe(
+        "Provider substituted model gpt-4.1-mini-2025-04-14; expected gpt-4o-mini",
+      );
+    } finally {
+      await close(server);
+    }
+  });
 });

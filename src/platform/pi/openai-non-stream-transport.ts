@@ -455,6 +455,15 @@ export const openAINonStreamingStreamFn: StreamFn = (
         parsed,
         "chat completion response",
       ) as ChatCompletionResponse;
+      if (
+        typeof completion.model !== "string" ||
+        (completion.model !== model.id &&
+          !completion.model.startsWith(`${model.id}-`))
+      ) {
+        throw new Error(
+          `Provider substituted model ${String(completion.model)}; expected ${model.id}`,
+        );
+      }
       if (!Array.isArray(completion.choices) || completion.choices.length === 0) {
         throw new Error("Chat completion response contains no choices");
       }
