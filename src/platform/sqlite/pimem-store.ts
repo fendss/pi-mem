@@ -500,14 +500,27 @@ export class MemoryStore {
       const row = this.db.prepare(`
         SELECT state FROM online_memory_scopes WHERE scope_id = ?
       `).get(scopeId) as unknown as { state: OnlineScopeState } | undefined;
-      if (!row) throw new Error(`No memories have been added for scope: ${scopeId}`);
       if (this.hasPendingAppendRequests(scopeId)) {
         throw new Error(`Memory ingestion is incomplete for scope: ${scopeId}`);
       }
-      this.db.prepare(`
-        UPDATE online_memory_scopes SET state = 'sealed', updated_at_ms = ?
-        WHERE scope_id = ?
-      `).run(Date.now(), scopeId);
+      if (!row) {
+        const count = this.db.prepare(`
+          SELECT COUNT(*) AS count FROM memories WHERE scope_id = ?
+        `).get(scopeId) as unknown as { count: number };
+        if (count.count === 0) {
+          throw new Error(`No memories have been added for scope: ${scopeId}`);
+        }
+        // Existing production scopes predate this lifecycle sidecar and are already sealed.
+        this.db.prepare(`
+          INSERT INTO online_memory_scopes (scope_id, state, updated_at_ms)
+          VALUES (?, 'sealed', ?)
+        `).run(scopeId, Date.now());
+      } else {
+        this.db.prepare(`
+          UPDATE online_memory_scopes SET state = 'sealed', updated_at_ms = ?
+          WHERE scope_id = ?
+        `).run(Date.now(), scopeId);
+      }
       this.db.exec("COMMIT");
       return "sealed";
     } catch (error) {

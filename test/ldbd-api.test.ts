@@ -89,6 +89,27 @@ describe("online memory persistence", () => {
     store.close();
   });
 
+  it("adopts a legacy immutable scope as sealed without rewriting memories", async () => {
+    const store = await memoryStore();
+    const scopeId = onlineScopeId("legacy-user");
+    store.ingestScope(scopeId, [{
+      memoryId: "legacy-memory",
+      scopeId,
+      sessionId: "legacy-session",
+      turnIndex: 0,
+      role: "user",
+      content: "legacy content",
+      contentHash: sha256("legacy content"),
+      metadata: {},
+    }]);
+    expect(store.getOnlineScopeState(scopeId)).toBeUndefined();
+    expect(store.sealOnlineScope(scopeId)).toBe("sealed");
+    expect(store.getOnlineScopeState(scopeId)).toBe("sealed");
+    expect(store.listScopeRecords(scopeId).map((record) => record.content))
+      .toEqual(["legacy content"]);
+    store.close();
+  });
+
   it("rejects request ID conflicts and sealing with pending indexing", async () => {
     const store = await memoryStore();
     const scopeId = onlineScopeId("user-1");
