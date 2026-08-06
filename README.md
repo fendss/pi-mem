@@ -18,6 +18,12 @@ caller-owned benchmark answer adapter
 
 PiMem stops at the cited evidence package. It does not own answer formatting or a universal answer prompt. Each benchmark adapter supplies its own answer protocol after retrieval. Ingest never invokes a generative model.
 
+## Architecture navigation
+
+- [`docs/architecture/README.md`](docs/architecture/README.md) explains the bounded contexts and dependency direction.
+- [`docs/architecture/file-catalog.md`](docs/architecture/file-catalog.md) states what every source file owns.
+- [`docs/architecture/code-catalog.md`](docs/architecture/code-catalog.md) states what every function, class, and class method does.
+
 ## Version 1.0
 
 - deterministic TypeScript ingest and an immutable SQLite source store;
@@ -219,7 +225,10 @@ accepted by LongMemEval's `longmemeval_evaluate.py`.
 
 Run commands read Pi model configuration from `~/.pi/agent` by default.
 `--agent-dir`, `--provider`, `--model`, and `--thinking-level` can select another
-preconfigured model without mutating global settings. Provider credentials must
+preconfigured model without mutating global settings. Model calls default to
+`--transport sse`; use `--transport non-stream` for an OpenAI-compatible
+provider whose JSON Chat Completions endpoint is available but SSE is not.
+The selected transport is recorded in benchmark artifacts. Provider credentials must
 remain trusted `!command` entries (for example, a command that reads a
 process-only environment variable); CLI flags never accept or print API keys.
 

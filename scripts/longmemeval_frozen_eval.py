@@ -36,47 +36,15 @@ ANSWER_PROMPT = """You are asked to answer a question based on your memories of 
 </instructions>
 
 <memories>
-Memories for user {{speaker_1_name}}:
-
-{{speaker_1_memories}}
-
-Memories for user {{speaker_2_name}}:
-
-{{speaker_2_memories}}
+{{memories}}
 </memories>
 
 Question: {{question}}
 Answer with the shortest correct phrase or sentence. No preamble, no fluff:"""
 
-SELECTION_V3_ANSWER_PROMPT = """You are asked to answer a question based on your memories of a conversation.
-
-<instructions>
-1. Use only the provided source memories. Prefer the memory that answers the question most directly.
-2. The memories are episodic raw observations. Reason about what they imply; the answer need not appear verbatim.
-3. The question may contain typos. Match it to the most relevant exact entity even if wording differs.
-4. When multiple answers are possible, list all supported answers, not just the first.
-5. For counts or time intervals, enumerate carefully before answering.
-6. Preserve specific names, titles, places, and labels from the memories.
-7. Convert relative times into dates, months, or years only when the memory timestamp and question require it. Keep week-based expressions relative.
-8. If memories conflict, prefer the most recent supported memory only for current-state questions.
-9. For list questions, include all required items and no extras.
-10. Keep the final answer minimal. Do not add explanation, background, or extra dates unless needed for correctness.
-</instructions>
-
-<retrieval_package>
-{{retrieval_package}}
-</retrieval_package>
-
-<memories role="user">
-{{user_memories}}
-</memories>
-
-<memories role="assistant">
-{{assistant_memories}}
-</memories>
-
-Question: {{question}}
-Answer with the shortest correct phrase or sentence. No preamble, no fluff:"""
+SELECTION_V3_ANSWER_PROMPT = ANSWER_PROMPT
+SELECTION_V3_PAYLOAD_VERSION = "ldbd-retrieval-package-v1"
+EXACT_SEARCH_PAYLOAD_VERSION = "ldbd-exact-searched-memories-v1"
 
 JUDGE_PROMPT = """Your task is to label an answer as \u2019CORRECT\u2019 or \u2019WRONG\u2019 given:
 (1) a question,
@@ -92,7 +60,7 @@ TIME (strict granularity; relative form equivalence; no calendar math)
   Do not answer a gold at a different time unit \u2014 even if the numeric value overlaps. Do not answer a month-level gold with a specific day, nor a year with a specific month/day/hour, etc.
   (e.g., gold = "July 26, 2019" [DAY]; generated = "2019-07-26 08:09:17" [includes Second] \u2192 WRONG)
 - Do NOT convert relative \u2194 absolute. If the gold uses a relative time expression, the generated answer must also use a relative form (or a clear paraphrase of that same form), not a computed date/range.
-- Treat harmless modifiers in relative forms (e.g., "the/last/previous/just prior") as equivalent when both the anchor date and the time unit are the same.
+- Treat harmless modifiers in relative forms (e.g., “the/last/previous/just prior”) as equivalent when both the anchor date and the time unit are the same.
 
 - Lists of DISTINCT facts:
 - If the gold answer lists multiple distinct facts (joined by "and", commas, or slashes), the generated answer must cover **all** of them.
@@ -349,11 +317,24 @@ def selection_v3_answer_prompt(record: dict[str, Any]) -> str:
             f"reference memoryId={citation.get('memoryId')}: "
             f"{citation.get('supports')}"
         )
+    memories = "\n".join(
+        [
+            "<retrieval_package>",
+            "\n".join(package_lines),
+            "</retrieval_package>",
+            "",
+            '<source_memories role="user">',
+            user_memories or "(none selected)",
+            "</source_memories>",
+            "",
+            '<source_memories role="assistant">',
+            assistant_memories or "(none selected)",
+            "</source_memories>",
+        ]
+    )
     return (
         SELECTION_V3_ANSWER_PROMPT
-        .replace("{{retrieval_package}}", "\n".join(package_lines))
-        .replace("{{user_memories}}", user_memories or "(none selected)")
-        .replace("{{assistant_memories}}", assistant_memories or "(none selected)")
+        .replace("{{memories}}", memories or "(none selected)")
         .replace("{{question}}", record["question"])
     )
 
@@ -361,26 +342,11 @@ def selection_v3_answer_prompt(record: dict[str, Any]) -> str:
 def answer_prompt(record: dict[str, Any], mode: str) -> str:
     if mode == "selection-aware-v3":
         return selection_v3_answer_prompt(record)
-    speaker_1 = record["speaker_1_name"]
-    speaker_2 = record["speaker_2_name"]
-    first: list[str] = []
-    second: list[str] = []
-    memories = record["searched_memories"]
-    for memory in memories:
-        metadata = memory.get("metadata") or {}
-        session = metadata.get("session") or {}
-        source_speaker = (metadata.get("turn") or {}).get("sourceSpeaker")
-        role = memory.get("role")
-        rendered = render_memory(memory)
-        if source_speaker == session.get("speakerA") or role == "user":
-            first.append(rendered)
-        else:
-            second.append(rendered)
+    memories = "\n".join(
+        render_memory(memory) for memory in record["searched_memories"]
+    )
     return (
-        ANSWER_PROMPT.replace("{{speaker_1_name}}", speaker_1)
-        .replace("{{speaker_1_memories}}", "\n".join(first) or "(none retrieved)")
-        .replace("{{speaker_2_name}}", speaker_2)
-        .replace("{{speaker_2_memories}}", "\n".join(second) or "(none retrieved)")
+        ANSWER_PROMPT.replace("{{memories}}", memories or "(none retrieved)")
         .replace("{{question}}", record["question"])
     )
 
@@ -494,6 +460,11 @@ async def run_reanswer(args: argparse.Namespace) -> None:
         "question_count": expected_count,
         "input_hash": sha256_json(source),
         "prompt_hash": hashlib.sha256(prompt_template.encode()).hexdigest(),
+        "prompt_builder_version": (
+            SELECTION_V3_PAYLOAD_VERSION
+            if args.mode == "selection-aware-v3"
+            else EXACT_SEARCH_PAYLOAD_VERSION
+        ),
         "model": model,
         "slots": args.slots,
         "gold_visible_to_answer_stage": False,

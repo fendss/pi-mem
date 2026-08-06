@@ -1,4 +1,5 @@
 import importlib.util
+import hashlib
 import json
 import sys
 import tempfile
@@ -82,6 +83,29 @@ class FrozenInputPreparationTest(unittest.TestCase):
         EVAL.validate_reanswer_source(prepared, "exact-searched-memories")
         with self.assertRaisesRegex(ValueError, "requires prepared selection data"):
             EVAL.validate_reanswer_source(prepared, "selection-aware-v3")
+
+
+class PromptContractTest(unittest.TestCase):
+    def test_answer_prompt_matches_ldbd_contract(self) -> None:
+        self.assertEqual(
+            hashlib.sha256(EVAL.ANSWER_PROMPT.encode()).hexdigest(),
+            "ecfb93382f47ef1fc23d284182a0e49fca7e9a8cb4046ce2f51daadb110e29a5",
+        )
+        self.assertIs(EVAL.SELECTION_V3_ANSWER_PROMPT, EVAL.ANSWER_PROMPT)
+
+    def test_selection_payload_preserves_the_gold_isolated_retrieval_package(self) -> None:
+        prepared = FrozenInputPreparationTest().prepare(selection=True)
+        prompt = EVAL.answer_prompt(prepared["records"][0], "selection-aware-v3")
+        self.assertIn("<retrieval_package>", prompt)
+        self.assertIn("One source fact was selected.", prompt)
+        self.assertIn("source fact", prompt)
+        self.assertNotIn("gold_answer", prompt)
+
+    def test_judge_prompt_matches_ldbd_contract(self) -> None:
+        self.assertEqual(
+            hashlib.sha256(EVAL.JUDGE_PROMPT.encode()).hexdigest(),
+            "44b751660e4e0950ee640b14207a0ab7d519c4558374d429b6bf262d9871d6ff",
+        )
 
 
 if __name__ == "__main__":

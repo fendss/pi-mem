@@ -1,6 +1,6 @@
 {
   "name": "pi-mem",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "private": true,
   "description": "A minimal, source-grounded memory agent runtime built on Pi.",
   "repository": {
@@ -18,10 +18,12 @@
   "scripts": {
     "clean": "node --input-type=module -e \"import { rmSync } from 'node:fs'; rmSync('dist', { recursive: true, force: true });\"",
     "build": "npm run clean && tsc -p tsconfig.build.json",
+    "docs:catalog": "node scripts/generate-code-catalog.mjs",
+    "docs:catalog:check": "node scripts/generate-code-catalog.mjs --check",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:python": "python3 -m unittest scripts/test_longmemeval_frozen_eval.py",
-    "check": "npm run typecheck && npm test -- --maxWorkers=4 && npm run test:python && npm run build",
+    "check": "npm run docs:catalog:check && npm run typecheck && npm test -- --maxWorkers=4 && npm run test:python && npm run build",
     "cli": "node --disable-warning=ExperimentalWarning dist/cli.js"
   },
   "dependencies": {
