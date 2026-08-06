@@ -91,6 +91,7 @@ describe("loadPiModelRuntime", () => {
     expect(runtime.providerId).toBe("test-provider");
     expect(runtime.modelId).toBe("test-model");
     expect(runtime.thinkingLevel).toBe("off");
+    expect(runtime.transport).toBe("sse");
     expect(runtime.model).toMatchObject({
       id: "test-model",
       name: "Test Model",
@@ -104,6 +105,17 @@ describe("loadPiModelRuntime", () => {
     expect(typeof runtime.streamFn).toBe("function");
     expect(await runtime.getApiKey("another-provider")).toBeUndefined();
     expect(await runtime.getApiKey("test-provider")).toBe("unit-test-key");
+  });
+
+  it("selects the non-stream transport explicitly", async () => {
+    const agentDir = await createAgentDir();
+    const runtime = await loadPiModelRuntime({
+      agentDir,
+      transport: "non-stream",
+    });
+
+    expect(runtime.transport).toBe("non-stream");
+    expect(typeof runtime.streamFn).toBe("function");
   });
 
   it("selects an explicit configured model without changing settings", async () => {

@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
+  LONGMEMEVAL_ANSWER_PROMPT_TEMPLATE,
+  LONGMEMEVAL_ANSWER_PROMPT_VERSION,
   adaptLongMemEvalS,
   buildLongMemEvalAnswerPrompt,
   longMemEvalMemoryId,
@@ -8,6 +10,7 @@ import {
   normalizeLongMemEvalTimestamp,
 } from "../src/adapters/longmemeval.js";
 import type { PiMemResult } from "../src/types.js";
+import { sha256 } from "../src/util.js";
 
 function mixedFixture(): unknown {
   return [
@@ -215,7 +218,7 @@ describe("LongMemEval-S trusted adapter", () => {
     );
   });
 
-  it("builds the answer prompt from the organized package and cited evidence", () => {
+  it("builds the LDBD answer prompt from cited evidence only", () => {
     const retrieval = {
       status: "sufficient",
       evidenceSummary: "ORGANIZED_EVIDENCE_SUMMARY",
@@ -238,11 +241,25 @@ describe("LongMemEval-S trusted adapter", () => {
     const prompt = buildLongMemEvalAnswerPrompt("What is the value?", retrieval);
 
     expect(prompt.adapterId).toBe("longmemeval-s");
+    expect(prompt.promptVersion).toBe(
+      "ldbd-longmemeval-answer-48dbfff3-retrieval-package-v1",
+    );
     expect(prompt.userPrompt).toContain("CITED_SOURCE_VALUE");
     expect(prompt.userPrompt).toContain("memoryId=m-cited");
     expect(prompt.userPrompt).not.toContain("UNSELECTED_READ_NOISE");
     expect(prompt.userPrompt).toContain("ORGANIZED_EVIDENCE_SUMMARY");
+    expect(prompt.userPrompt).toContain("<retrieval_package>");
+    expect(prompt.userPrompt).toContain("<memories>");
     expect(prompt.userPrompt).toContain("Question: What is the value?");
+  });
+
+  it("pins the byte-exact LDBD answer prompt contract", () => {
+    expect(LONGMEMEVAL_ANSWER_PROMPT_VERSION).toBe(
+      "ldbd-longmemeval-answer-48dbfff3-retrieval-package-v1",
+    );
+    expect(
+      sha256(LONGMEMEVAL_ANSWER_PROMPT_TEMPLATE),
+    ).toBe("ecfb93382f47ef1fc23d284182a0e49fca7e9a8cb4046ce2f51daadb110e29a5");
   });
 
   it("fails closed when the source is not the one-question-per-scope S split", () => {

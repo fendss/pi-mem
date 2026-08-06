@@ -1,0 +1,61 @@
+import type { AgentMessage } from "@earendil-works/pi-agent-core";
+import type { ToolResultMessage } from "@earendil-works/pi-ai";
+
+const EPHEMERAL_TOOLS = new Set(["search", "bash_ro"]);
+
+export interface EphemeralContextSnapshot {
+  expiredNavigationResults: number;
+}
+
+export interface EphemeralMemoryContext {
+  transformContext(messages: AgentMessage[]): Promise<AgentMessage[]>;
+  snapshot(): EphemeralContextSnapshot;
+}
+
+function isToolResult(message: AgentMessage): message is ToolResultMessage {
+  return message.role === "toolResult";
+}
+
+function trailingToolResultStart(messages: readonly AgentMessage[]): number {
+  let index = messages.length;
+  while (index > 0 && isToolResult(messages[index - 1]!)) index -= 1;
+  return index;
+}
+
+/**
+ * Keeps the current tool batch visible once, then expires navigation payloads.
+ * Full results remain in the audit trace and ledger; selected read evidence stays
+ * in model context.
+ */
+export function createEphemeralMemoryContext(): EphemeralMemoryContext {
+  const expiredIds = new Set<string>();
+  return {
+    async transformContext(messages): Promise<AgentMessage[]> {
+      const currentBatchStart = trailingToolResultStart(messages);
+      return messages.map((message, index) => {
+        if (
+          index >= currentBatchStart ||
+          !isToolResult(message) ||
+          !EPHEMERAL_TOOLS.has(message.toolName) ||
+          message.isError
+        ) {
+          return message;
+        }
+        expiredIds.add(message.toolCallId);
+        return {
+          ...message,
+          content: [{
+            type: "text" as const,
+            text:
+              `[${message.toolName} navigation output expired from active ` +
+              "context; full output remains in the audit trace. Read selected " +
+              "memory IDs or run a focused search for an uncovered subclaim.]",
+          }],
+        };
+      });
+    },
+    snapshot(): EphemeralContextSnapshot {
+      return { expiredNavigationResults: expiredIds.size };
+    },
+  };
+}
