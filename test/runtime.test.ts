@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { orderCandidatesForEvidenceAttention } from "../src/runtime.js";
+import {
+  PIMEM_SKILL_HASH,
+  PIMEM_SKILL_TEXT,
+  orderCandidatesForEvidenceAttention,
+  piMemSystemPrompt,
+} from "../src/evidence-agent/index.js";
 import type { MemoryCandidate } from "../src/types.js";
 
 function candidate(
@@ -40,5 +45,19 @@ describe("runtime candidate presentation", () => {
       "unread-b",
       "cited-b",
     ]);
+  });
+});
+
+describe("runtime Skill experiment boundary", () => {
+  it("changes only the Skill suffix between none and pimem-v0", () => {
+    const baseline = piMemSystemPrompt("none");
+    const treatment = piMemSystemPrompt("pimem-v0");
+
+    expect(baseline).not.toContain("<active_skill");
+    expect(baseline).not.toContain(PIMEM_SKILL_TEXT);
+    expect(treatment.startsWith(`${baseline}\n\n`)).toBe(true);
+    expect(treatment).toContain('<active_skill name="pimem-retrieval"');
+    expect(treatment).toContain(PIMEM_SKILL_TEXT);
+    expect(PIMEM_SKILL_HASH).toMatch(/^[a-f0-9]{64}$/u);
   });
 });

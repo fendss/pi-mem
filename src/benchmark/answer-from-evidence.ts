@@ -11,6 +11,13 @@ export interface BenchmarkAnswerPrompt {
   userPrompt: string;
 }
 
+export const BENCHMARK_ANSWER_EXECUTION_CHECKLIST = `<answer_execution>
+- Evaluate every requested item or answer option independently against the source memories before composing the final answer.
+- For lists and multi-select questions, include every supported item and no unsupported item.
+- For ordering questions, reconstruct local event transitions first, then obey the requested forward, backward, nearest-first, or farthest-first direction. Retrieval rank is not chronology.
+- Follow the caller's exact output syntax. Emit only the final answer and do not expose memory IDs, ranks, scores, or retrieval metadata.
+</answer_execution>`;
+
 export interface BenchmarkAnswerResult {
   answer: string;
   promptAdapter: string;
@@ -57,15 +64,28 @@ export function returnedModelMatches(requested: string, returned: string): boole
 }
 
 /** Runs benchmark-owned answer synthesis after PiMem has finished retrieval. */
+function answerSystemPrompt(
+  prompt: BenchmarkAnswerPrompt,
+  executionChecklist?: string,
+): string {
+  return [prompt.systemPrompt.trim(), executionChecklist?.trim()]
+    .filter(Boolean)
+    .join("\n\n");
+}
+
 export async function runBenchmarkAnswer(options: {
   modelRuntime: PiModelRuntime;
   prompt: BenchmarkAnswerPrompt;
   maxRunMs?: number;
+  executionChecklist?: string;
 }): Promise<BenchmarkAnswerResult> {
   const maxRunMs = options.maxRunMs ?? 120_000;
   const agent = new Agent({
     initialState: {
-      systemPrompt: options.prompt.systemPrompt,
+      systemPrompt: answerSystemPrompt(
+        options.prompt,
+        options.executionChecklist,
+      ),
       model: options.modelRuntime.model,
       thinkingLevel: options.modelRuntime.thinkingLevel,
       tools: [],
@@ -113,11 +133,12 @@ export async function runBenchmarkAnswer(options: {
     promptAdapter: options.prompt.adapterId,
     promptVersion: options.prompt.promptVersion,
     promptHash: sha256(
-      `${options.prompt.systemPrompt}\0${options.prompt.userPrompt}`,
+      `${answerSystemPrompt(options.prompt, options.executionChecklist)}\0${options.prompt.userPrompt}`,
     ),
     model: {
       providerId: options.modelRuntime.providerId,
       modelId: options.modelRuntime.modelId,
+      responseModels: [responseModel],
       thinkingLevel: options.modelRuntime.thinkingLevel,
       transport: options.modelRuntime.transport,
       responseModel,

@@ -9,6 +9,7 @@ const temporaryDirectories: string[] = [];
 async function createAgentDir(input?: {
   apiKey?: string;
   api?: string;
+  modelApi?: string;
   defaultProvider?: string;
   defaultModel?: string;
 }): Promise<string> {
@@ -36,13 +37,21 @@ async function createAgentDir(input?: {
           baseUrl: "http://127.0.0.1:9999/v1/",
           api: input?.api ?? "openai-completions",
           apiKey: input?.apiKey ?? "!printf 'unit-test-key'",
-          compat: {
-            maxTokensField: "max_tokens",
-          },
+          compat: input?.api === "openai-responses"
+            ? {
+                supportsDeveloperRole: false,
+                sessionAffinityFormat: "openai-nosession",
+              }
+            : {
+                maxTokensField: "max_tokens",
+              },
           models: [
             {
               id: modelId,
               name: "Test Model",
+              ...(input?.modelApi === undefined
+                ? {}
+                : { api: input.modelApi }),
               input: ["text"],
               contextWindow: 32_000,
               maxTokens: 4_096,
@@ -116,6 +125,42 @@ describe("loadPiModelRuntime", () => {
 
     expect(runtime.transport).toBe("non-stream");
     expect(typeof runtime.streamFn).toBe("function");
+  });
+
+  it("loads an openai-responses provider with the official streaming transport", async () => {
+    const agentDir = await createAgentDir({ api: "openai-responses" });
+    const runtime = await loadPiModelRuntime({ agentDir });
+
+    expect(runtime.transport).toBe("sse");
+    expect(runtime.model).toMatchObject({
+      api: "openai-responses",
+      compat: {
+        supportsDeveloperRole: false,
+        sessionAffinityFormat: "openai-nosession",
+      },
+    });
+    expect(typeof runtime.streamFn).toBe("function");
+  });
+
+  it("allows a model to override its provider with openai-responses", async () => {
+    const agentDir = await createAgentDir({
+      api: "openai-completions",
+      modelApi: "openai-responses",
+    });
+    const runtime = await loadPiModelRuntime({ agentDir });
+
+    expect(runtime.model.api).toBe("openai-responses");
+    expect(runtime.model.compat).toBeUndefined();
+  });
+
+  it("rejects the custom non-stream transport for openai-responses", async () => {
+    const agentDir = await createAgentDir({ api: "openai-responses" });
+
+    await expect(
+      loadPiModelRuntime({ agentDir, transport: "non-stream" }),
+    ).rejects.toThrow(
+      "non-stream transport is only supported for openai-completions",
+    );
   });
 
   it("selects an explicit configured model without changing settings", async () => {
@@ -192,6 +237,19 @@ describe("loadPiModelRuntime", () => {
     });
     await expect(
       loadPiModelRuntime({ agentDir }),
-    ).rejects.toThrow("Only the openai-completions API is supported");
+    ).rejects.toThrow(
+      "provider.api must be openai-completions or openai-responses",
+    );
+  });
+
+  it("rejects unsupported model API overrides before any model call", async () => {
+    const agentDir = await createAgentDir({
+      modelApi: "anthropic-messages",
+    });
+    await expect(
+      loadPiModelRuntime({ agentDir }),
+    ).rejects.toThrow(
+      "model.api must be openai-completions or openai-responses",
+    );
   });
 });

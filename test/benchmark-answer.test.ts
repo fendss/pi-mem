@@ -23,8 +23,9 @@ describe("benchmark answer boundary", () => {
     ).toBe(false);
   });
 
-  it("forces deterministic sampling only at the answer boundary", async () => {
+  it("forces deterministic sampling and execution checks only at the answer boundary", async () => {
     let streamOptions: SimpleStreamOptions | undefined;
+    let observedSystemPrompt = "";
     const message = {
       role: "assistant",
       content: [{ type: "text", text: "Answer" }],
@@ -60,8 +61,9 @@ describe("benchmark answer boundary", () => {
         contextWindow: 128_000,
         maxTokens: 16_384,
       },
-      streamFn: (_model, _context, options) => {
+      streamFn: (_model, context, options) => {
         streamOptions = options;
+        observedSystemPrompt = context.systemPrompt ?? "";
         const stream = createAssistantMessageEventStream();
         queueMicrotask(() => {
           stream.push({ type: "start", partial: message });
@@ -80,9 +82,79 @@ describe("benchmark answer boundary", () => {
         systemPrompt: "",
         userPrompt: "Question",
       },
+      executionChecklist: `<answer_execution>
+- Evaluate every requested item independently.
+- Retrieval rank is not chronology.
+- Follow the exact output syntax.
+</answer_execution>`,
     });
 
     expect(streamOptions?.temperature).toBe(0);
+    expect(observedSystemPrompt).toContain("Evaluate every requested item");
+    expect(observedSystemPrompt).toContain("Retrieval rank is not chronology");
+    expect(observedSystemPrompt).toContain("exact output syntax");
     expect(result.answer).toBe("Answer");
+  });
+
+  it("does not change benchmark prompts unless the checklist is enabled", async () => {
+    let observedSystemPrompt: string | undefined;
+    const message = {
+      role: "assistant",
+      content: [{ type: "text", text: "Answer" }],
+      api: "openai-completions",
+      provider: "test-provider",
+      model: "gpt-4o-mini",
+      responseModel: "gpt-4o-mini-2024-07-18",
+      usage: {
+        input: 1,
+        output: 1,
+        cacheRead: 0,
+        cacheWrite: 0,
+        totalTokens: 2,
+        cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
+      },
+      stopReason: "stop",
+      timestamp: Date.now(),
+    } satisfies AssistantMessage;
+    const runtime = {
+      providerId: "test-provider",
+      modelId: "gpt-4o-mini",
+      thinkingLevel: "off",
+      transport: "sse",
+      model: {
+        id: "gpt-4o-mini",
+        name: "GPT-4o mini",
+        api: "openai-completions",
+        provider: "test-provider",
+        baseUrl: "https://provider.example/v1",
+        reasoning: false,
+        input: ["text"],
+        cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+        contextWindow: 128_000,
+        maxTokens: 16_384,
+      },
+      streamFn: (_model, context) => {
+        observedSystemPrompt = context.systemPrompt;
+        const stream = createAssistantMessageEventStream();
+        queueMicrotask(() => {
+          stream.push({ type: "start", partial: message });
+          stream.push({ type: "done", reason: "stop", message });
+        });
+        return stream;
+      },
+      getApiKey: async () => "test-key",
+    } satisfies PiModelRuntime;
+
+    await runBenchmarkAnswer({
+      modelRuntime: runtime,
+      prompt: {
+        adapterId: "longmemeval-s",
+        promptVersion: "test",
+        systemPrompt: "historical system prompt",
+        userPrompt: "Question",
+      },
+    });
+
+    expect(observedSystemPrompt).toBe("historical system prompt");
   });
 });

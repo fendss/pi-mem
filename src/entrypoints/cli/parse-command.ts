@@ -1,4 +1,5 @@
 import { resolve } from "node:path";
+import type { PiMemSkill } from "../../evidence-agent/index.js";
 import type { LoadPiModelRuntimeOptions } from "../../platform/pi/load-model-runtime.js";
 import { requireEnvironmentVariable } from "../../platform/security/protected-environment.js";
 import { parseRetrievalProfile } from "../../retrieval/retrieval-profile.js";
@@ -131,6 +132,14 @@ export function modelOptionsFor(
     ...(baseUrl === undefined ? {} : { baseUrl }),
     transport,
   };
+}
+
+export function skillFor(parsed: ParsedCommand): PiMemSkill {
+  const skill = optionalFlag(parsed, "skill") ?? "pimem-v0";
+  if (skill !== "none" && skill !== "pimem-v0") {
+    throw new Error(`Unknown PiMem skill: ${skill}`);
+  }
+  return skill;
 }
 
 export function assertOnlyFlags(

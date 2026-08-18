@@ -1,3 +1,4 @@
+import { execFileSync } from "node:child_process";
 import { chmod, mkdir, readFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import {
@@ -20,9 +21,11 @@ import { readPrivateQuestions } from "../../../benchmark/longmemeval/private-que
 import { runQuestionWithRuntime } from "../../../benchmark/use-cases/run-question.js";
 import { createRetrievalContext } from "../../../composition/create-retrieval-context.js";
 import {
-  PI_MEM_SYSTEM_PROMPT,
   PIMEM_HARNESS_VERSION,
+  PIMEM_SKILL_HASH,
+  PIMEM_SKILL_VERSION,
   PiMemRunError,
+  piMemSystemPrompt,
   type PiMemResult,
 } from "../../../evidence-agent/index.js";
 import { runAsyncPool } from "../../../platform/concurrency/async-pool.js";
@@ -37,6 +40,7 @@ import {
   positiveIntegerFlag,
   requiredFlag,
   retrievalProfileFor,
+  skillFor,
   type ParsedCommand,
 } from "../parse-command.js";
 import {
@@ -48,6 +52,94 @@ import {
 const BENCHMARK_MAX_RUN_MS = 300_000;
 const BENCHMARK_MAX_TURNS = 64;
 const BENCHMARK_MAX_TOOL_CALLS = 80;
+const MOL_VERSION = "search-read-finish-v0";
+
+export function benchmarkSourceRevision(): {
+  commit: string;
+  dirty: boolean | null;
+  fingerprint?: string;
+} {
+  const declaredCommit = process.env.PIMEM_SOURCE_COMMIT?.trim();
+  const declaredDirty = process.env.PIMEM_SOURCE_DIRTY?.trim();
+  const declaredFingerprint = process.env.PIMEM_SOURCE_FINGERPRINT?.trim();
+  if (
+    declaredCommit !== undefined || declaredDirty !== undefined ||
+    declaredFingerprint !== undefined
+  ) {
+    if (!declaredCommit || !/^[a-f0-9]{40}$/u.test(declaredCommit)) {
+      throw new Error("PIMEM_SOURCE_COMMIT must be a full lowercase Git SHA");
+    }
+    if (declaredDirty !== "true" && declaredDirty !== "false") {
+      throw new Error("PIMEM_SOURCE_DIRTY must be true or false");
+    }
+    if (
+      declaredFingerprint !== undefined &&
+      !/^[a-f0-9]{64}$/u.test(declaredFingerprint)
+    ) {
+      throw new Error("PIMEM_SOURCE_FINGERPRINT must be a SHA-256 digest");
+    }
+    return {
+      commit: declaredCommit,
+      dirty: declaredDirty === "true",
+      ...(declaredFingerprint === undefined
+        ? {}
+        : { fingerprint: declaredFingerprint }),
+    };
+  }
+  const projectRoot = resolve(import.meta.dirname, "../../../..");
+  try {
+    const commit = execFileSync("git", ["rev-parse", "HEAD"], {
+      cwd: projectRoot,
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "ignore"],
+    }).trim();
+    const status = execFileSync(
+      "git",
+      ["status", "--porcelain", "--untracked-files=normal"],
+      {
+        cwd: projectRoot,
+        encoding: "utf8",
+        stdio: ["ignore", "pipe", "ignore"],
+      },
+    ).trim();
+    return { commit, dirty: status.length > 0 };
+  } catch {
+    return { commit: "unavailable", dirty: null };
+  }
+}
+
+export function benchmarkQuestionSetHash(
+  questions: readonly LongMemEvalPrivateQuestion[],
+): string {
+  const identity = questions
+    .map((item) => ({
+      questionId: item.questionId,
+      scopeId: item.scopeId,
+      question: item.question,
+      ...(item.questionDate === undefined
+        ? {}
+        : { questionDate: item.questionDate }),
+    }))
+    .sort((left, right) => left.questionId.localeCompare(right.questionId));
+  return sha256(JSON.stringify(identity));
+}
+
+export async function benchmarkCorpusHash(
+  sanitizedRoot: string,
+  questions: readonly LongMemEvalPrivateQuestion[],
+): Promise<string> {
+  const scopeIds = [...new Set(questions.map((item) => item.scopeId))].sort();
+  const scopes = await Promise.all(scopeIds.map(async (scopeId) => ({
+    scopeId,
+    memoryHash: sha256(
+      await readFile(
+        join(sanitizedRoot, safePathSegment(scopeId), "memory.jsonl"),
+        "utf8",
+      ),
+    ),
+  })));
+  return sha256(JSON.stringify(scopes));
+}
 
 function successRecordPath(recordsDir: string, questionId: string): string {
   return join(recordsDir, `${safePathSegment(questionId)}.json`);
@@ -263,11 +355,13 @@ export async function benchmarkLongMemEval(
     "api-key-env",
     "base-url-env",
     "transport",
+    "skill",
   ]);
   const paths = dataPaths(requiredFlag(parsed, "data-dir"));
   const outputDir = resolve(requiredFlag(parsed, "output-dir"));
   const retrievalProfile = retrievalProfileFor(parsed);
   const slots = positiveIntegerFlag(parsed, "slots", 1, 256);
+  const skill = skillFor(parsed);
   const requestedIds = new Set(parsed.flags.get("question-id") ?? []);
   const privateQuestions = await readPrivateQuestions(paths.privateQuestions);
   const selected =
@@ -351,9 +445,9 @@ export async function benchmarkLongMemEval(
     await ensureBenchmarkManifest(join(outputDir, "run-manifest.json"), {
       benchmark: "LongMemEval-S",
       question_count: selected.length,
-      question_set_hash: sha256(
-        JSON.stringify(selected.map((question) => question.questionId).sort()),
-      ),
+      question_set_hash: benchmarkQuestionSetHash(selected),
+      corpus_hash: await benchmarkCorpusHash(paths.sanitized, selected),
+      source_revision: benchmarkSourceRevision(),
       retrieval,
       retrieval_model: configuredModel,
       answer_model: configuredModel,
@@ -364,7 +458,13 @@ export async function benchmarkLongMemEval(
       },
       slots,
       harness_version: PIMEM_HARNESS_VERSION,
-      retrieval_system_prompt_hash: sha256(PI_MEM_SYSTEM_PROMPT),
+      mol_version: MOL_VERSION,
+      skill: {
+        mode: skill,
+        version: skill === "none" ? null : PIMEM_SKILL_VERSION,
+        hash: skill === "none" ? null : PIMEM_SKILL_HASH,
+      },
+      retrieval_system_prompt_hash: sha256(piMemSystemPrompt(skill)),
       max_run_ms: BENCHMARK_MAX_RUN_MS,
       max_turns: BENCHMARK_MAX_TURNS,
       max_tool_calls: BENCHMARK_MAX_TOOL_CALLS,
@@ -390,6 +490,7 @@ export async function benchmarkLongMemEval(
             maxRunMs: BENCHMARK_MAX_RUN_MS,
             maxTurns: BENCHMARK_MAX_TURNS,
             maxToolCalls: BENCHMARK_MAX_TOOL_CALLS,
+            skill,
           },
         );
         const answerResult = await runBenchmarkAnswer({

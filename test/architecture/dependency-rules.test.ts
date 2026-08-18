@@ -104,4 +104,19 @@ describe("architecture dependency rules", () => {
     }
     expect(violations).toEqual([]);
   });
+
+  it("keeps context use cases independent of adapters and outer layers", async () => {
+    const violations: string[] = [];
+    for (const path of await listTypeScriptFiles(sourceRoot)) {
+      const pathParts = relative(sourceRoot, path).split(sep);
+      if (!contextFor(path) || !pathParts.includes("use-cases")) continue;
+      const source = await readFile(path, "utf8");
+      for (const specifier of importsFor(path, source)) {
+        if (/(?:^|\/)(?:adapters|platform|composition)(?:\/|$)/u.test(specifier)) {
+          violations.push(`${relative(projectRoot, path)} -> ${specifier}`);
+        }
+      }
+    }
+    expect(violations).toEqual([]);
+  });
 });

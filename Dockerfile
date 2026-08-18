@@ -5,6 +5,7 @@ COPY package.json package-lock.json ./
 RUN npm ci
 COPY tsconfig.json tsconfig.build.json ./
 COPY src ./src
+COPY .agents ./.agents
 RUN npm run build
 
 FROM node:22-bookworm-slim AS runtime
@@ -22,6 +23,7 @@ WORKDIR /app
 COPY package.json package-lock.json ./
 RUN npm ci --omit=dev && npm cache clean --force
 COPY --from=build /app/dist ./dist
+COPY --from=build /app/.agents ./.agents
 COPY deploy/agent-config ./deploy/agent-config
 
 RUN mkdir -p /data && chown -R node:node /data /app

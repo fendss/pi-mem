@@ -18,9 +18,10 @@ Compatibility facades preserve old import paths during the structural migration.
 | [`src/benchmark/longmemeval/private-question-store.ts`](../../src/benchmark/longmemeval/private-question-store.ts) | benchmark | domain service | internal | Reads and atomically updates the private LongMemEval question map. |
 | [`src/benchmark/model/benchmark-query.ts`](../../src/benchmark/model/benchmark-query.ts) | benchmark | model | internal | Defines the benchmark question model shared at the benchmark boundary. |
 | [`src/benchmark/model/benchmark-run.ts`](../../src/benchmark/model/benchmark-run.ts) | benchmark | model | internal | Defines durable benchmark prediction, success, and failure artifact records. |
-| [`src/benchmark/use-cases/run-question.ts`](../../src/benchmark/use-cases/run-question.ts) | benchmark | use case | internal | Composes the runtime needed to answer one question against one memory scope. |
+| [`src/benchmark/use-cases/run-question.ts`](../../src/benchmark/use-cases/run-question.ts) | benchmark | use case | internal | Runs one question through injected evidence-agent dependencies. |
 | [`src/cli.ts`](../../src/cli.ts) | compatibility | compatibility facade | compatibility | Preserves a pre-refactor import path by re-exporting `./entrypoints/cli/main.js`. |
 | [`src/composition/create-retrieval-context.ts`](../../src/composition/create-retrieval-context.ts) | composition | composition root | internal | Wires a concrete store and optional embedder into the selected retrieval profile. |
+| [`src/composition/run-question.ts`](../../src/composition/run-question.ts) | composition | composition root | internal | Builds concrete model, store, and retrieval adapters for one question run. |
 | [`src/context.ts`](../../src/context.ts) | compatibility | compatibility facade | compatibility | Preserves a pre-refactor import path by re-exporting `./evidence-agent/adapters/pi/ephemeral-context.js`. |
 | [`src/database-evidence-operators.ts`](../../src/database-evidence-operators.ts) | compatibility | compatibility facade | compatibility | Preserves a pre-refactor import path by re-exporting `./retrieval/adapters/sqlite/database-evidence-operators.js`. |
 | [`src/embedding-index.ts`](../../src/embedding-index.ts) | compatibility | compatibility facade | compatibility | Preserves a pre-refactor import path by re-exporting `./retrieval/index-scope-embeddings.js`. |
@@ -55,8 +56,6 @@ Compatibility facades preserve old import paths during the structural migration.
 | [`src/evidence-agent/index.ts`](../../src/evidence-agent/index.ts) | evidence-agent | public API | public | Defines the public API exported by the evidence-agent context. |
 | [`src/evidence-agent/model/evidence.ts`](../../src/evidence-agent/model/evidence.ts) | evidence-agent | model | internal | Defines candidates, evidence, citations, metrics, and final agent results. |
 | [`src/evidence-agent/model/memory-ledger.ts`](../../src/evidence-agent/model/memory-ledger.ts) | evidence-agent | model | internal | Tracks searched candidates, exact reads, evidence, and provenance during a run. |
-| [`src/evidence-agent/prompts/question-plan.ts`](../../src/evidence-agent/prompts/question-plan.ts) | evidence-agent | prompt policy | internal | Builds question-specific retrieval planning guidance. |
-| [`src/evidence-agent/prompts/retrieval-guidance.ts`](../../src/evidence-agent/prompts/retrieval-guidance.ts) | evidence-agent | prompt policy | internal | Defines stable retrieval workflow guidance used in the system prompt. |
 | [`src/evidence-agent/run-pimem.ts`](../../src/evidence-agent/run-pimem.ts) | evidence-agent | domain service | internal | Runs the Pi evidence agent and assembles its source-grounded result. |
 | [`src/evidence-fact-index.ts`](../../src/evidence-fact-index.ts) | compatibility | compatibility facade | compatibility | Preserves a pre-refactor import path by re-exporting `./retrieval/adapters/sqlite/evidence-fact-index.js`. |
 | [`src/hybrid-search.ts`](../../src/hybrid-search.ts) | compatibility | compatibility facade | compatibility | Preserves a pre-refactor import path by re-exporting `./retrieval/operators/hybrid-search.js`. |
@@ -81,8 +80,6 @@ Compatibility facades preserve old import paths during the structural migration.
 | [`src/ranking.ts`](../../src/ranking.ts) | compatibility | compatibility facade | compatibility | Preserves a pre-refactor import path by re-exporting `./retrieval/ranking.js`. |
 | [`src/request-gate.ts`](../../src/request-gate.ts) | compatibility | compatibility facade | compatibility | Preserves a pre-refactor import path by re-exporting `./platform/concurrency/request-gate.js`. |
 | [`src/retrieval-profile.ts`](../../src/retrieval-profile.ts) | compatibility | compatibility facade | compatibility | Preserves a pre-refactor import path by re-exporting `./retrieval/retrieval-profile.js`. |
-| [`src/retrieval-skill.ts`](../../src/retrieval-skill.ts) | compatibility | compatibility facade | compatibility | Preserves a pre-refactor import path by re-exporting `./evidence-agent/prompts/retrieval-guidance.js`. |
-| [`src/retrieval-strategy.ts`](../../src/retrieval-strategy.ts) | compatibility | compatibility facade | compatibility | Preserves a pre-refactor import path by re-exporting `./evidence-agent/prompts/question-plan.js`. |
 | [`src/retrieval/adapters/openai/openai-compatible-embedder.ts`](../../src/retrieval/adapters/openai/openai-compatible-embedder.ts) | retrieval | adapter | internal | Implements the embedder port with an OpenAI-compatible embeddings endpoint. |
 | [`src/retrieval/adapters/sqlite/database-evidence-operators.ts`](../../src/retrieval/adapters/sqlite/database-evidence-operators.ts) | retrieval | adapter | internal | Implements temporal and numeric evidence-operator queries over SQLite. |
 | [`src/retrieval/adapters/sqlite/evidence-fact-index.ts`](../../src/retrieval/adapters/sqlite/evidence-fact-index.ts) | retrieval | adapter | internal | Builds and inspects normalized temporal and numeric fact indexes in SQLite. |
@@ -91,7 +88,7 @@ Compatibility facades preserve old import paths during the structural migration.
 | [`src/retrieval/index.ts`](../../src/retrieval/index.ts) | retrieval | public API | public | Defines the public API exported by the retrieval context. |
 | [`src/retrieval/model/embedder.ts`](../../src/retrieval/model/embedder.ts) | retrieval | model | internal | Defines the technology-neutral embedding port. |
 | [`src/retrieval/model/embedding.ts`](../../src/retrieval/model/embedding.ts) | retrieval | model | internal | Defines embedding profiles, stored vectors, and embedding-index contracts. |
-| [`src/retrieval/model/retrieval.ts`](../../src/retrieval/model/retrieval.ts) | retrieval | model | internal | Defines retrieval requests, hits, operators, profiles, coverage, and metrics. |
+| [`src/retrieval/model/retrieval.ts`](../../src/retrieval/model/retrieval.ts) | retrieval | model | internal | Defines retrieval requests, hits, operators, profiles, and metrics. |
 | [`src/retrieval/operators/hybrid-search.ts`](../../src/retrieval/operators/hybrid-search.ts) | retrieval | operator | internal | Combines FTS and vector results using reciprocal-rank fusion. |
 | [`src/retrieval/operators/numeric-operator.ts`](../../src/retrieval/operators/numeric-operator.ts) | retrieval | operator | internal | Normalizes numeric constraints and executes numeric evidence queries. |
 | [`src/retrieval/operators/temporal-operator.ts`](../../src/retrieval/operators/temporal-operator.ts) | retrieval | operator | internal | Normalizes temporal constraints and executes temporal evidence queries. |

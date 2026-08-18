@@ -5,8 +5,10 @@ import { join } from "node:path";
 import type {
   Model,
   OpenAICompletionsCompat,
+  OpenAIResponsesCompat,
 } from "@earendil-works/pi-ai";
 import { openAICompletionsApi } from "@earendil-works/pi-ai/api/openai-completions.lazy";
+import { openAIResponsesApi } from "@earendil-works/pi-ai/api/openai-responses.lazy";
 import type {
   StreamFn,
   ThinkingLevel,
@@ -26,13 +28,17 @@ export interface LoadPiModelRuntimeOptions {
 }
 
 export type PiModelTransport = "sse" | "non-stream";
+export type PiModelApi = "openai-completions" | "openai-responses";
+export type PiModel =
+  | Model<"openai-completions">
+  | Model<"openai-responses">;
 
 export interface PiModelRuntime {
   providerId: string;
   modelId: string;
   thinkingLevel: ThinkingLevel;
   transport: PiModelTransport;
-  model: Model<"openai-completions">;
+  model: PiModel;
   streamFn: StreamFn;
   getApiKey: (providerId: string) => Promise<string | undefined>;
 }
@@ -122,10 +128,10 @@ function optionalInput(value: unknown, label: string): ("text" | "image")[] {
   return [...new Set(value)] as ("text" | "image")[];
 }
 
-function optionalCompat(
+function mergedCompat(
   providerValue: unknown,
   modelValue: unknown,
-): OpenAICompletionsCompat | undefined {
+): JsonObject | undefined {
   const providerCompat =
     providerValue === undefined
       ? undefined
@@ -134,6 +140,13 @@ function optionalCompat(
     modelValue === undefined ? undefined : asObject(modelValue, "model.compat");
   const raw = { ...providerCompat, ...modelCompat };
   if (Object.keys(raw).length === 0) return undefined;
+  return raw;
+}
+
+function optionalCompletionsCompat(
+  raw: JsonObject | undefined,
+): OpenAICompletionsCompat | undefined {
+  if (raw === undefined) return undefined;
 
   const maxTokensField = raw.maxTokensField;
   if (
@@ -147,6 +160,54 @@ function optionalCompat(
   return {
     ...(maxTokensField === undefined ? {} : { maxTokensField }),
   };
+}
+
+function optionalResponsesCompat(
+  raw: JsonObject | undefined,
+): OpenAIResponsesCompat | undefined {
+  if (raw === undefined) return undefined;
+
+  const result: OpenAIResponsesCompat = {};
+  const booleanKeys = [
+    "supportsDeveloperRole",
+    "supportsLongCacheRetention",
+    "supportsStrictMode",
+    "supportsOpenAIGrammarTools",
+    "supportsToolSearch",
+    "supportsExplicitPromptCacheMode",
+  ] as const;
+  for (const key of booleanKeys) {
+    const value = raw[key];
+    if (value !== undefined && typeof value !== "boolean") {
+      throw new Error(`compat.${key} must be a boolean`);
+    }
+    if (value !== undefined) result[key] = value;
+  }
+
+  const sessionAffinityFormat = raw.sessionAffinityFormat;
+  if (
+    sessionAffinityFormat !== undefined &&
+    sessionAffinityFormat !== "openai" &&
+    sessionAffinityFormat !== "openai-nosession" &&
+    sessionAffinityFormat !== "openrouter"
+  ) {
+    throw new Error("compat.sessionAffinityFormat is invalid");
+  }
+  if (sessionAffinityFormat !== undefined) {
+    result.sessionAffinityFormat = sessionAffinityFormat;
+  }
+
+  return Object.keys(result).length === 0 ? undefined : result;
+}
+
+function supportedApi(value: unknown, label: string): PiModelApi {
+  const api = asNonEmptyString(value, label);
+  if (api !== "openai-completions" && api !== "openai-responses") {
+    throw new Error(
+      `${label} must be openai-completions or openai-responses`,
+    );
+  }
+  return api;
 }
 
 function validateBaseUrl(value: unknown): string {
@@ -267,12 +328,7 @@ export async function loadPiModelRuntime(
     providers[providerId],
     `models.json.providers.${providerId}`,
   );
-  const providerApi = asNonEmptyString(provider.api, "provider.api");
-  if (providerApi !== "openai-completions") {
-    throw new Error(
-      "Only the openai-completions API is supported by this minimal runtime",
-    );
-  }
+  const providerApi = supportedApi(provider.api, "provider.api");
   if (!Array.isArray(provider.models)) {
     throw new Error("provider.models must be an array");
   }
@@ -289,10 +345,12 @@ export async function loadPiModelRuntime(
   const modelApi =
     modelConfig.api === undefined
       ? providerApi
-      : asNonEmptyString(modelConfig.api, "model.api");
-  if (modelApi !== "openai-completions") {
+      : supportedApi(modelConfig.api, "model.api");
+
+  const transport = options.transport ?? "sse";
+  if (transport === "non-stream" && modelApi !== "openai-completions") {
     throw new Error(
-      "Only the openai-completions API is supported by this minimal runtime",
+      "The non-stream transport is only supported for openai-completions models",
     );
   }
 
@@ -305,14 +363,13 @@ export async function loadPiModelRuntime(
   ) {
     throw new Error("apiKeyEnv must be an environment variable name");
   }
-  const compat = optionalCompat(provider.compat, modelConfig.compat);
-  const model: Model<"openai-completions"> = {
+  const rawCompat = mergedCompat(provider.compat, modelConfig.compat);
+  const modelBase = {
     id: modelId,
     name:
       modelConfig.name === undefined
         ? modelId
         : asNonEmptyString(modelConfig.name, "model.name"),
-    api: "openai-completions",
     provider: providerId,
     baseUrl: validateBaseUrl(
       options.baseUrl ?? modelConfig.baseUrl ?? provider.baseUrl,
@@ -334,14 +391,29 @@ export async function loadPiModelRuntime(
       16_384,
       "model.maxTokens",
     ),
-    ...(compat === undefined ? {} : { compat }),
   };
+  let model: PiModel;
+  if (modelApi === "openai-completions") {
+    const compat = optionalCompletionsCompat(rawCompat);
+    model = {
+      ...modelBase,
+      api: modelApi,
+      ...(compat === undefined ? {} : { compat }),
+    };
+  } else {
+    const compat = optionalResponsesCompat(rawCompat);
+    model = {
+      ...modelBase,
+      api: modelApi,
+      ...(compat === undefined ? {} : { compat }),
+    };
+  }
 
-  const transport = options.transport ?? "sse";
-  const api = openAICompletionsApi();
-  const streamFn: StreamFn = transport === "non-stream"
-    ? openAINonStreamingStreamFn
-    : api.streamSimple;
+  const streamFn: StreamFn = modelApi === "openai-completions"
+    ? transport === "non-stream"
+      ? openAINonStreamingStreamFn
+      : openAICompletionsApi().streamSimple
+    : openAIResponsesApi().streamSimple;
   let apiKeyPromise: Promise<string> | undefined;
   const getApiKey = async (
     requestedProviderId: string,

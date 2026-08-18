@@ -1,14 +1,11 @@
+import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
 import { Agent } from "@earendil-works/pi-agent-core";
 import type { AssistantMessage } from "@earendil-works/pi-ai";
 import { ReadOnlyBash } from "./adapters/docker/read-only-shell.js";
 import { createEphemeralMemoryContext } from "./adapters/pi/ephemeral-context.js";
 import { MemoryLedger } from "./model/memory-ledger.js";
 import type { PiModelRuntime } from "../platform/pi/load-model-runtime.js";
-import {
-  PIMEM_RETRIEVAL_SKILL,
-  PIMEM_RETRIEVAL_SKILL_VERSION,
-} from "./prompts/retrieval-guidance.js";
-import { renderMemoryQuestionPlan } from "./prompts/question-plan.js";
 import {
   createFinishOnlyBeforeToolCall,
   createPiMemTools,
@@ -24,11 +21,21 @@ import type {
   RetrievalMetricsSnapshot,
 } from "../retrieval/index.js";
 import type { MemoryRecord } from "../memory/index.js";
-import { assertNonEmpty, newRunId } from "../util.js";
+import { assertNonEmpty, newRunId, sha256 } from "../util.js";
 
-export const PIMEM_HARNESS_VERSION = PIMEM_RETRIEVAL_SKILL_VERSION;
+export type PiMemSkill = "none" | "pimem-v0";
 
-export const PI_MEM_SYSTEM_PROMPT = `You are PiMem: a memory retrieval and evidence-selection agent.
+export const PIMEM_HARNESS_VERSION = "pimem-mol-v0";
+export const PIMEM_SKILL_VERSION = "pimem-v0";
+
+const DEFAULT_SKILL_PATH = fileURLToPath(
+  new URL("../../.agents/skills/pimem-retrieval/SKILL.md", import.meta.url),
+);
+
+export const PIMEM_SKILL_TEXT = readFileSync(DEFAULT_SKILL_PATH, "utf8");
+export const PIMEM_SKILL_HASH = sha256(PIMEM_SKILL_TEXT);
+
+const PI_MEM_BASE_SYSTEM_PROMPT = `You are PiMem: a memory retrieval and evidence-selection agent.
 
 Your only task is to locate immutable source memories relevant to the caller's question and return a compact cited evidence package. Do not generate or format the benchmark answer. Different callers apply different answer protocols after retrieval.
 
@@ -44,8 +51,22 @@ Tool policy:
 - read only selected evidence. Every cited memory must be read.
 - bash_ro is a focused last resort for exact matching, not a mandatory full-scope scan. Its output is navigation and also expires.
 - Call finish alone with status, concise evidenceSummary, and citations. Count and inventory are optional evidence metadata.
+`;
 
-${PIMEM_RETRIEVAL_SKILL}`;
+function activeSkillPrompt(): string {
+  return `<active_skill name="pimem-retrieval" version="${PIMEM_SKILL_VERSION}">\n${PIMEM_SKILL_TEXT}\n</active_skill>`;
+}
+
+export function piMemSystemPrompt(
+  skill: PiMemSkill = "pimem-v0",
+  basePrompt: string = PI_MEM_BASE_SYSTEM_PROMPT,
+): string {
+  return skill === "none"
+    ? basePrompt
+    : [basePrompt, activeSkillPrompt()].filter(Boolean).join("\n\n");
+}
+
+export const PI_MEM_SYSTEM_PROMPT = piMemSystemPrompt();
 
 export function orderCandidatesForEvidenceAttention(
   candidates: readonly MemoryCandidate[],
@@ -80,6 +101,7 @@ export interface RunPiMemOptions {
   maxProtocolNudges?: number;
   maxRunMs?: number;
   systemPrompt?: string;
+  skill?: PiMemSkill;
 }
 
 export interface PiMemFailureDiagnostics {
@@ -111,9 +133,7 @@ function questionPrompt(question: string, questionDate?: string): string {
       ? []
       : ["", `Question date (source timezone unspecified): ${questionDate}`]),
     "",
-    renderMemoryQuestionPlan(question),
-    "",
-    "Search adaptively for direct source coverage, verify every required evidence slot, and call finish with the cited evidence package. Do not answer the question.",
+    "Use the available memory operations to find direct source coverage, verify every required evidence slot, and call finish with the cited evidence package. Do not answer the question.",
   ].join("\n");
 }
 
@@ -132,6 +152,35 @@ function lastAssistantMessage(
     }
   }
   return undefined;
+}
+
+function responseModelMatches(requested: string, actual: string): boolean {
+  return actual === requested || actual.startsWith(`${requested}-`);
+}
+
+function validateResponseModels(
+  messages: readonly unknown[],
+  requestedModel: string,
+): string[] {
+  const responseModels = new Set<string>();
+  for (const message of messages) {
+    if (
+      typeof message !== "object" || message === null ||
+      !("role" in message) || message.role !== "assistant"
+    ) continue;
+    const assistant = message as AssistantMessage;
+    const actual = assistant.responseModel ?? assistant.model;
+    if (!responseModelMatches(requestedModel, actual)) {
+      throw new Error(
+        `Provider substituted model ${actual}; expected ${requestedModel}`,
+      );
+    }
+    responseModels.add(actual);
+  }
+  if (responseModels.size === 0) {
+    throw new Error("Provider response model is missing");
+  }
+  return [...responseModels].sort();
 }
 
 function assistantText(message: AssistantMessage | undefined): string {
@@ -180,7 +229,6 @@ export async function runPiMem(
   const retrievalMetricsBefore =
     options.store.snapshotRetrievalMetrics?.() ?? zeroRetrievalMetrics;
   const ephemeralContext = createEphemeralMemoryContext();
-
   const tools = createPiMemTools({
     store: options.store,
     scopeId,
@@ -204,9 +252,13 @@ export async function runPiMem(
         }),
 
   });
+  const enforceFinishOnly = createFinishOnlyBeforeToolCall();
   const agent = new Agent({
     initialState: {
-      systemPrompt: options.systemPrompt ?? PI_MEM_SYSTEM_PROMPT,
+      systemPrompt: piMemSystemPrompt(
+        options.skill ?? "pimem-v0",
+        options.systemPrompt ?? PI_MEM_BASE_SYSTEM_PROMPT,
+      ),
       model: options.modelRuntime.model,
       thinkingLevel: options.modelRuntime.thinkingLevel,
       tools: tools.all,
@@ -214,7 +266,7 @@ export async function runPiMem(
     streamFn: options.modelRuntime.streamFn,
     getApiKey: options.modelRuntime.getApiKey,
     transformContext: ephemeralContext.transformContext,
-    beforeToolCall: createFinishOnlyBeforeToolCall(),
+    beforeToolCall: enforceFinishOnly,
     toolExecution: "sequential",
     sessionId: runId,
   });
@@ -368,6 +420,10 @@ export async function runPiMem(
         retrievalMetricsBefore.rerankCandidateCount,
     ),
   };
+  const responseModels = validateResponseModels(
+    agent.state.messages,
+    options.modelRuntime.modelId,
+  );
   const base: PiMemResult = {
     runId,
     scopeId,
@@ -399,6 +455,7 @@ export async function runPiMem(
     retrievalModel: {
       providerId: options.modelRuntime.providerId,
       modelId: options.modelRuntime.modelId,
+      responseModels,
       thinkingLevel: options.modelRuntime.thinkingLevel,
       transport: options.modelRuntime.transport,
     },

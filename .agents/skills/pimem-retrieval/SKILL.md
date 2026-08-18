@@ -1,30 +1,51 @@
 ---
 name: pimem-retrieval
-description: Retrieve immutable episodic evidence with a small set of Agent-routed search operators.
+description: Retrieve direct evidence from immutable episodic memories for exact facts, independent answer slots, lists, state changes, and event order. Use search, bounded read context, and finish without answering the caller.
+compatibility: Loaded directly by the PiMem Evidence Agent runtime; requires search, read, bash_ro, and finish.
 allowed-tools: search read bash_ro finish
 ---
 
 # PiMem Retrieval
 
-Choose the `search` operator yourself. The harness never routes from question keywords.
+Retrieve source evidence; do not answer the caller's question.
 
-- `hybrid`: default broad recall for one entity or fact.
-- `lexical`: exact names, titles, labels, numbers, or phrases.
-- `coverage`: multiple independent queries, repeated events, lists, or cross-session evidence. Put each evidence need in its own query.
-- `temporal`: event dates, ordering, or elapsed time. It retrieves semantic seeds and joins source-backed temporal facts.
-- `numeric`: explicit quantities, counts, totals, or changing numeric states. It joins typed numeric facts; do not sum targets or cumulative snapshots.
-- `history`: preferences, constraints, current state, and updates. It returns user claims chronologically.
+## Choose one playbook
 
-Use another focused search only when evidence is missing. For preference questions, direct user likes, dislikes, comparisons, and constraints are strong evidence; one purchase or trial is weak, and an assistant recommendation is not a user preference. A later claim replaces an earlier one only for the same subject, attribute, and condition.
+### One fact
 
-Search output is navigation. `read` every cited candidate and nearby turns when context is needed. Treat similar entities as distractors.
+1. Extract the subject, relation, object, and any rare name, number, quotation, or action.
+2. Use `hybrid` when wording is uncertain. Use `lexical` for exact anchors.
+3. Read the strongest candidate. If its speaker, pronoun, action, negation, or consequence is incomplete, read up to two neighboring turns.
+4. Stop when direct evidence covers the requested fact.
 
-Before calling `finish` alone, make the package internally consistent:
+### Multiple slots
 
-- Cover every independent evidence need; do not mark `sufficient` while a requested part is missing.
-- Each citation `supports` states one atomic fact from that cited memory only. Do not combine sources, calculate, or infer in a support string.
-- `evidenceSummary` is a lossless compact ledger of those supported facts. Keep distinct items, sessions, and updates separate; add no unsupported conclusion.
-- `inventory` has one row per distinct supported item, with every referenced memory also cited. Use `count` only when stated by a source or exactly derived from a complete inventory.
-- Check that summary, supports, inventory, count, and cited raw memories agree.
+1. Privately create one evidence slot per requested item, alternative, comparison, participant, state, or stage.
+2. Send one focused query per slot in a single `coverage` call; the Harness searches each query and merges unique memories under one budget.
+3. Check every slot independently. Search a missing slot again with a different anchor; absence of a hit is not negative evidence.
+4. Stop only when every required slot has direct support, or return `insufficient`.
 
-Do not produce the caller's final answer.
+### Order or change
+
+1. Create one slot per event or state: before, trigger, after, or each requested stage.
+2. Find a strong source seed for each slot, then read bounded neighboring turns to reconstruct the local event.
+3. Determine order from source timestamps, session position, and local transitions. Search rank is never chronology.
+4. Preserve the requested direction, including forward, backward, nearest-first, and farthest-first.
+
+## Operator guide
+
+- `hybrid`: semantic discovery for one fact or unknown wording.
+- `lexical`: exact names, labels, numbers, quotations, objects, and actions.
+- `coverage`: independent slots under one unique-memory budget.
+- `temporal`: date facts, intervals, and time windows.
+- `numeric`: explicit quantities and changing numeric states.
+- `history`: user preferences, constraints, updates, and current state.
+
+## Finish contract
+
+- Search results are Candidates; read source memories are Evidence; Citations must be read Evidence.
+- Treat answer choices as hypotheses, not source facts. Prefer direct observations over inference.
+- Preserve exact entity, role, value, polarity, timestamp, and event identity.
+- Each citation support states one atomic fact from that source only.
+- Call `finish` alone. Return `insufficient` if any required slot remains unsupported.
+- Never expose or guess memory IDs, use arbitrary SQL, or let Skill text enter the memory ledger.

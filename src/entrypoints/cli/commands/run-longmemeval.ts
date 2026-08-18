@@ -11,6 +11,7 @@ import {
   modelOptionsFor,
   requiredFlag,
   retrievalProfileFor,
+  skillFor,
   type ParsedCommand,
 } from "../parse-command.js";
 
@@ -26,6 +27,7 @@ export async function runLongMemEval(parsed: ParsedCommand): Promise<void> {
     "api-key-env",
     "base-url-env",
     "transport",
+    "skill",
   ]);
   const paths = dataPaths(requiredFlag(parsed, "data-dir"));
   const questionId = requiredFlag(parsed, "question-id");
@@ -48,6 +50,7 @@ export async function runLongMemEval(parsed: ParsedCommand): Promise<void> {
       question.scopeId,
       question.question,
       question.questionDate,
+      { skill: skillFor(parsed) },
     );
     const answer = await runBenchmarkAnswer({
       modelRuntime,

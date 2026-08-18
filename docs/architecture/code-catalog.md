@@ -23,10 +23,11 @@ _No top-level functions, classes, or class methods._
 
 | Symbol | Purpose | Kind | Visibility | Source |
 |---|---|---|---|---|
-| `lastAssistantMessage(messages: readonly unknown[]): AssistantMessage \| undefined` | Returns the final assistant message emitted by the answer model. | function | internal | [line 25](../../src/benchmark/answer-from-evidence.ts#L25) |
-| `assistantText(message: AssistantMessage): string` | Extracts plain text from an assistant message. | function | internal | [line 42](../../src/benchmark/answer-from-evidence.ts#L42) |
-| `returnedModelMatches(requested: string, returned: string): boolean` | Checks whether the provider's response model matches the requested model. | function | exported | [line 55](../../src/benchmark/answer-from-evidence.ts#L55) |
-| `runBenchmarkAnswer(options: { modelRuntime: PiModelRuntime; prompt: BenchmarkAnswerPrompt; maxRunMs?: number; }): Promise<BenchmarkAnswerResult>` | Runs benchmark-owned answer synthesis after PiMem has finished retrieval. | function | exported | [line 60](../../src/benchmark/answer-from-evidence.ts#L60) |
+| `lastAssistantMessage(messages: readonly unknown[]): AssistantMessage \| undefined` | Returns the final assistant message emitted by the answer model. | function | internal | [line 32](../../src/benchmark/answer-from-evidence.ts#L32) |
+| `assistantText(message: AssistantMessage): string` | Extracts plain text from an assistant message. | function | internal | [line 49](../../src/benchmark/answer-from-evidence.ts#L49) |
+| `returnedModelMatches(requested: string, returned: string): boolean` | Checks whether the provider's response model matches the requested model. | function | exported | [line 62](../../src/benchmark/answer-from-evidence.ts#L62) |
+| `answerSystemPrompt(prompt: BenchmarkAnswerPrompt, executionChecklist?: string): string` | Runs benchmark-owned answer synthesis after PiMem has finished retrieval. | function | internal | [line 67](../../src/benchmark/answer-from-evidence.ts#L67) |
+| `runBenchmarkAnswer(options: { modelRuntime: PiModelRuntime; prompt: BenchmarkAnswerPrompt; maxRunMs?: number; executionChecklist?: string; }): Promise<BenchmarkAnswerResult>` | Runs benchmark answer. | function | exported | [line 76](../../src/benchmark/answer-from-evidence.ts#L76) |
 ## `src/benchmark/index.ts`
 
 _No top-level functions, classes, or class methods._
@@ -73,8 +74,7 @@ _No top-level functions, classes, or class methods._
 
 | Symbol | Purpose | Kind | Visibility | Source |
 |---|---|---|---|---|
-| `runQuestion(paths: LongMemEvalDataPaths, retrievalProfile: RetrievalProfile, scopeId: string, question: string, questionDate: string \| undefined, modelOptions: LoadPiModelRuntimeOptions): Promise<PiMemResult>` | Runs question. | function | exported | [line 18](../../src/benchmark/use-cases/run-question.ts#L18) |
-| `runQuestionWithRuntime(paths: LongMemEvalDataPaths, store: PiMemRuntimeStore, modelRuntime: PiModelRuntime, scopeId: string, question: string, questionDate?: string, runtimeLimits: { maxRunMs?: number; maxTurns?: number; maxToolCalls?: number; } = {}): Promise<PiMemResult>` | Runs question with runtime. | function | exported | [line 43](../../src/benchmark/use-cases/run-question.ts#L43) |
+| `runQuestionWithRuntime(paths: LongMemEvalDataPaths, store: PiMemRuntimeStore, modelRuntime: RunPiMemOptions["modelRuntime"], scopeId: string, question: string, questionDate?: string, runtimeOptions: Pick< RunPiMemOptions, "maxRunMs" \| "maxTurns" \| "maxToolCalls" \| "skill" > = {}): Promise<PiMemResult>` | Runs question with runtime. | function | exported | [line 11](../../src/benchmark/use-cases/run-question.ts#L11) |
 ## `src/cli.ts`
 
 _No top-level functions, classes, or class methods._
@@ -83,6 +83,11 @@ _No top-level functions, classes, or class methods._
 | Symbol | Purpose | Kind | Visibility | Source |
 |---|---|---|---|---|
 | `createRetrievalContext(rawStore: MemoryStore, profile: RetrievalProfile, embedder?: Embedder): RetrievalContext` | Creates retrieval context. | function | exported | [line 17](../../src/composition/create-retrieval-context.ts#L17) |
+## `src/composition/run-question.ts`
+
+| Symbol | Purpose | Kind | Visibility | Source |
+|---|---|---|---|---|
+| `runQuestion(paths: LongMemEvalDataPaths, retrievalProfile: RetrievalProfile, scopeId: string, question: string, questionDate: string \| undefined, modelOptions: LoadPiModelRuntimeOptions, skill: PiMemSkill = "pimem-v0"): Promise<PiMemResult>` | Runs question. | function | exported | [line 14](../../src/composition/run-question.ts#L14) |
 ## `src/context.ts`
 
 _No top-level functions, classes, or class methods._
@@ -99,16 +104,19 @@ _No top-level functions, classes, or class methods._
 
 | Symbol | Purpose | Kind | Visibility | Source |
 |---|---|---|---|---|
-| `successRecordPath(recordsDir: string, questionId: string): string` | Implements the success record path operation. | function | internal | [line 52](../../src/entrypoints/cli/commands/benchmark-longmemeval.ts#L52) |
-| `failureRecordPath(failuresDir: string, questionId: string): string` | Implements the failure record path operation. | function | internal | [line 56](../../src/entrypoints/cli/commands/benchmark-longmemeval.ts#L56) |
-| `completedQuestionIds(path: string): Promise<Set<string>>` | Implements the completed question ids operation. | function | internal | [line 60](../../src/entrypoints/cli/commands/benchmark-longmemeval.ts#L60) |
-| `predictionFor(retrieval: PiMemResult, answer: BenchmarkAnswerResult, questionId: string): BenchmarkPrediction` | Implements the prediction for operation. | function | internal | [line 78](../../src/entrypoints/cli/commands/benchmark-longmemeval.ts#L78) |
-| `ensureBenchmarkManifest(path: string, config: Record<string, unknown>): Promise<void>` | Implements the ensure benchmark manifest operation. | function | internal | [line 106](../../src/entrypoints/cli/commands/benchmark-longmemeval.ts#L106) |
-| `loadSuccessRecords(recordsDir: string, questions: readonly LongMemEvalPrivateQuestion[]): Promise<Map<string, BenchmarkSuccessRecord>>` | Loads success records. | function | internal | [line 132](../../src/entrypoints/cli/commands/benchmark-longmemeval.ts#L132) |
-| `readJsonlMap(path: string): Promise<Map<string, unknown>>` | Reads jsonl map. | function | internal | [line 153](../../src/entrypoints/cli/commands/benchmark-longmemeval.ts#L153) |
-| `materializeBenchmarkArtifacts(outputDir: string, selected: readonly LongMemEvalPrivateQuestion[]): Promise<{ succeeded: number; failed: number }>` | Materializes benchmark artifacts. | function | internal | [line 173](../../src/entrypoints/cli/commands/benchmark-longmemeval.ts#L173) |
-| `systemicRuntimeFailure(message: string): boolean` | Implements the systemic runtime failure operation. | function | internal | [line 244](../../src/entrypoints/cli/commands/benchmark-longmemeval.ts#L244) |
-| `benchmarkLongMemEval(parsed: ParsedCommand): Promise<void>` | Implements the benchmark long mem eval operation. | function | exported | [line 250](../../src/entrypoints/cli/commands/benchmark-longmemeval.ts#L250) |
+| `benchmarkSourceRevision(): { commit: string; dirty: boolean \| null; fingerprint?: string; }` | Implements the benchmark source revision operation. | function | exported | [line 57](../../src/entrypoints/cli/commands/benchmark-longmemeval.ts#L57) |
+| `benchmarkQuestionSetHash(questions: readonly LongMemEvalPrivateQuestion[]): string` | Implements the benchmark question set hash operation. | function | exported | [line 111](../../src/entrypoints/cli/commands/benchmark-longmemeval.ts#L111) |
+| `benchmarkCorpusHash(sanitizedRoot: string, questions: readonly LongMemEvalPrivateQuestion[]): Promise<string>` | Implements the benchmark corpus hash operation. | function | exported | [line 127](../../src/entrypoints/cli/commands/benchmark-longmemeval.ts#L127) |
+| `successRecordPath(recordsDir: string, questionId: string): string` | Implements the success record path operation. | function | internal | [line 144](../../src/entrypoints/cli/commands/benchmark-longmemeval.ts#L144) |
+| `failureRecordPath(failuresDir: string, questionId: string): string` | Implements the failure record path operation. | function | internal | [line 148](../../src/entrypoints/cli/commands/benchmark-longmemeval.ts#L148) |
+| `completedQuestionIds(path: string): Promise<Set<string>>` | Implements the completed question ids operation. | function | internal | [line 152](../../src/entrypoints/cli/commands/benchmark-longmemeval.ts#L152) |
+| `predictionFor(retrieval: PiMemResult, answer: BenchmarkAnswerResult, questionId: string): BenchmarkPrediction` | Implements the prediction for operation. | function | internal | [line 170](../../src/entrypoints/cli/commands/benchmark-longmemeval.ts#L170) |
+| `ensureBenchmarkManifest(path: string, config: Record<string, unknown>): Promise<void>` | Implements the ensure benchmark manifest operation. | function | internal | [line 198](../../src/entrypoints/cli/commands/benchmark-longmemeval.ts#L198) |
+| `loadSuccessRecords(recordsDir: string, questions: readonly LongMemEvalPrivateQuestion[]): Promise<Map<string, BenchmarkSuccessRecord>>` | Loads success records. | function | internal | [line 224](../../src/entrypoints/cli/commands/benchmark-longmemeval.ts#L224) |
+| `readJsonlMap(path: string): Promise<Map<string, unknown>>` | Reads jsonl map. | function | internal | [line 245](../../src/entrypoints/cli/commands/benchmark-longmemeval.ts#L245) |
+| `materializeBenchmarkArtifacts(outputDir: string, selected: readonly LongMemEvalPrivateQuestion[]): Promise<{ succeeded: number; failed: number }>` | Materializes benchmark artifacts. | function | internal | [line 265](../../src/entrypoints/cli/commands/benchmark-longmemeval.ts#L265) |
+| `systemicRuntimeFailure(message: string): boolean` | Implements the systemic runtime failure operation. | function | internal | [line 336](../../src/entrypoints/cli/commands/benchmark-longmemeval.ts#L336) |
+| `benchmarkLongMemEval(parsed: ParsedCommand): Promise<void>` | Implements the benchmark long mem eval operation. | function | exported | [line 342](../../src/entrypoints/cli/commands/benchmark-longmemeval.ts#L342) |
 ## `src/entrypoints/cli/commands/ingest-longmemeval.ts`
 
 | Symbol | Purpose | Kind | Visibility | Source |
@@ -141,12 +149,12 @@ _No top-level functions, classes, or class methods._
 
 | Symbol | Purpose | Kind | Visibility | Source |
 |---|---|---|---|---|
-| `runLongMemEval(parsed: ParsedCommand): Promise<void>` | Runs long mem eval. | function | exported | [line 17](../../src/entrypoints/cli/commands/run-longmemeval.ts#L17) |
+| `runLongMemEval(parsed: ParsedCommand): Promise<void>` | Runs long mem eval. | function | exported | [line 18](../../src/entrypoints/cli/commands/run-longmemeval.ts#L18) |
 ## `src/entrypoints/cli/commands/run-memory.ts`
 
 | Symbol | Purpose | Kind | Visibility | Source |
 |---|---|---|---|---|
-| `runGeneric(parsed: ParsedCommand): Promise<void>` | Runs generic. | function | exported | [line 12](../../src/entrypoints/cli/commands/run-memory.ts#L12) |
+| `runGeneric(parsed: ParsedCommand): Promise<void>` | Runs generic. | function | exported | [line 13](../../src/entrypoints/cli/commands/run-memory.ts#L13) |
 ## `src/entrypoints/cli/main.ts`
 
 | Symbol | Purpose | Kind | Visibility | Source |
@@ -157,14 +165,15 @@ _No top-level functions, classes, or class methods._
 
 | Symbol | Purpose | Kind | Visibility | Source |
 |---|---|---|---|---|
-| `parseCommand(argv: string[]): ParsedCommand` | Parses command. | function | exported | [line 12](../../src/entrypoints/cli/parse-command.ts#L12) |
-| `requiredFlag(parsed: ParsedCommand, name: string): string` | Implements the required flag operation. | function | exported | [line 34](../../src/entrypoints/cli/parse-command.ts#L34) |
-| `optionalFlag(parsed: ParsedCommand, name: string): string \| undefined` | Implements the optional flag operation. | function | exported | [line 42](../../src/entrypoints/cli/parse-command.ts#L42) |
-| `positiveIntegerFlag(parsed: ParsedCommand, name: string, fallback: number, maximum: number): number` | Implements the positive integer flag operation. | function | exported | [line 54](../../src/entrypoints/cli/parse-command.ts#L54) |
-| `positiveNumberFlag(parsed: ParsedCommand, name: string, fallback: number, maximum: number): number` | Implements the positive number flag operation. | function | exported | [line 69](../../src/entrypoints/cli/parse-command.ts#L69) |
-| `modelOptionsFor(parsed: ParsedCommand): LoadPiModelRuntimeOptions` | Implements the model options for operation. | function | exported | [line 84](../../src/entrypoints/cli/parse-command.ts#L84) |
-| `assertOnlyFlags(parsed: ParsedCommand, allowed: readonly string[]): void` | Validates only flags and throws when invalid. | function | exported | [line 136](../../src/entrypoints/cli/parse-command.ts#L136) |
-| `retrievalProfileFor(parsed: ParsedCommand): RetrievalProfile` | Implements the retrieval profile for operation. | function | exported | [line 146](../../src/entrypoints/cli/parse-command.ts#L146) |
+| `parseCommand(argv: string[]): ParsedCommand` | Parses command. | function | exported | [line 13](../../src/entrypoints/cli/parse-command.ts#L13) |
+| `requiredFlag(parsed: ParsedCommand, name: string): string` | Implements the required flag operation. | function | exported | [line 35](../../src/entrypoints/cli/parse-command.ts#L35) |
+| `optionalFlag(parsed: ParsedCommand, name: string): string \| undefined` | Implements the optional flag operation. | function | exported | [line 43](../../src/entrypoints/cli/parse-command.ts#L43) |
+| `positiveIntegerFlag(parsed: ParsedCommand, name: string, fallback: number, maximum: number): number` | Implements the positive integer flag operation. | function | exported | [line 55](../../src/entrypoints/cli/parse-command.ts#L55) |
+| `positiveNumberFlag(parsed: ParsedCommand, name: string, fallback: number, maximum: number): number` | Implements the positive number flag operation. | function | exported | [line 70](../../src/entrypoints/cli/parse-command.ts#L70) |
+| `modelOptionsFor(parsed: ParsedCommand): LoadPiModelRuntimeOptions` | Implements the model options for operation. | function | exported | [line 85](../../src/entrypoints/cli/parse-command.ts#L85) |
+| `skillFor(parsed: ParsedCommand): PiMemSkill` | Implements the skill for operation. | function | exported | [line 137](../../src/entrypoints/cli/parse-command.ts#L137) |
+| `assertOnlyFlags(parsed: ParsedCommand, allowed: readonly string[]): void` | Validates only flags and throws when invalid. | function | exported | [line 145](../../src/entrypoints/cli/parse-command.ts#L145) |
+| `retrievalProfileFor(parsed: ParsedCommand): RetrievalProfile` | Implements the retrieval profile for operation. | function | exported | [line 155](../../src/entrypoints/cli/parse-command.ts#L155) |
 ## `src/entrypoints/cli/workflow-files.ts`
 
 | Symbol | Purpose | Kind | Visibility | Source |
@@ -319,28 +328,21 @@ _No top-level functions, classes, or class methods._
 | `MemoryLedger.assertInvariants(): void` | Verifies candidate, evidence, citation, and scope provenance invariants. | method | public | [line 302](../../src/evidence-agent/model/memory-ledger.ts#L302) |
 | `MemoryLedger.assertScope(record: MemoryRecord): void` | Validates scope and throws when invalid. | method | private | [line 327](../../src/evidence-agent/model/memory-ledger.ts#L327) |
 | `MemoryLedger.upsertCandidate(record: MemoryRecord, preview: string, discovery: MemoryCandidate["discoveries"][number]): void` | Implements the upsert candidate operation. | method | private | [line 335](../../src/evidence-agent/model/memory-ledger.ts#L335) |
-## `src/evidence-agent/prompts/question-plan.ts`
-
-| Symbol | Purpose | Kind | Visibility | Source |
-|---|---|---|---|---|
-| `cleanMemoryQuestion(question: string): string` | Implements the clean memory question operation. | function | exported | [line 18](../../src/evidence-agent/prompts/question-plan.ts#L18) |
-| `inferEvidenceFocus(question: string): EvidenceFocus[]` | Implements the infer evidence focus operation. | function | internal | [line 26](../../src/evidence-agent/prompts/question-plan.ts#L26) |
-| `planMemoryQuestion(question: string): MemoryQuestionGuidance` | Implements the plan memory question operation. | function | exported | [line 46](../../src/evidence-agent/prompts/question-plan.ts#L46) |
-| `renderMemoryQuestionPlan(question: string): string` | Renders memory question plan. | function | exported | [line 69](../../src/evidence-agent/prompts/question-plan.ts#L69) |
-## `src/evidence-agent/prompts/retrieval-guidance.ts`
-
-_No top-level functions, classes, or class methods._
 ## `src/evidence-agent/run-pimem.ts`
 
 | Symbol | Purpose | Kind | Visibility | Source |
 |---|---|---|---|---|
-| `orderCandidatesForEvidenceAttention(candidates: readonly MemoryCandidate[]): MemoryCandidate[]` | Orders candidate memories for stable evidence review without changing their provenance. | function | exported | [line 50](../../src/evidence-agent/run-pimem.ts#L50) |
-| `PiMemRunError` | Implements pi mem run error. | class | exported | [line 96](../../src/evidence-agent/run-pimem.ts#L96) |
-| `PiMemRunError.constructor(message: string, diagnostics: PiMemFailureDiagnostics)` | Creates a pi mem run error instance. | method | public | [line 99](../../src/evidence-agent/run-pimem.ts#L99) |
-| `questionPrompt(question: string, questionDate?: string): string` | Builds the user prompt from the question and optional question date. | function | internal | [line 106](../../src/evidence-agent/run-pimem.ts#L106) |
-| `lastAssistantMessage(messages: readonly unknown[]): AssistantMessage \| undefined` | Returns the final assistant message from the Pi conversation. | function | internal | [line 120](../../src/evidence-agent/run-pimem.ts#L120) |
-| `assistantText(message: AssistantMessage \| undefined): string` | Extracts plain text from the final assistant message. | function | internal | [line 137](../../src/evidence-agent/run-pimem.ts#L137) |
-| `runPiMem(options: RunPiMemOptions): Promise<PiMemResult>` | Runs one bounded evidence-agent session and returns its provenance-backed result. | function | exported | [line 155](../../src/evidence-agent/run-pimem.ts#L155) |
+| `activeSkillPrompt(): string` | Implements the active skill prompt operation. | function | internal | [line 56](../../src/evidence-agent/run-pimem.ts#L56) |
+| `piMemSystemPrompt(skill: PiMemSkill = "pimem-v0", basePrompt: string = PI_MEM_BASE_SYSTEM_PROMPT): string` | Implements the pi mem system prompt operation. | function | exported | [line 60](../../src/evidence-agent/run-pimem.ts#L60) |
+| `orderCandidatesForEvidenceAttention(candidates: readonly MemoryCandidate[]): MemoryCandidate[]` | Orders candidate memories for stable evidence review without changing their provenance. | function | exported | [line 71](../../src/evidence-agent/run-pimem.ts#L71) |
+| `PiMemRunError` | Implements pi mem run error. | class | exported | [line 118](../../src/evidence-agent/run-pimem.ts#L118) |
+| `PiMemRunError.constructor(message: string, diagnostics: PiMemFailureDiagnostics)` | Creates a pi mem run error instance. | method | public | [line 121](../../src/evidence-agent/run-pimem.ts#L121) |
+| `questionPrompt(question: string, questionDate?: string): string` | Builds the user prompt from the question and optional question date. | function | internal | [line 128](../../src/evidence-agent/run-pimem.ts#L128) |
+| `lastAssistantMessage(messages: readonly unknown[]): AssistantMessage \| undefined` | Returns the final assistant message from the Pi conversation. | function | internal | [line 140](../../src/evidence-agent/run-pimem.ts#L140) |
+| `responseModelMatches(requested: string, actual: string): boolean` | Implements the response model matches operation. | function | internal | [line 157](../../src/evidence-agent/run-pimem.ts#L157) |
+| `validateResponseModels(messages: readonly unknown[], requestedModel: string): string[]` | Validates response models. | function | internal | [line 161](../../src/evidence-agent/run-pimem.ts#L161) |
+| `assistantText(message: AssistantMessage \| undefined): string` | Extracts plain text from the final assistant message. | function | internal | [line 186](../../src/evidence-agent/run-pimem.ts#L186) |
+| `runPiMem(options: RunPiMemOptions): Promise<PiMemResult>` | Runs one bounded evidence-agent session and returns its provenance-backed result. | function | exported | [line 204](../../src/evidence-agent/run-pimem.ts#L204) |
 ## `src/evidence-fact-index.ts`
 
 _No top-level functions, classes, or class methods._
@@ -404,18 +406,21 @@ _No top-level functions, classes, or class methods._
 
 | Symbol | Purpose | Kind | Visibility | Source |
 |---|---|---|---|---|
-| `asObject(value: unknown, label: string): JsonObject` | Implements the as object operation. | function | internal | [line 57](../../src/platform/pi/load-model-runtime.ts#L57) |
-| `asNonEmptyString(value: unknown, label: string): string` | Implements the as non empty string operation. | function | internal | [line 64](../../src/platform/pi/load-model-runtime.ts#L64) |
-| `optionalBoolean(value: unknown, fallback: boolean, label: string): boolean` | Implements the optional boolean operation. | function | internal | [line 71](../../src/platform/pi/load-model-runtime.ts#L71) |
-| `optionalPositiveInteger(value: unknown, fallback: number, label: string): number` | Implements the optional positive integer operation. | function | internal | [line 83](../../src/platform/pi/load-model-runtime.ts#L83) |
-| `optionalCost(value: unknown, label: string): typeof DEFAULT_COST` | Implements the optional cost operation. | function | internal | [line 99](../../src/platform/pi/load-model-runtime.ts#L99) |
-| `optionalInput(value: unknown, label: string): ("text" \| "image")[]` | Implements the optional input operation. | function | internal | [line 113](../../src/platform/pi/load-model-runtime.ts#L113) |
-| `optionalCompat(providerValue: unknown, modelValue: unknown): OpenAICompletionsCompat \| undefined` | Implements the optional compat operation. | function | internal | [line 125](../../src/platform/pi/load-model-runtime.ts#L125) |
-| `validateBaseUrl(value: unknown): string` | Validates base url. | function | internal | [line 152](../../src/platform/pi/load-model-runtime.ts#L152) |
-| `parseJsonFile(path: string, label: string): Promise<JsonObject>` | Parses json file. | function | internal | [line 172](../../src/platform/pi/load-model-runtime.ts#L172) |
-| `trustedCommand(apiKeyConfig: unknown): string` | Implements the trusted command operation. | function | internal | [line 192](../../src/platform/pi/load-model-runtime.ts#L192) |
-| `executeTrustedApiKeyCommand(command: string): Promise<string>` | Executes trusted api key command. | function | internal | [line 209](../../src/platform/pi/load-model-runtime.ts#L209) |
-| `loadPiModelRuntime(options: LoadPiModelRuntimeOptions = {}): Promise<PiModelRuntime>` | Loads pi model runtime. | function | exported | [line 236](../../src/platform/pi/load-model-runtime.ts#L236) |
+| `asObject(value: unknown, label: string): JsonObject` | Implements the as object operation. | function | internal | [line 63](../../src/platform/pi/load-model-runtime.ts#L63) |
+| `asNonEmptyString(value: unknown, label: string): string` | Implements the as non empty string operation. | function | internal | [line 70](../../src/platform/pi/load-model-runtime.ts#L70) |
+| `optionalBoolean(value: unknown, fallback: boolean, label: string): boolean` | Implements the optional boolean operation. | function | internal | [line 77](../../src/platform/pi/load-model-runtime.ts#L77) |
+| `optionalPositiveInteger(value: unknown, fallback: number, label: string): number` | Implements the optional positive integer operation. | function | internal | [line 89](../../src/platform/pi/load-model-runtime.ts#L89) |
+| `optionalCost(value: unknown, label: string): typeof DEFAULT_COST` | Implements the optional cost operation. | function | internal | [line 105](../../src/platform/pi/load-model-runtime.ts#L105) |
+| `optionalInput(value: unknown, label: string): ("text" \| "image")[]` | Implements the optional input operation. | function | internal | [line 119](../../src/platform/pi/load-model-runtime.ts#L119) |
+| `mergedCompat(providerValue: unknown, modelValue: unknown): JsonObject \| undefined` | Merges d compat. | function | internal | [line 131](../../src/platform/pi/load-model-runtime.ts#L131) |
+| `optionalCompletionsCompat(raw: JsonObject \| undefined): OpenAICompletionsCompat \| undefined` | Implements the optional completions compat operation. | function | internal | [line 146](../../src/platform/pi/load-model-runtime.ts#L146) |
+| `optionalResponsesCompat(raw: JsonObject \| undefined): OpenAIResponsesCompat \| undefined` | Implements the optional responses compat operation. | function | internal | [line 165](../../src/platform/pi/load-model-runtime.ts#L165) |
+| `supportedApi(value: unknown, label: string): PiModelApi` | Implements the supported api operation. | function | internal | [line 203](../../src/platform/pi/load-model-runtime.ts#L203) |
+| `validateBaseUrl(value: unknown): string` | Validates base url. | function | internal | [line 213](../../src/platform/pi/load-model-runtime.ts#L213) |
+| `parseJsonFile(path: string, label: string): Promise<JsonObject>` | Parses json file. | function | internal | [line 233](../../src/platform/pi/load-model-runtime.ts#L233) |
+| `trustedCommand(apiKeyConfig: unknown): string` | Implements the trusted command operation. | function | internal | [line 253](../../src/platform/pi/load-model-runtime.ts#L253) |
+| `executeTrustedApiKeyCommand(command: string): Promise<string>` | Executes trusted api key command. | function | internal | [line 270](../../src/platform/pi/load-model-runtime.ts#L270) |
+| `loadPiModelRuntime(options: LoadPiModelRuntimeOptions = {}): Promise<PiModelRuntime>` | Loads pi model runtime. | function | exported | [line 297](../../src/platform/pi/load-model-runtime.ts#L297) |
 ## `src/platform/pi/openai-non-stream-transport.ts`
 
 | Symbol | Purpose | Kind | Visibility | Source |
@@ -496,12 +501,6 @@ _No top-level functions, classes, or class methods._
 
 _No top-level functions, classes, or class methods._
 ## `src/retrieval-profile.ts`
-
-_No top-level functions, classes, or class methods._
-## `src/retrieval-skill.ts`
-
-_No top-level functions, classes, or class methods._
-## `src/retrieval-strategy.ts`
 
 _No top-level functions, classes, or class methods._
 ## `src/retrieval/adapters/openai/openai-compatible-embedder.ts`
@@ -646,7 +645,7 @@ _No top-level functions, classes, or class methods._
 | `makeSearchRequest(params: { queries: string[]; limit?: number; sessionIds?: string[]; roles?: MemoryRecord["role"][]; after?: string; before?: string; order?: SearchOrder; maxPerSession?: number; }, defaults: Pick<SearchRequest, "limit" \| "order" \| "maxPerSession"> = {}): SearchRequest` | Builds a normalized retrieval request with stable default limits and ordering. | function | internal | [line 63](../../src/retrieval/search-memory.ts#L63) |
 | `searchQueryFingerprint(query: string): string` | Creates a canonical fingerprint used to detect repeated queries. | function | internal | [line 92](../../src/retrieval/search-memory.ts#L92) |
 | `mergeOperatorHits(preferred: readonly RetrievalHit[], fallback: readonly RetrievalHit[], limit: number): RetrievalHit[]` | Merges operator-preferred and fallback hits without duplicate memories. | function | internal | [line 101](../../src/retrieval/search-memory.ts#L101) |
-| `coverageHits(store: MemoryToolStore, scopeId: string, queries: readonly string[], limit: number, maxPerSession: number \| undefined, signal?: AbortSignal): Promise<RetrievalHit[]>` | Runs each query separately and merges results to preserve multi-query coverage. | function | internal | [line 114](../../src/retrieval/search-memory.ts#L114) |
+| `coverageHits(store: MemoryToolStore, scopeId: string, queries: readonly string[], limit: number, maxPerSession: number \| undefined, signal?: AbortSignal): Promise<RetrievalHit[]>` | Runs each coverage query and merges deterministic session-diverse results under one budget. | function | internal | [line 114](../../src/retrieval/search-memory.ts#L114) |
 | `createSearchMemory(options: SearchMemoryOptions): ( params: { operator?: SearchOperator; queries: string[]; limit?: number }, signal?: AbortSignal, ) => Promise<SearchMemoryResult>` | Creates the search orchestrator for normalization, routing, coverage, expansion, and hit merging. | function | exported | [line 167](../../src/retrieval/search-memory.ts#L167) |
 ## `src/retrieval/temporal-annotation.ts`
 
