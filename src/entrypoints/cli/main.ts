@@ -13,12 +13,12 @@ function printHelp(): void {
 
 Commands:
   ingest-longmemeval --source FILE --data-dir DIR [--question-id ID ...] [--retrieval-profile fts5|pimem-hybrid] [--embedding-slots N] [--embedding-rps N]
-  run-longmemeval    --data-dir DIR --question-id ID [--retrieval-profile fts5|pimem-hybrid] [--model ID]
-  benchmark-longmemeval --data-dir DIR --output-dir DIR [--question-id ID ...] [--retrieval-profile fts5|pimem-hybrid] [--model ID] [--slots N]
+  run-longmemeval    --data-dir DIR --question-id ID [--retrieval-profile fts5|pimem-hybrid] [--model ID] [--skill none|pimem-v0]
+  benchmark-longmemeval --data-dir DIR --output-dir DIR [--question-id ID ...] [--retrieval-profile fts5|pimem-hybrid] [--model ID] [--skill none|pimem-v0] [--slots N]
   longmemeval-suite --source FILE --data-dir DIR --output-dir DIR --embedding-env FILE --answer-env FILE --judge-env FILE --agent-dir DIR --provider ID --model ID --archive FILE.tar.gz --evaluation-archive FILE.tar.gz [--slots N] [--frozen-slots N] [--judge-slots N]
   prepare-longmemeval-eval --source FILE --predictions FILE --output FILE
   package-benchmark   --output-dir DIR --archive FILE.tar.gz
-  run                 --data-dir DIR --scope ID --question TEXT [--question-date TEXT] [--retrieval-profile fts5|pimem-hybrid] [--model ID]
+  run                 --data-dir DIR --scope ID --question TEXT [--question-date TEXT] [--retrieval-profile fts5|pimem-hybrid] [--model ID] [--skill none|pimem-v0]
 `);
 }
 

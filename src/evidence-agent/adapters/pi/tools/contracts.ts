@@ -47,8 +47,6 @@ export interface ReadToolDetails {
 
 export interface FinishToolDetails {
   kind: "finish";
-  autoReadCandidateRefs: number[];
-  autoReadMemoryIds: string[];
   selection: PiMemSelection;
 }
 

@@ -12,10 +12,15 @@ export type {
 export {
   PI_MEM_SYSTEM_PROMPT,
   PIMEM_HARNESS_VERSION,
+  PIMEM_SKILL_HASH,
+  PIMEM_SKILL_TEXT,
+  PIMEM_SKILL_VERSION,
   PiMemRunError,
   orderCandidatesForEvidenceAttention,
+  piMemSystemPrompt,
   runPiMem,
   type PiMemFailureDiagnostics,
   type PiMemRuntimeStore,
+  type PiMemSkill,
   type RunPiMemOptions,
 } from "./run-pimem.js";

@@ -57,6 +57,7 @@ export interface ToolTraceEntry {
 export interface ModelMetadata {
   providerId: string;
   modelId: string;
+  responseModels: string[];
   thinkingLevel: string;
   transport: "sse" | "non-stream";
 }

@@ -10,7 +10,7 @@ export function createReadTool(
     name: "read",
     label: "Read memory",
     description:
-      "Read selected immutable source memories using candidate numbers returned by search or bash_ro. The harness resolves them to exact internal IDs and records all context expansion. When a hit may omit its value, date, state, or adjacent reply, use bounded contextBefore/contextAfter. Use the same candidate numbers for citations in finish; there is no second evidence-number namespace.",
+      "Read selected immutable source memories using candidate numbers. Use bounded contextBefore/contextAfter when adjacent source context is needed, then reuse candidate numbers in finish.",
     parameters: ReadParameters,
     async execute(_toolCallId, params) {
       const candidateRefs = normalizeHarnessRefs(params.candidateRefs);

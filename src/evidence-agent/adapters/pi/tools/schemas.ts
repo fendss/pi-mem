@@ -24,10 +24,13 @@ export const ReadParameters = Type.Object({
     minItems: 1,
     maxItems: 100,
     description:
-      "Stable candidate numbers returned by search or bash_ro. The harness resolves them to exact internal memory IDs. Zero is normalized to the first candidate for defensive compatibility with zero-based model output.",
+      "Stable candidate numbers returned by search or bash_ro. The harness resolves candidate numbers to exact internal memory IDs.",
   }),
   contextBefore: Type.Optional(Type.Integer({ minimum: 0, maximum: 10 })),
   contextAfter: Type.Optional(Type.Integer({ minimum: 0, maximum: 10 })),
+}, {
+  description:
+    "Read immutable candidate memories and optional bounded neighboring context.",
 });
 
 export const FinishParameters = Type.Object({

@@ -23,6 +23,7 @@ PiMem stops at the cited evidence package. It does not own answer formatting or 
 - [`docs/architecture/README.md`](docs/architecture/README.md) explains the bounded contexts and dependency direction.
 - [`docs/architecture/file-catalog.md`](docs/architecture/file-catalog.md) states what every source file owns.
 - [`docs/architecture/code-catalog.md`](docs/architecture/code-catalog.md) states what every function, class, and class method does.
+- [`deploy/README.md`](deploy/README.md) documents the Dockerized LDBD Add/Search API.
 
 ## Version 1.0
 

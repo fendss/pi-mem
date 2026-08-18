@@ -136,11 +136,41 @@ describe("PiMem tools", () => {
       limit: 40,
       roles: ["user"],
       order: "chronological",
-      maxPerSession: 4,
     });
     expect(JSON.stringify(result.content)).toContain(
       "2 days before question",
     );
+  });
+
+  it("applies a per-session cap only when the caller configures one", async () => {
+    const searched = record("m-capped", 0);
+    let observed: SearchRequest | undefined;
+    const store: MemoryToolStore = {
+      search(_scopeId, request) {
+        observed = request;
+        return [{
+          record: searched,
+          query: request.queries[0] ?? "",
+          retriever: "fts5",
+          rank: 1,
+          score: 1,
+          preview: searched.content,
+        }];
+      },
+      read() {
+        return [searched];
+      },
+    };
+    const tools = createPiMemTools({
+      store,
+      scopeId: "scope-1",
+      ledger: new MemoryLedger("scope-1"),
+      searchDefaults: { limit: 20, order: "relevance", maxPerSession: 4 },
+    });
+
+    await tools.search.execute("search-capped", { queries: ["source"] });
+
+    expect(observed).toMatchObject({ maxPerSession: 4 });
   });
 
   it("awaits asynchronous retrieval without changing the search schema", async () => {
@@ -180,27 +210,54 @@ describe("PiMem tools", () => {
     expect(observedSignal).toBe(controller.signal);
   });
 
-  it("auto-reads exact cited candidates before accepting finish", async () => {
+  it("rejects cited candidates that were not explicitly read", async () => {
     const searched = record("m1", 0);
     const expanded = record("m2", 1);
     const ledger = new MemoryLedger("scope-1");
+    let readCalls = 0;
+    const store = createStore(searched, expanded);
     const tools = createPiMemTools({
-      store: createStore(searched, expanded),
+      store: {
+        ...store,
+        read(...args) {
+          readCalls += 1;
+          return store.read(...args);
+        },
+      },
       scopeId: "scope-1",
       ledger,
     });
 
     await tools.search.execute("search-1", { queries: ["source"] });
-    const result = await tools.finish.execute("finish-1", {
+    await expect(tools.finish.execute("finish-1", {
       status: "sufficient",
       citations: [{ candidateRef: 1, supports: "The source states it." }],
       evidenceSummary: "The exact selected candidate supplies the evidence.",
+    })).rejects.toThrow(/candidate reference 1 has not been read.*call read/iu);
+
+    expect(readCalls).toBe(0);
+    expect(ledger.evidence).toEqual([]);
+    expect(ledger.selection).toBeUndefined();
+  });
+
+  it("rejects unread candidate references used only by inventory", async () => {
+    const searched = record("m1", 0);
+    const ledger = new MemoryLedger("scope-1");
+    const tools = createPiMemTools({
+      store: createStore(searched, record("m2", 1)),
+      scopeId: "scope-1",
+      ledger,
     });
 
-    expect(result.details.autoReadCandidateRefs).toEqual([1]);
-    expect(result.details.autoReadMemoryIds).toEqual(["m1"]);
-    expect(ledger.evidence.map((item) => item.memoryId)).toEqual(["m1", "m2"]);
-    expect(ledger.selection?.citations[0]?.memoryId).toBe("m1");
+    await tools.search.execute("search-1", { queries: ["source"] });
+    await expect(tools.finish.execute("finish-inventory", {
+      status: "insufficient",
+      citations: [],
+      inventory: [{ item: "unread item", candidateRefs: [1] }],
+      evidenceSummary: "The candidate has not yet been read.",
+    })).rejects.toThrow(/candidate reference 1 has not been read.*call read/iu);
+
+    expect(ledger.selection).toBeUndefined();
   });
 
   it("lets an operator block finish before the ledger accepts it", async () => {

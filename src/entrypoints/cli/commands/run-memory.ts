@@ -1,11 +1,12 @@
-import { runQuestion } from "../../../benchmark/use-cases/run-question.js";
 import { dataPaths } from "../../../benchmark/longmemeval/data-paths.js";
+import { runQuestion } from "../../../composition/run-question.js";
 import {
   assertOnlyFlags,
   modelOptionsFor,
   optionalFlag,
   requiredFlag,
   retrievalProfileFor,
+  skillFor,
   type ParsedCommand,
 } from "../parse-command.js";
 
@@ -23,6 +24,7 @@ export async function runGeneric(parsed: ParsedCommand): Promise<void> {
     "api-key-env",
     "base-url-env",
     "transport",
+    "skill",
   ]);
   const result = await runQuestion(
     dataPaths(requiredFlag(parsed, "data-dir")),
@@ -31,6 +33,7 @@ export async function runGeneric(parsed: ParsedCommand): Promise<void> {
     requiredFlag(parsed, "question"),
     optionalFlag(parsed, "question-date"),
     modelOptionsFor(parsed),
+    skillFor(parsed),
   );
   process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
 }

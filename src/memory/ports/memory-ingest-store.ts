@@ -1,4 +1,10 @@
-import type { MemoryRecord, ScopeIngestStatus } from "../model/memory.js";
+import type {
+  AppendMemoryRequest,
+  AppendMemoryResult,
+  MemoryRecord,
+  OnlineScopeState,
+  ScopeIngestStatus,
+} from "../model/memory.js";
 
 export interface ScopeExport {
   scopeId: string;
@@ -12,4 +18,12 @@ export interface MemoryIngestStore {
     records: MemoryRecord[],
   ): ScopeIngestStatus;
   exportScope(scopeId: string, exportRoot: string): Promise<ScopeExport>;
+}
+
+export interface OnlineMemoryStore {
+  appendMemoryRequest(request: AppendMemoryRequest): AppendMemoryResult;
+  markAppendRequestComplete(requestId: string, requestHash: string): void;
+  hasPendingAppendRequests(scopeId: string): boolean;
+  getOnlineScopeState(scopeId: string): OnlineScopeState | undefined;
+  sealOnlineScope(scopeId: string): OnlineScopeState;
 }

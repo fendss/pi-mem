@@ -28,3 +28,24 @@ export interface MemoryRecord {
 }
 
 export type ScopeIngestStatus = "inserted" | "unchanged";
+
+export interface AppendMemoryMessage {
+  role: MemoryRole;
+  content: string;
+  timestamp?: string;
+}
+
+export interface AppendMemoryRequest {
+  requestId: string;
+  requestHash: string;
+  scopeId: string;
+  sourceSessionId: string;
+  messages: readonly AppendMemoryMessage[];
+}
+
+export interface AppendMemoryResult {
+  status: "pending" | "complete";
+  records: MemoryRecord[];
+}
+
+export type OnlineScopeState = "ingesting" | "sealed";
