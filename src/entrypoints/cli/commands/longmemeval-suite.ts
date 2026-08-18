@@ -25,6 +25,7 @@ import {
   positiveNumberFlag,
   requiredFlag,
   retrievalProfileFor,
+  skillFor,
   type ParsedCommand,
 } from "../parse-command.js";
 import {
@@ -282,23 +283,146 @@ async function packageEvaluationArtifacts(
   await rename(temporary, destination);
 }
 
+type SuiteModelRole = "retrieval" | "answer";
+
+export interface SuiteModelRoleConfiguration {
+  agentDir: string;
+  provider: string;
+  model: string;
+  thinkingLevel: string;
+  apiKeySourceEnv: string;
+  baseUrlSourceEnv: string;
+  transport: string;
+}
+
+export interface SuiteModelConfiguration {
+  retrieval: SuiteModelRoleConfiguration;
+  answer: SuiteModelRoleConfiguration;
+}
+
+function roleFlag(
+  parsed: ParsedCommand,
+  role: SuiteModelRole,
+  name: string,
+): string | undefined {
+  return optionalFlag(parsed, `${role}-${name}`) ?? optionalFlag(parsed, name);
+}
+
+function requiredRoleFlag(
+  parsed: ParsedCommand,
+  role: SuiteModelRole,
+  name: string,
+): string {
+  const value = roleFlag(parsed, role, name);
+  if (value === undefined) {
+    throw new Error(
+      `Expected --${role}-${name} or the legacy --${name} fallback`,
+    );
+  }
+  return value;
+}
+
+function modelRoleConfiguration(
+  parsed: ParsedCommand,
+  role: SuiteModelRole,
+): SuiteModelRoleConfiguration {
+  return {
+    agentDir: resolve(requiredRoleFlag(parsed, role, "agent-dir")),
+    provider: requiredRoleFlag(parsed, role, "provider"),
+    model: requiredRoleFlag(parsed, role, "model"),
+    thinkingLevel: roleFlag(parsed, role, "thinking-level") ?? "off",
+    apiKeySourceEnv:
+      roleFlag(parsed, role, "api-key-env") ?? "OPENAI_API_KEY",
+    baseUrlSourceEnv:
+      roleFlag(parsed, role, "base-url-env") ?? "OPENAI_API_BASE",
+    transport: roleFlag(parsed, role, "transport") ?? "sse",
+  };
+}
+
+export function suiteModelConfigurationFor(
+  parsed: ParsedCommand,
+): SuiteModelConfiguration {
+  return {
+    retrieval: modelRoleConfiguration(parsed, "retrieval"),
+    answer: modelRoleConfiguration(parsed, "answer"),
+  };
+}
+
+const RETRIEVAL_API_KEY_ENV = "PIMEM_RETRIEVAL_API_KEY";
+const RETRIEVAL_BASE_URL_ENV = "PIMEM_RETRIEVAL_BASE_URL";
+const ANSWER_API_KEY_ENV = "PIMEM_ANSWER_API_KEY";
+const ANSWER_BASE_URL_ENV = "PIMEM_ANSWER_BASE_URL";
+
+export function suiteBenchmarkEnvironment(options: {
+  retrievalSource: NodeJS.ProcessEnv;
+  answerSource: NodeJS.ProcessEnv;
+  models: SuiteModelConfiguration;
+}): NodeJS.ProcessEnv {
+  const retrievalApiKey = requireEnvironmentVariable(
+    options.retrievalSource,
+    options.models.retrieval.apiKeySourceEnv,
+  );
+  const retrievalBaseUrl = requireEnvironmentVariable(
+    options.retrievalSource,
+    options.models.retrieval.baseUrlSourceEnv,
+  );
+  const answerApiKey = requireEnvironmentVariable(
+    options.answerSource,
+    options.models.answer.apiKeySourceEnv,
+  );
+  const answerBaseUrl = requireEnvironmentVariable(
+    options.answerSource,
+    options.models.answer.baseUrlSourceEnv,
+  );
+  return {
+    ...options.retrievalSource,
+    ...options.answerSource,
+    [RETRIEVAL_API_KEY_ENV]: retrievalApiKey,
+    [RETRIEVAL_BASE_URL_ENV]: retrievalBaseUrl,
+    [ANSWER_API_KEY_ENV]: answerApiKey,
+    [ANSWER_BASE_URL_ENV]: answerBaseUrl,
+    // The frozen re-answer evaluator has a stable OPENAI_* contract. Keep it
+    // aligned with the suite's answer role even when the source file uses
+    // custom variable names.
+    OPENAI_API_KEY: answerApiKey,
+    OPENAI_API_BASE: answerBaseUrl,
+    OPENAI_MODEL: options.models.answer.model,
+  };
+}
+
 export async function longMemEvalSuite(parsed: ParsedCommand): Promise<void> {
   assertOnlyFlags(parsed, [
     "source",
     "data-dir",
     "output-dir",
     "retrieval-profile",
+    "skill",
     "slots",
     "agent-dir",
+    "retrieval-agent-dir",
+    "answer-agent-dir",
     "provider",
+    "retrieval-provider",
+    "answer-provider",
     "model",
+    "retrieval-model",
+    "answer-model",
     "thinking-level",
+    "retrieval-thinking-level",
+    "answer-thinking-level",
     "embedding-env",
+    "retrieval-env",
     "answer-env",
     "judge-env",
     "api-key-env",
+    "retrieval-api-key-env",
+    "answer-api-key-env",
     "base-url-env",
+    "retrieval-base-url-env",
+    "answer-base-url-env",
     "transport",
+    "retrieval-transport",
+    "answer-transport",
     "retry-delay-seconds",
     "archive",
     "judge-script",
@@ -313,6 +437,9 @@ export async function longMemEvalSuite(parsed: ParsedCommand): Promise<void> {
   const outputDir = resolve(requiredFlag(parsed, "output-dir"));
   const embeddingEnv = resolve(requiredFlag(parsed, "embedding-env"));
   const answerEnv = resolve(requiredFlag(parsed, "answer-env"));
+  const retrievalEnv = resolve(
+    optionalFlag(parsed, "retrieval-env") ?? answerEnv,
+  );
   const judgeEnvPath = resolve(requiredFlag(parsed, "judge-env"));
   const archive = resolve(requiredFlag(parsed, "archive"));
   const evaluationArchive = resolve(
@@ -328,13 +455,8 @@ export async function longMemEvalSuite(parsed: ParsedCommand): Promise<void> {
     3_600,
   );
   const retrievalProfile = retrievalProfileFor(parsed);
-  const agentDir = resolve(requiredFlag(parsed, "agent-dir"));
-  const provider = requiredFlag(parsed, "provider");
-  const model = requiredFlag(parsed, "model");
-  const thinkingLevel = optionalFlag(parsed, "thinking-level") ?? "off";
-  const apiKeyEnv = optionalFlag(parsed, "api-key-env") ?? "OPENAI_API_KEY";
-  const baseUrlEnv = optionalFlag(parsed, "base-url-env") ?? "OPENAI_API_BASE";
-  const transport = optionalFlag(parsed, "transport") ?? "sse";
+  const skill = skillFor(parsed);
+  const models = suiteModelConfigurationFor(parsed);
   const judgeScript = resolve(
     optionalFlag(parsed, "judge-script") ??
       "scripts/longmemeval_frozen_eval.py",
@@ -348,12 +470,23 @@ export async function longMemEvalSuite(parsed: ParsedCommand): Promise<void> {
   const expected = questions.length;
   if (expected === 0) throw new Error("Suite has no private benchmark questions");
 
-  const benchmarkEnvironment = await loadProtectedEnvironment([
-    embeddingEnv,
-    answerEnv,
+  const embeddingEnvironment = await loadProtectedEnvironment([embeddingEnv]);
+  const answerSourcePromise = loadProtectedEnvironment(
+    [answerEnv],
+    embeddingEnvironment,
+  );
+  const retrievalSourcePromise = retrievalEnv === answerEnv
+    ? answerSourcePromise
+    : loadProtectedEnvironment([retrievalEnv], embeddingEnvironment);
+  const [retrievalSource, answerSource] = await Promise.all([
+    retrievalSourcePromise,
+    answerSourcePromise,
   ]);
-  requireEnvironmentVariable(benchmarkEnvironment, apiKeyEnv);
-  requireEnvironmentVariable(benchmarkEnvironment, baseUrlEnv);
+  const benchmarkEnvironment = suiteBenchmarkEnvironment({
+    retrievalSource,
+    answerSource,
+    models,
+  });
   const judgeEnvironment = await loadProtectedEnvironment(
     [judgeEnvPath],
     benchmarkEnvironment,
@@ -417,22 +550,38 @@ export async function longMemEvalSuite(parsed: ParsedCommand): Promise<void> {
         outputDir,
         "--retrieval-profile",
         retrievalProfile,
+        "--skill",
+        skill,
         "--slots",
         String(slots),
-        "--agent-dir",
-        agentDir,
-        "--provider",
-        provider,
-        "--model",
-        model,
-        "--thinking-level",
-        thinkingLevel,
-        "--api-key-env",
-        apiKeyEnv,
-        "--base-url-env",
-        baseUrlEnv,
-        "--transport",
-        transport,
+        "--retrieval-agent-dir",
+        models.retrieval.agentDir,
+        "--retrieval-provider",
+        models.retrieval.provider,
+        "--retrieval-model",
+        models.retrieval.model,
+        "--retrieval-thinking-level",
+        models.retrieval.thinkingLevel,
+        "--retrieval-api-key-env",
+        RETRIEVAL_API_KEY_ENV,
+        "--retrieval-base-url-env",
+        RETRIEVAL_BASE_URL_ENV,
+        "--retrieval-transport",
+        models.retrieval.transport,
+        "--answer-agent-dir",
+        models.answer.agentDir,
+        "--answer-provider",
+        models.answer.provider,
+        "--answer-model",
+        models.answer.model,
+        "--answer-thinking-level",
+        models.answer.thinkingLevel,
+        "--answer-api-key-env",
+        ANSWER_API_KEY_ENV,
+        "--answer-base-url-env",
+        ANSWER_BASE_URL_ENV,
+        "--answer-transport",
+        models.answer.transport,
       ];
       const code = await runLoggedChild({
         file: process.execPath,
@@ -460,7 +609,7 @@ export async function longMemEvalSuite(parsed: ParsedCommand): Promise<void> {
         )
       ) {
         throw new Error(
-          "Suite stopped after a credential/provider mismatch; update the protected answer environment before resuming",
+          "Suite stopped after a credential/provider mismatch; update the protected retrieval or answer environment before resuming",
         );
       }
       await writeAtomicText(statusPath, "retrying\n");

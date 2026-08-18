@@ -138,11 +138,16 @@ npm run cli -- longmemeval-suite \
   --output-dir ./runs/full-suite \
   --retrieval-profile pimem-hybrid \
   --embedding-env "$HOME/.config/pi-mem/embedding.env" \
+  --retrieval-env "$HOME/.config/pi-mem/retrieval.env" \
   --answer-env "$HOME/.config/pi-mem/answer.env" \
   --judge-env "$HOME/.config/pi-mem/judger.env" \
-  --agent-dir "$HOME/.pi/agent" \
-  --provider pimem-openai \
-  --model gpt-4o-mini \
+  --retrieval-agent-dir "$HOME/.pi/agent" \
+  --retrieval-provider pimem-openai \
+  --retrieval-model gpt-5.4-mini \
+  --answer-agent-dir "$HOME/.pi/agent" \
+  --answer-provider pimem-openai \
+  --answer-model gpt-4o-mini \
+  --skill pimem-v0 \
   --slots 16 \
   --frozen-slots 16 \
   --judge-slots 16 \
@@ -195,7 +200,9 @@ The endpoint, key, Authorization header, vectors, and full API response are not
 written to runner output. A missing key, failed query embedding, or incomplete
 scope index is an error; hybrid never silently falls back to FTS5.
 
-`longmemeval-suite` loads only mode-`0600`, runner-owned protected environment files. It passes API keys by environment-variable name and overrides the configured provider base URL from `OPENAI_API_BASE`, so rotating `answer.env` does not require rewriting `models.json`. It fails fast on `401`, `403`, or invalid-token errors, while `429`, timeout, transport, and transient upstream failures remain durably resumable. The command owns progress, retry waves, completeness/provenance audit, benchmark packaging, evaluator preparation, Judger v5, a gold-isolated frozen re-answer over the current run's exact `searchedMemories`, paired comparison, and evaluation packaging.
+`longmemeval-suite` loads only mode-`0600`, runner-owned protected environment files. Retrieval and answer files may both use the conventional `OPENAI_API_KEY` and `OPENAI_API_BASE` names: the suite reads them separately and maps them to process-only role-specific variables before starting the benchmark, so neither credential can overwrite the other. `--retrieval-env` defaults to `--answer-env` for backward compatibility. The paired `--retrieval-*` and `--answer-*` flags independently select agent directory, provider, model, thinking level, credential-variable names, base-URL-variable names, and transport. Each omitted role flag falls back to its legacy unprefixed form (`--agent-dir`, `--provider`, `--model`, `--thinking-level`, `--api-key-env`, `--base-url-env`, or `--transport`), so existing suite commands retain their behavior. The answer role also owns the frozen re-answer stage.
+
+The suite fails fast on `401`, `403`, or invalid-token errors, while `429`, timeout, transport, and transient upstream failures remain durably resumable. The command owns progress, retry waves, completeness/provenance audit, benchmark packaging, evaluator preparation, Judger v5, a gold-isolated frozen re-answer over the current run's exact `searchedMemories`, paired comparison, and evaluation packaging.
 
 The batch command accepts `--slots 1..256`. Each asynchronous slot runs one
 fresh Agent at a time and takes the next unanswered question immediately after

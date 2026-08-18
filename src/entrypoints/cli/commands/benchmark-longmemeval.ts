@@ -29,7 +29,11 @@ import {
   type PiMemResult,
 } from "../../../evidence-agent/index.js";
 import { runAsyncPool } from "../../../platform/concurrency/async-pool.js";
-import { loadPiModelRuntime } from "../../../platform/pi/load-model-runtime.js";
+import {
+  loadPiModelRuntime,
+  type LoadPiModelRuntimeOptions,
+  type PiModelRuntime,
+} from "../../../platform/pi/load-model-runtime.js";
 import { MemoryStore } from "../../../platform/sqlite/pimem-store.js";
 import { embeddingProfile } from "../../../retrieval/index-scope-embeddings.js";
 import type { RetrievalMetadata } from "../../../retrieval/index.js";
@@ -53,6 +57,42 @@ const BENCHMARK_MAX_RUN_MS = 300_000;
 const BENCHMARK_MAX_TURNS = 64;
 const BENCHMARK_MAX_TOOL_CALLS = 80;
 const MOL_VERSION = "search-read-finish-v0";
+const BENCHMARK_MODEL_FLAGS = [
+  "agent-dir",
+  "provider",
+  "model",
+  "thinking-level",
+  "api-key-env",
+  "base-url-env",
+  "transport",
+] as const;
+
+type BenchmarkModelRole = "retrieval" | "answer";
+
+/** Resolves one stage's model flags, falling back field-by-field to legacy flags. */
+export function benchmarkModelOptionsFor(
+  parsed: ParsedCommand,
+  role: BenchmarkModelRole,
+): LoadPiModelRuntimeOptions {
+  const flags = new Map<string, string[]>();
+  for (const name of BENCHMARK_MODEL_FLAGS) {
+    const values = parsed.flags.get(`${role}-${name}`) ?? parsed.flags.get(name);
+    if (values !== undefined) flags.set(name, values);
+  }
+  return modelOptionsFor({ command: parsed.command, flags });
+}
+
+function benchmarkRuntimeIdentity(
+  runtime: PiModelRuntime,
+): Record<string, unknown> {
+  return {
+    providerId: runtime.providerId,
+    modelId: runtime.modelId,
+    thinkingLevel: runtime.thinkingLevel,
+    transport: runtime.transport,
+    api: runtime.model.api,
+  };
+}
 
 export function benchmarkSourceRevision(): {
   commit: string;
@@ -355,6 +395,20 @@ export async function benchmarkLongMemEval(
     "api-key-env",
     "base-url-env",
     "transport",
+    "retrieval-agent-dir",
+    "retrieval-provider",
+    "retrieval-model",
+    "retrieval-thinking-level",
+    "retrieval-api-key-env",
+    "retrieval-base-url-env",
+    "retrieval-transport",
+    "answer-agent-dir",
+    "answer-provider",
+    "answer-model",
+    "answer-thinking-level",
+    "answer-api-key-env",
+    "answer-base-url-env",
+    "answer-transport",
     "skill",
   ]);
   const paths = dataPaths(requiredFlag(parsed, "data-dir"));
@@ -408,7 +462,10 @@ export async function benchmarkLongMemEval(
   let halted = false;
   let retrieval: RetrievalMetadata = { retrievalProfile: "fts5" };
   try {
-    const modelRuntime = await loadPiModelRuntime(modelOptionsFor(parsed));
+    const [retrievalModelRuntime, answerModelRuntime] = await Promise.all([
+      loadPiModelRuntime(benchmarkModelOptionsFor(parsed, "retrieval")),
+      loadPiModelRuntime(benchmarkModelOptionsFor(parsed, "answer")),
+    ]);
     const contextCount = Math.max(
       1,
       Math.min(slots, Math.max(1, pending.length)),
@@ -437,12 +494,6 @@ export async function benchmarkLongMemEval(
       process.stderr.write(`Embedding preflight: ${indexed}/${total} indexed\n`);
     }
 
-    const configuredModel = {
-      providerId: modelRuntime.providerId,
-      modelId: modelRuntime.modelId,
-      thinkingLevel: modelRuntime.thinkingLevel,
-      transport: modelRuntime.transport,
-    };
     await ensureBenchmarkManifest(join(outputDir, "run-manifest.json"), {
       benchmark: "LongMemEval-S",
       question_count: selected.length,
@@ -450,8 +501,8 @@ export async function benchmarkLongMemEval(
       corpus_hash: await benchmarkCorpusHash(paths.sanitized, selected),
       source_revision: benchmarkSourceRevision(),
       retrieval,
-      retrieval_model: configuredModel,
-      answer_model: configuredModel,
+      retrieval_model: benchmarkRuntimeIdentity(retrievalModelRuntime),
+      answer_model: benchmarkRuntimeIdentity(answerModelRuntime),
       answer_prompt: {
         adapter: "longmemeval-s",
         version: LONGMEMEVAL_ANSWER_PROMPT_VERSION,
@@ -490,7 +541,7 @@ export async function benchmarkLongMemEval(
           paths,
           retrievalContexts[slot - 1]!.store,
           retrievalContexts[slot - 1]!.operatorRegistry,
-          modelRuntime,
+          retrievalModelRuntime,
           question.scopeId,
           question.question,
           question.questionDate,
@@ -502,7 +553,7 @@ export async function benchmarkLongMemEval(
           },
         );
         const answerResult = await runBenchmarkAnswer({
-          modelRuntime,
+          modelRuntime: answerModelRuntime,
           prompt: buildLongMemEvalAnswerPrompt(
             question.question,
             retrievalResult,

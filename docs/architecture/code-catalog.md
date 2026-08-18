@@ -109,19 +109,21 @@ _No top-level functions, classes, or class methods._
 
 | Symbol | Purpose | Kind | Visibility | Source |
 |---|---|---|---|---|
-| `benchmarkSourceRevision(): { commit: string; dirty: boolean \| null; fingerprint?: string; }` | Implements the benchmark source revision operation. | function | exported | [line 57](../../src/entrypoints/cli/commands/benchmark-longmemeval.ts#L57) |
-| `benchmarkQuestionSetHash(questions: readonly LongMemEvalPrivateQuestion[]): string` | Implements the benchmark question set hash operation. | function | exported | [line 111](../../src/entrypoints/cli/commands/benchmark-longmemeval.ts#L111) |
-| `benchmarkCorpusHash(sanitizedRoot: string, questions: readonly LongMemEvalPrivateQuestion[]): Promise<string>` | Implements the benchmark corpus hash operation. | function | exported | [line 127](../../src/entrypoints/cli/commands/benchmark-longmemeval.ts#L127) |
-| `successRecordPath(recordsDir: string, questionId: string): string` | Implements the success record path operation. | function | internal | [line 144](../../src/entrypoints/cli/commands/benchmark-longmemeval.ts#L144) |
-| `failureRecordPath(failuresDir: string, questionId: string): string` | Implements the failure record path operation. | function | internal | [line 148](../../src/entrypoints/cli/commands/benchmark-longmemeval.ts#L148) |
-| `completedQuestionIds(path: string): Promise<Set<string>>` | Implements the completed question ids operation. | function | internal | [line 152](../../src/entrypoints/cli/commands/benchmark-longmemeval.ts#L152) |
-| `predictionFor(retrieval: PiMemResult, answer: BenchmarkAnswerResult, questionId: string): BenchmarkPrediction` | Implements the prediction for operation. | function | internal | [line 170](../../src/entrypoints/cli/commands/benchmark-longmemeval.ts#L170) |
-| `ensureBenchmarkManifest(path: string, config: Record<string, unknown>): Promise<void>` | Implements the ensure benchmark manifest operation. | function | internal | [line 198](../../src/entrypoints/cli/commands/benchmark-longmemeval.ts#L198) |
-| `loadSuccessRecords(recordsDir: string, questions: readonly LongMemEvalPrivateQuestion[]): Promise<Map<string, BenchmarkSuccessRecord>>` | Loads success records. | function | internal | [line 224](../../src/entrypoints/cli/commands/benchmark-longmemeval.ts#L224) |
-| `readJsonlMap(path: string): Promise<Map<string, unknown>>` | Reads jsonl map. | function | internal | [line 245](../../src/entrypoints/cli/commands/benchmark-longmemeval.ts#L245) |
-| `materializeBenchmarkArtifacts(outputDir: string, selected: readonly LongMemEvalPrivateQuestion[]): Promise<{ succeeded: number; failed: number }>` | Materializes benchmark artifacts. | function | internal | [line 265](../../src/entrypoints/cli/commands/benchmark-longmemeval.ts#L265) |
-| `systemicRuntimeFailure(message: string): boolean` | Implements the systemic runtime failure operation. | function | internal | [line 336](../../src/entrypoints/cli/commands/benchmark-longmemeval.ts#L336) |
-| `benchmarkLongMemEval(parsed: ParsedCommand): Promise<void>` | Implements the benchmark long mem eval operation. | function | exported | [line 342](../../src/entrypoints/cli/commands/benchmark-longmemeval.ts#L342) |
+| `benchmarkModelOptionsFor(parsed: ParsedCommand, role: BenchmarkModelRole): LoadPiModelRuntimeOptions` | Resolves one stage's model flags, falling back field-by-field to legacy flags. | function | exported | [line 73](../../src/entrypoints/cli/commands/benchmark-longmemeval.ts#L73) |
+| `benchmarkRuntimeIdentity(runtime: PiModelRuntime): Record<string, unknown>` | Implements the benchmark runtime identity operation. | function | internal | [line 85](../../src/entrypoints/cli/commands/benchmark-longmemeval.ts#L85) |
+| `benchmarkSourceRevision(): { commit: string; dirty: boolean \| null; fingerprint?: string; }` | Implements the benchmark source revision operation. | function | exported | [line 97](../../src/entrypoints/cli/commands/benchmark-longmemeval.ts#L97) |
+| `benchmarkQuestionSetHash(questions: readonly LongMemEvalPrivateQuestion[]): string` | Implements the benchmark question set hash operation. | function | exported | [line 151](../../src/entrypoints/cli/commands/benchmark-longmemeval.ts#L151) |
+| `benchmarkCorpusHash(sanitizedRoot: string, questions: readonly LongMemEvalPrivateQuestion[]): Promise<string>` | Implements the benchmark corpus hash operation. | function | exported | [line 167](../../src/entrypoints/cli/commands/benchmark-longmemeval.ts#L167) |
+| `successRecordPath(recordsDir: string, questionId: string): string` | Implements the success record path operation. | function | internal | [line 184](../../src/entrypoints/cli/commands/benchmark-longmemeval.ts#L184) |
+| `failureRecordPath(failuresDir: string, questionId: string): string` | Implements the failure record path operation. | function | internal | [line 188](../../src/entrypoints/cli/commands/benchmark-longmemeval.ts#L188) |
+| `completedQuestionIds(path: string): Promise<Set<string>>` | Implements the completed question ids operation. | function | internal | [line 192](../../src/entrypoints/cli/commands/benchmark-longmemeval.ts#L192) |
+| `predictionFor(retrieval: PiMemResult, answer: BenchmarkAnswerResult, questionId: string): BenchmarkPrediction` | Implements the prediction for operation. | function | internal | [line 210](../../src/entrypoints/cli/commands/benchmark-longmemeval.ts#L210) |
+| `ensureBenchmarkManifest(path: string, config: Record<string, unknown>): Promise<void>` | Implements the ensure benchmark manifest operation. | function | internal | [line 238](../../src/entrypoints/cli/commands/benchmark-longmemeval.ts#L238) |
+| `loadSuccessRecords(recordsDir: string, questions: readonly LongMemEvalPrivateQuestion[]): Promise<Map<string, BenchmarkSuccessRecord>>` | Loads success records. | function | internal | [line 264](../../src/entrypoints/cli/commands/benchmark-longmemeval.ts#L264) |
+| `readJsonlMap(path: string): Promise<Map<string, unknown>>` | Reads jsonl map. | function | internal | [line 285](../../src/entrypoints/cli/commands/benchmark-longmemeval.ts#L285) |
+| `materializeBenchmarkArtifacts(outputDir: string, selected: readonly LongMemEvalPrivateQuestion[]): Promise<{ succeeded: number; failed: number }>` | Materializes benchmark artifacts. | function | internal | [line 305](../../src/entrypoints/cli/commands/benchmark-longmemeval.ts#L305) |
+| `systemicRuntimeFailure(message: string): boolean` | Implements the systemic runtime failure operation. | function | internal | [line 376](../../src/entrypoints/cli/commands/benchmark-longmemeval.ts#L376) |
+| `benchmarkLongMemEval(parsed: ParsedCommand): Promise<void>` | Implements the benchmark long mem eval operation. | function | exported | [line 382](../../src/entrypoints/cli/commands/benchmark-longmemeval.ts#L382) |
 ## `src/entrypoints/cli/commands/ingest-longmemeval.ts`
 
 | Symbol | Purpose | Kind | Visibility | Source |
@@ -131,14 +133,19 @@ _No top-level functions, classes, or class methods._
 
 | Symbol | Purpose | Kind | Visibility | Source |
 |---|---|---|---|---|
-| `sleep(milliseconds: number): Promise<void>` | Implements the sleep operation. | function | internal | [line 37](../../src/entrypoints/cli/commands/longmemeval-suite.ts#L37) |
-| `jsonRecordCount(directory: string): Promise<number>` | Implements the json record count operation. | function | internal | [line 43](../../src/entrypoints/cli/commands/longmemeval-suite.ts#L43) |
-| `runLoggedChild(options: { file: string; args: string[]; environment: NodeJS.ProcessEnv; logPath: string; mirrorStderr?: boolean; }): Promise<number>` | Runs logged child. | function | internal | [line 59](../../src/entrypoints/cli/commands/longmemeval-suite.ts#L59) |
-| `unresolvedFailureMessages(outputDir: string): Promise<string[]>` | Implements the unresolved failure messages operation. | function | internal | [line 99](../../src/entrypoints/cli/commands/longmemeval-suite.ts#L99) |
-| `auditLongMemEvalSuite(outputDir: string, expected: number): Promise<Record<string, unknown>>` | Implements the audit long mem eval suite operation. | function | internal | [line 122](../../src/entrypoints/cli/commands/longmemeval-suite.ts#L122) |
-| `baselineScores(parsed: ParsedCommand): Array<{ name: string; accuracy: number; }>` | Implements the baseline scores operation. | function | internal | [line 212](../../src/entrypoints/cli/commands/longmemeval-suite.ts#L212) |
-| `packageEvaluationArtifacts(outputDir: string, archivePath: string): Promise<void>` | Packages evaluation artifacts. | function | internal | [line 230](../../src/entrypoints/cli/commands/longmemeval-suite.ts#L230) |
-| `longMemEvalSuite(parsed: ParsedCommand): Promise<void>` | Implements the long mem eval suite operation. | function | exported | [line 285](../../src/entrypoints/cli/commands/longmemeval-suite.ts#L285) |
+| `sleep(milliseconds: number): Promise<void>` | Implements the sleep operation. | function | internal | [line 38](../../src/entrypoints/cli/commands/longmemeval-suite.ts#L38) |
+| `jsonRecordCount(directory: string): Promise<number>` | Implements the json record count operation. | function | internal | [line 44](../../src/entrypoints/cli/commands/longmemeval-suite.ts#L44) |
+| `runLoggedChild(options: { file: string; args: string[]; environment: NodeJS.ProcessEnv; logPath: string; mirrorStderr?: boolean; }): Promise<number>` | Runs logged child. | function | internal | [line 60](../../src/entrypoints/cli/commands/longmemeval-suite.ts#L60) |
+| `unresolvedFailureMessages(outputDir: string): Promise<string[]>` | Implements the unresolved failure messages operation. | function | internal | [line 100](../../src/entrypoints/cli/commands/longmemeval-suite.ts#L100) |
+| `auditLongMemEvalSuite(outputDir: string, expected: number): Promise<Record<string, unknown>>` | Implements the audit long mem eval suite operation. | function | internal | [line 123](../../src/entrypoints/cli/commands/longmemeval-suite.ts#L123) |
+| `baselineScores(parsed: ParsedCommand): Array<{ name: string; accuracy: number; }>` | Implements the baseline scores operation. | function | internal | [line 213](../../src/entrypoints/cli/commands/longmemeval-suite.ts#L213) |
+| `packageEvaluationArtifacts(outputDir: string, archivePath: string): Promise<void>` | Packages evaluation artifacts. | function | internal | [line 231](../../src/entrypoints/cli/commands/longmemeval-suite.ts#L231) |
+| `roleFlag(parsed: ParsedCommand, role: SuiteModelRole, name: string): string \| undefined` | Implements the role flag operation. | function | internal | [line 303](../../src/entrypoints/cli/commands/longmemeval-suite.ts#L303) |
+| `requiredRoleFlag(parsed: ParsedCommand, role: SuiteModelRole, name: string): string` | Implements the required role flag operation. | function | internal | [line 311](../../src/entrypoints/cli/commands/longmemeval-suite.ts#L311) |
+| `modelRoleConfiguration(parsed: ParsedCommand, role: SuiteModelRole): SuiteModelRoleConfiguration` | Implements the model role configuration operation. | function | internal | [line 325](../../src/entrypoints/cli/commands/longmemeval-suite.ts#L325) |
+| `suiteModelConfigurationFor(parsed: ParsedCommand): SuiteModelConfiguration` | Implements the suite model configuration for operation. | function | exported | [line 342](../../src/entrypoints/cli/commands/longmemeval-suite.ts#L342) |
+| `suiteBenchmarkEnvironment(options: { retrievalSource: NodeJS.ProcessEnv; answerSource: NodeJS.ProcessEnv; models: SuiteModelConfiguration; }): NodeJS.ProcessEnv` | Implements the suite benchmark environment operation. | function | exported | [line 356](../../src/entrypoints/cli/commands/longmemeval-suite.ts#L356) |
+| `longMemEvalSuite(parsed: ParsedCommand): Promise<void>` | Implements the long mem eval suite operation. | function | exported | [line 393](../../src/entrypoints/cli/commands/longmemeval-suite.ts#L393) |
 ## `src/entrypoints/cli/commands/package-benchmark.ts`
 
 | Symbol | Purpose | Kind | Visibility | Source |
