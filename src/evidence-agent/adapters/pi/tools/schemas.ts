@@ -1,23 +1,25 @@
 import { Type } from "@earendil-works/pi-ai";
 
-export const SearchParameters = Type.Object({
-  operator: Type.Optional(Type.Union([
-    Type.Literal("hybrid"),
-    Type.Literal("lexical"),
-    Type.Literal("coverage"),
-    Type.Literal("temporal"),
-    Type.Literal("numeric"),
-    Type.Literal("history"),
-  ], {
-    description: "Agent-selected retrieval operator. Defaults to hybrid. The harness never routes from question keywords.",
-  })),
-  queries: Type.Array(Type.String({ minLength: 1 }), {
-    minItems: 1,
-    maxItems: 8,
-    description: "Focused query variants or separate evidence needs.",
-  }),
-  limit: Type.Optional(Type.Integer({ minimum: 1, maximum: 100 })),
-});
+export function createSearchParameters(operatorIds: readonly string[]) {
+  if (operatorIds.length === 0) {
+    throw new Error("Search tool requires at least one registered operator");
+  }
+  return Type.Object({
+    operator: Type.Optional(Type.String({
+      enum: [...operatorIds],
+      description:
+        "Agent-selected operator from the frozen runtime catalog. Defaults to the registry default. The harness never routes from question keywords.",
+    })),
+    queries: Type.Array(Type.String({ minLength: 1 }), {
+      minItems: 1,
+      maxItems: 8,
+      description: "Focused query variants or separate evidence needs.",
+    }),
+    limit: Type.Optional(Type.Integer({ minimum: 1, maximum: 100 })),
+  });
+}
+
+export type SearchParametersSchema = ReturnType<typeof createSearchParameters>;
 
 export const ReadParameters = Type.Object({
   candidateRefs: Type.Array(Type.Integer({ minimum: 0 }), {

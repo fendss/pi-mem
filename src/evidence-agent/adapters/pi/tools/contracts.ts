@@ -4,7 +4,7 @@ import type { MemoryRecord } from "../../../../memory/index.js";
 import type {
   EvidenceOperatorResult,
   MemoryToolStore,
-  SearchOperator,
+  SearchOperatorRegistry,
   SearchRequest,
 } from "../../../../retrieval/index.js";
 import type {
@@ -16,13 +16,14 @@ import {
   BashRoParameters,
   FinishParameters,
   ReadParameters,
-  SearchParameters,
+  type SearchParametersSchema,
 } from "./schemas.js";
 
 export interface SearchToolDetails {
   kind: "search";
   request: SearchRequest;
-  operator: SearchOperator;
+  operator: string;
+  operatorVersion: string;
   operatorResult?: EvidenceOperatorResult;
   candidateReferences: Array<{ candidateRef: number; memoryId: string }>;
   candidates: MemoryCandidate[];
@@ -69,6 +70,7 @@ export interface MemoryLookup {
 
 export interface CreatePiMemToolsOptions {
   store: MemoryToolStore;
+  operatorRegistry: SearchOperatorRegistry;
   scopeId: string;
   ledger: MemoryLedger;
   bashRo?: {
@@ -84,7 +86,7 @@ export interface CreatePiMemToolsOptions {
 }
 
 export interface PiMemTools {
-  search: AgentTool<typeof SearchParameters, SearchToolDetails>;
+  search: AgentTool<SearchParametersSchema, SearchToolDetails>;
   read: AgentTool<typeof ReadParameters, ReadToolDetails>;
   bashRo?: AgentTool<typeof BashRoParameters, BashRoToolDetails>;
   finish: AgentTool<typeof FinishParameters, FinishToolDetails>;

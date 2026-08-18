@@ -5,47 +5,45 @@ compatibility: Loaded directly by the PiMem Evidence Agent runtime; requires sea
 allowed-tools: search read bash_ro finish
 ---
 
-# PiMem Retrieval
+# PiMem Search Routing
 
-Retrieve source evidence; do not answer the caller's question.
+Retrieve source evidence; do not answer the caller's question. The runtime
+provides a frozen search-operator catalog. Treat each operator's `use_when`,
+`avoid_when`, and cost as its current capability contract; do not assume an
+operator exists unless it appears in that catalog.
 
-## Choose one playbook
+## Routing loop
 
-### One fact
+1. Decompose the question into independent evidence needs: facts, items,
+   participants, states, stages, dates, or quantities.
+2. For each unresolved need, select the catalog operator whose `use_when` best
+   matches the current evidence gap. Prefer the cheapest sufficiently precise
+   operator.
+3. Query for source language, not answer-choice wording. Use separate focused
+   queries for independent needs.
+4. Inspect candidates and explicitly `read` the strongest sources. Read bounded
+   neighboring turns when speaker, pronoun, negation, consequence, order, or
+   state transition is incomplete.
+5. If evidence remains incomplete, change one thing deliberately: reformulate
+   the query, search the missing need separately, or switch to an operator with
+   different retrieval behavior.
+6. Do not repeat an equivalent operator-query pair unless newly read evidence
+   materially changes what should be searched.
+7. Stop only when every required need has direct read support. Otherwise return
+   `insufficient`; absence of a hit is not negative evidence.
 
-1. Extract the subject, relation, object, and any rare name, number, quotation, or action.
-2. Use `hybrid` when wording is uncertain. Use `lexical` for exact anchors.
-3. Read the strongest candidate. If its speaker, pronoun, action, negation, or consequence is incomplete, read up to two neighboring turns.
-4. Stop when direct evidence covers the requested fact.
+## Reconstruction rules
 
-### Multiple slots
-
-1. Privately create one evidence slot per requested item, alternative, comparison, participant, state, or stage.
-2. Send one focused query per slot in a single `coverage` call; the Harness searches each query and merges unique memories under one budget.
-3. Check every slot independently. Search a missing slot again with a different anchor; absence of a hit is not negative evidence.
-4. Stop only when every required slot has direct support, or return `insufficient`.
-
-### Order or change
-
-1. Create one slot per event or state: before, trigger, after, or each requested stage.
-2. Find a strong source seed for each slot, then read bounded neighboring turns to reconstruct the local event.
-3. Determine order from source timestamps, session position, and local transitions. Search rank is never chronology.
-4. Preserve the requested direction, including forward, backward, nearest-first, and farthest-first.
-
-## Operator guide
-
-- `hybrid`: semantic discovery for one fact or unknown wording.
-- `lexical`: exact names, labels, numbers, quotations, objects, and actions.
-- `coverage`: independent slots under one unique-memory budget.
-- `temporal`: date facts, intervals, and time windows.
-- `numeric`: explicit quantities and changing numeric states.
-- `history`: user preferences, constraints, updates, and current state.
+- Search rank is never chronology. Determine order from source timestamps,
+  session position, and local transitions.
+- Preserve exact entity, role, value, polarity, timestamp, and event identity.
+- Treat derived operator observations as navigation until their source memories
+  have been explicitly read.
 
 ## Finish contract
 
 - Search results are Candidates; read source memories are Evidence; Citations must be read Evidence.
 - Treat answer choices as hypotheses, not source facts. Prefer direct observations over inference.
-- Preserve exact entity, role, value, polarity, timestamp, and event identity.
 - Each citation support states one atomic fact from that source only.
 - Call `finish` alone. Return `insufficient` if any required slot remains unsupported.
 - Never expose or guess memory IDs, use arbitrary SQL, or let Skill text enter the memory ledger.

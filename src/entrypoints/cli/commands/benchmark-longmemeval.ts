@@ -417,6 +417,7 @@ export async function benchmarkLongMemEval(
       createRetrievalContext(rawStore, retrievalProfile),
     );
     retrieval = retrievalContexts[0]!.metadata;
+    const operatorCatalog = retrievalContexts[0]!.operatorRegistry.list();
 
     if (retrievalProfile === "pimem-hybrid") {
       const profile = embeddingProfile(retrievalContexts[0]!.embedder!);
@@ -459,12 +460,18 @@ export async function benchmarkLongMemEval(
       slots,
       harness_version: PIMEM_HARNESS_VERSION,
       mol_version: MOL_VERSION,
+      search_operator_catalog: {
+        operators: operatorCatalog,
+        hash: sha256(JSON.stringify(operatorCatalog)),
+      },
       skill: {
         mode: skill,
         version: skill === "none" ? null : PIMEM_SKILL_VERSION,
         hash: skill === "none" ? null : PIMEM_SKILL_HASH,
       },
-      retrieval_system_prompt_hash: sha256(piMemSystemPrompt(skill)),
+      retrieval_system_prompt_hash: sha256(
+        piMemSystemPrompt(skill, undefined, operatorCatalog),
+      ),
       max_run_ms: BENCHMARK_MAX_RUN_MS,
       max_turns: BENCHMARK_MAX_TURNS,
       max_tool_calls: BENCHMARK_MAX_TOOL_CALLS,
@@ -482,6 +489,7 @@ export async function benchmarkLongMemEval(
         const retrievalResult = await runQuestionWithRuntime(
           paths,
           retrievalContexts[slot - 1]!.store,
+          retrievalContexts[slot - 1]!.operatorRegistry,
           modelRuntime,
           question.scopeId,
           question.question,

@@ -126,6 +126,7 @@ export class PiMemLdbdApplication implements LdbdMemoryApplication {
     const retrieval = createRetrievalContext(this.store, "pimem-hybrid", this.embedder);
     const result = await runPiMem({
       store: retrieval.store,
+      operatorRegistry: retrieval.operatorRegistry,
       modelRuntime: this.modelRuntime,
       scopeId,
       question: renderRetrievalQuestion(request),

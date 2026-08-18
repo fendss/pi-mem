@@ -19,14 +19,17 @@ import type {
 import type {
   RetrievalMetadata,
   RetrievalMetricsSnapshot,
+  SearchOperatorCatalogEntry,
+  SearchOperatorRegistry,
 } from "../retrieval/index.js";
+import { renderSearchOperatorCatalog } from "../retrieval/index.js";
 import type { MemoryRecord } from "../memory/index.js";
 import { assertNonEmpty, newRunId, sha256 } from "../util.js";
 
 export type PiMemSkill = "none" | "pimem-v0";
 
-export const PIMEM_HARNESS_VERSION = "pimem-mol-v0";
-export const PIMEM_SKILL_VERSION = "pimem-v0";
+export const PIMEM_HARNESS_VERSION = "pimem-operator-registry-v1";
+export const PIMEM_SKILL_VERSION = "pimem-v0-registry-1";
 
 const DEFAULT_SKILL_PATH = fileURLToPath(
   new URL("../../.agents/skills/pimem-retrieval/SKILL.md", import.meta.url),
@@ -60,10 +63,16 @@ function activeSkillPrompt(): string {
 export function piMemSystemPrompt(
   skill: PiMemSkill = "pimem-v0",
   basePrompt: string = PI_MEM_BASE_SYSTEM_PROMPT,
+  operatorCatalog: readonly SearchOperatorCatalogEntry[] = [],
 ): string {
-  return skill === "none"
-    ? basePrompt
-    : [basePrompt, activeSkillPrompt()].filter(Boolean).join("\n\n");
+  const catalogPrompt = operatorCatalog.length === 0
+    ? ""
+    : `<search_operator_catalog>\n${renderSearchOperatorCatalog(operatorCatalog)}\n</search_operator_catalog>`;
+  return [
+    basePrompt,
+    catalogPrompt,
+    ...(skill === "none" ? [] : [activeSkillPrompt()]),
+  ].filter(Boolean).join("\n\n");
 }
 
 export const PI_MEM_SYSTEM_PROMPT = piMemSystemPrompt();
@@ -90,6 +99,7 @@ export interface PiMemRuntimeStore extends MemoryToolStore {
 
 export interface RunPiMemOptions {
   store: PiMemRuntimeStore;
+  operatorRegistry: SearchOperatorRegistry;
   modelRuntime: PiModelRuntime;
   scopeId: string;
   question: string;
@@ -231,6 +241,7 @@ export async function runPiMem(
   const ephemeralContext = createEphemeralMemoryContext();
   const tools = createPiMemTools({
     store: options.store,
+    operatorRegistry: options.operatorRegistry,
     scopeId,
     ledger,
     question,
@@ -258,6 +269,7 @@ export async function runPiMem(
       systemPrompt: piMemSystemPrompt(
         options.skill ?? "pimem-v0",
         options.systemPrompt ?? PI_MEM_BASE_SYSTEM_PROMPT,
+        options.operatorRegistry.list(),
       ),
       model: options.modelRuntime.model,
       thinkingLevel: options.modelRuntime.thinkingLevel,

@@ -27,6 +27,7 @@ export async function runQuestion(
     return await runQuestionWithRuntime(
       paths,
       retrieval.store,
+      retrieval.operatorRegistry,
       modelRuntime,
       scopeId,
       question,

@@ -74,7 +74,7 @@ _No top-level functions, classes, or class methods._
 
 | Symbol | Purpose | Kind | Visibility | Source |
 |---|---|---|---|---|
-| `runQuestionWithRuntime(paths: LongMemEvalDataPaths, store: PiMemRuntimeStore, modelRuntime: RunPiMemOptions["modelRuntime"], scopeId: string, question: string, questionDate?: string, runtimeOptions: Pick< RunPiMemOptions, "maxRunMs" \| "maxTurns" \| "maxToolCalls" \| "skill" > = {}): Promise<PiMemResult>` | Runs question with runtime. | function | exported | [line 11](../../src/benchmark/use-cases/run-question.ts#L11) |
+| `runQuestionWithRuntime(paths: LongMemEvalDataPaths, store: PiMemRuntimeStore, operatorRegistry: SearchOperatorRegistry, modelRuntime: RunPiMemOptions["modelRuntime"], scopeId: string, question: string, questionDate?: string, runtimeOptions: Pick< RunPiMemOptions, "maxRunMs" \| "maxTurns" \| "maxToolCalls" \| "skill" > = {}): Promise<PiMemResult>` | Runs question with runtime. | function | exported | [line 12](../../src/benchmark/use-cases/run-question.ts#L12) |
 ## `src/cli.ts`
 
 _No top-level functions, classes, or class methods._
@@ -82,7 +82,12 @@ _No top-level functions, classes, or class methods._
 
 | Symbol | Purpose | Kind | Visibility | Source |
 |---|---|---|---|---|
-| `createRetrievalContext(rawStore: MemoryStore, profile: RetrievalProfile, embedder?: Embedder): RetrievalContext` | Creates retrieval context. | function | exported | [line 17](../../src/composition/create-retrieval-context.ts#L17) |
+| `createRetrievalContext(rawStore: MemoryStore, profile: RetrievalProfile, embedder?: Embedder): RetrievalContext` | Creates retrieval context. | function | exported | [line 20](../../src/composition/create-retrieval-context.ts#L20) |
+## `src/composition/create-search-operator-registry.ts`
+
+| Symbol | Purpose | Kind | Visibility | Source |
+|---|---|---|---|---|
+| `createSearchOperatorRegistry(store: SearchOperatorStore, additionalOperators: readonly SearchOperator[] = []): SearchOperatorRegistry` | Registers built-in and additional operators, then freezes the catalog. | function | exported | [line 9](../../src/composition/create-search-operator-registry.ts#L9) |
 ## `src/composition/run-question.ts`
 
 | Symbol | Purpose | Kind | Visibility | Source |
@@ -287,12 +292,14 @@ _No top-level functions, classes, or class methods._
 | `renderMemories(memories: readonly MemoryRecord[], ledger: MemoryLedger, questionDate?: string): string` | Renders memories. | function | exported | [line 89](../../src/evidence-agent/adapters/pi/tools/render-tool-result.ts#L89) |
 ## `src/evidence-agent/adapters/pi/tools/schemas.ts`
 
-_No top-level functions, classes, or class methods._
+| Symbol | Purpose | Kind | Visibility | Source |
+|---|---|---|---|---|
+| `createSearchParameters(operatorIds: readonly string[])` | Creates search parameters. | function | exported | [line 3](../../src/evidence-agent/adapters/pi/tools/schemas.ts#L3) |
 ## `src/evidence-agent/adapters/pi/tools/search-tool.ts`
 
 | Symbol | Purpose | Kind | Visibility | Source |
 |---|---|---|---|---|
-| `createSearchTool(options: CreatePiMemToolsOptions): PiMemTools["search"]` | Creates the Pi search tool that delegates retrieval and records returned candidates in the ledger. | function | exported | [line 6](../../src/evidence-agent/adapters/pi/tools/search-tool.ts#L6) |
+| `createSearchTool(options: CreatePiMemToolsOptions): PiMemTools["search"]` | Creates the Pi search tool that delegates retrieval and records returned candidates in the ledger. | function | exported | [line 9](../../src/evidence-agent/adapters/pi/tools/search-tool.ts#L9) |
 ## `src/evidence-agent/adapters/pi/tools/tool-protocol.ts`
 
 | Symbol | Purpose | Kind | Visibility | Source |
@@ -332,17 +339,17 @@ _No top-level functions, classes, or class methods._
 
 | Symbol | Purpose | Kind | Visibility | Source |
 |---|---|---|---|---|
-| `activeSkillPrompt(): string` | Implements the active skill prompt operation. | function | internal | [line 56](../../src/evidence-agent/run-pimem.ts#L56) |
-| `piMemSystemPrompt(skill: PiMemSkill = "pimem-v0", basePrompt: string = PI_MEM_BASE_SYSTEM_PROMPT): string` | Implements the pi mem system prompt operation. | function | exported | [line 60](../../src/evidence-agent/run-pimem.ts#L60) |
-| `orderCandidatesForEvidenceAttention(candidates: readonly MemoryCandidate[]): MemoryCandidate[]` | Orders candidate memories for stable evidence review without changing their provenance. | function | exported | [line 71](../../src/evidence-agent/run-pimem.ts#L71) |
-| `PiMemRunError` | Implements pi mem run error. | class | exported | [line 118](../../src/evidence-agent/run-pimem.ts#L118) |
-| `PiMemRunError.constructor(message: string, diagnostics: PiMemFailureDiagnostics)` | Creates a pi mem run error instance. | method | public | [line 121](../../src/evidence-agent/run-pimem.ts#L121) |
-| `questionPrompt(question: string, questionDate?: string): string` | Builds the user prompt from the question and optional question date. | function | internal | [line 128](../../src/evidence-agent/run-pimem.ts#L128) |
-| `lastAssistantMessage(messages: readonly unknown[]): AssistantMessage \| undefined` | Returns the final assistant message from the Pi conversation. | function | internal | [line 140](../../src/evidence-agent/run-pimem.ts#L140) |
-| `responseModelMatches(requested: string, actual: string): boolean` | Implements the response model matches operation. | function | internal | [line 157](../../src/evidence-agent/run-pimem.ts#L157) |
-| `validateResponseModels(messages: readonly unknown[], requestedModel: string): string[]` | Validates response models. | function | internal | [line 161](../../src/evidence-agent/run-pimem.ts#L161) |
-| `assistantText(message: AssistantMessage \| undefined): string` | Extracts plain text from the final assistant message. | function | internal | [line 186](../../src/evidence-agent/run-pimem.ts#L186) |
-| `runPiMem(options: RunPiMemOptions): Promise<PiMemResult>` | Runs one bounded evidence-agent session and returns its provenance-backed result. | function | exported | [line 204](../../src/evidence-agent/run-pimem.ts#L204) |
+| `activeSkillPrompt(): string` | Implements the active skill prompt operation. | function | internal | [line 59](../../src/evidence-agent/run-pimem.ts#L59) |
+| `piMemSystemPrompt(skill: PiMemSkill = "pimem-v0", basePrompt: string = PI_MEM_BASE_SYSTEM_PROMPT, operatorCatalog: readonly SearchOperatorCatalogEntry[] = []): string` | Implements the pi mem system prompt operation. | function | exported | [line 63](../../src/evidence-agent/run-pimem.ts#L63) |
+| `orderCandidatesForEvidenceAttention(candidates: readonly MemoryCandidate[]): MemoryCandidate[]` | Orders candidate memories for stable evidence review without changing their provenance. | function | exported | [line 80](../../src/evidence-agent/run-pimem.ts#L80) |
+| `PiMemRunError` | Implements pi mem run error. | class | exported | [line 128](../../src/evidence-agent/run-pimem.ts#L128) |
+| `PiMemRunError.constructor(message: string, diagnostics: PiMemFailureDiagnostics)` | Creates a pi mem run error instance. | method | public | [line 131](../../src/evidence-agent/run-pimem.ts#L131) |
+| `questionPrompt(question: string, questionDate?: string): string` | Builds the user prompt from the question and optional question date. | function | internal | [line 138](../../src/evidence-agent/run-pimem.ts#L138) |
+| `lastAssistantMessage(messages: readonly unknown[]): AssistantMessage \| undefined` | Returns the final assistant message from the Pi conversation. | function | internal | [line 150](../../src/evidence-agent/run-pimem.ts#L150) |
+| `responseModelMatches(requested: string, actual: string): boolean` | Implements the response model matches operation. | function | internal | [line 167](../../src/evidence-agent/run-pimem.ts#L167) |
+| `validateResponseModels(messages: readonly unknown[], requestedModel: string): string[]` | Validates response models. | function | internal | [line 171](../../src/evidence-agent/run-pimem.ts#L171) |
+| `assistantText(message: AssistantMessage \| undefined): string` | Extracts plain text from the final assistant message. | function | internal | [line 196](../../src/evidence-agent/run-pimem.ts#L196) |
+| `runPiMem(options: RunPiMemOptions): Promise<PiMemResult>` | Runs one bounded evidence-agent session and returns its provenance-backed result. | function | exported | [line 214](../../src/evidence-agent/run-pimem.ts#L214) |
 ## `src/evidence-fact-index.ts`
 
 _No top-level functions, classes, or class methods._
@@ -532,6 +539,19 @@ _No top-level functions, classes, or class methods._
 | `OpenAICompatibleEmbedder.embedClusterWithRetries(inputs: readonly string[], signal?: AbortSignal): Promise<number[][]>` | Implements the embed cluster with retries operation. | method | private | [line 331](../../src/retrieval/adapters/openai/openai-compatible-embedder.ts#L331) |
 | `OpenAICompatibleEmbedder.request(inputs: readonly string[], includeDimensions: boolean, signal?: AbortSignal): Promise<number[][]>` | Implements the request operation. | method | private | [line 372](../../src/retrieval/adapters/openai/openai-compatible-embedder.ts#L372) |
 | `OpenAICompatibleEmbedder.parseResponse(payload: unknown, inputCount: number): number[][]` | Parses response. | method | private | [line 430](../../src/retrieval/adapters/openai/openai-compatible-embedder.ts#L430) |
+## `src/retrieval/adapters/operators/builtins.ts`
+
+| Symbol | Purpose | Kind | Visibility | Source |
+|---|---|---|---|---|
+| `makeSearchRequest(input: SearchOperatorInput, overrides: { limit?: number; roles?: MemoryRecord["role"][]; order?: SearchOrder; } = {}): SearchRequest` | Implements the make search request operation. | function | internal | [line 16](../../src/retrieval/adapters/operators/builtins.ts#L16) |
+| `mergeOperatorHits(preferred: readonly RetrievalHit[], fallback: readonly RetrievalHit[], limit: number): RetrievalHit[]` | Merges operator hits. | function | internal | [line 35](../../src/retrieval/adapters/operators/builtins.ts#L35) |
+| `coverageHits(store: SearchOperatorStore, scopeId: string, input: SearchOperatorInput, signal?: AbortSignal): Promise<RetrievalHit[]>` | Implements the coverage hits operation. | function | internal | [line 48](../../src/retrieval/adapters/operators/builtins.ts#L48) |
+| `hybridOperator(store: SearchOperatorStore): SearchOperator` | Implements the hybrid operator operation. | function | internal | [line 104](../../src/retrieval/adapters/operators/builtins.ts#L104) |
+| `lexicalOperator(store: SearchOperatorStore): SearchOperator` | Implements the lexical operator operation. | function | internal | [line 124](../../src/retrieval/adapters/operators/builtins.ts#L124) |
+| `coverageOperator(store: SearchOperatorStore): SearchOperator` | Implements the coverage operator operation. | function | internal | [line 146](../../src/retrieval/adapters/operators/builtins.ts#L146) |
+| `historyOperator(store: SearchOperatorStore): SearchOperator` | Implements the history operator operation. | function | internal | [line 171](../../src/retrieval/adapters/operators/builtins.ts#L171) |
+| `evidenceOperator(store: SearchOperatorStore, operator: "temporal" \| "numeric"): SearchOperator` | Implements the evidence operator operation. | function | internal | [line 194](../../src/retrieval/adapters/operators/builtins.ts#L194) |
+| `builtInSearchOperators(store: SearchOperatorStore): SearchOperator[]` | Creates the built-in search-operator implementations over one injected store. | function | exported | [line 253](../../src/retrieval/adapters/operators/builtins.ts#L253) |
 ## `src/retrieval/adapters/sqlite/database-evidence-operators.ts`
 
 | Symbol | Purpose | Kind | Visibility | Source |
@@ -584,6 +604,9 @@ _No top-level functions, classes, or class methods._
 ## `src/retrieval/model/retrieval.ts`
 
 _No top-level functions, classes, or class methods._
+## `src/retrieval/model/search-operator.ts`
+
+_No top-level functions, classes, or class methods._
 ## `src/retrieval/operators/hybrid-search.ts`
 
 | Symbol | Purpose | Kind | Visibility | Source |
@@ -625,6 +648,12 @@ _No top-level functions, classes, or class methods._
 | `explicitDates(content: string, fallbackYear?: number): string[]` | Implements the explicit dates operation. | function | internal | [line 214](../../src/retrieval/operators/temporal-operator.ts#L214) |
 | `extractTemporalFacts(content: string, sourceTimestamp?: string): TemporalFact[]` | Extracts deterministic event-date facts from one immutable memory turn. | function | exported | [line 239](../../src/retrieval/operators/temporal-operator.ts#L239) |
 | `buildTimelineOperatorResult(hits: readonly RetrievalHit[], question: string, questionDate?: string, auxiliaryRequest?: SearchRequest): EvidenceOperatorResult` | Builds timeline operator result. | function | exported | [line 338](../../src/retrieval/operators/temporal-operator.ts#L338) |
+## `src/retrieval/ports/memory-tool-store.ts`
+
+_No top-level functions, classes, or class methods._
+## `src/retrieval/ports/search-operator.ts`
+
+_No top-level functions, classes, or class methods._
 ## `src/retrieval/ranking.ts`
 
 | Symbol | Purpose | Kind | Visibility | Source |
@@ -641,12 +670,9 @@ _No top-level functions, classes, or class methods._
 
 | Symbol | Purpose | Kind | Visibility | Source |
 |---|---|---|---|---|
-| `normalizeStrings(values: readonly string[], label: string): string[]` | Validates, trims, and deduplicates a list of search values. | function | internal | [line 53](../../src/retrieval/search-memory.ts#L53) |
-| `makeSearchRequest(params: { queries: string[]; limit?: number; sessionIds?: string[]; roles?: MemoryRecord["role"][]; after?: string; before?: string; order?: SearchOrder; maxPerSession?: number; }, defaults: Pick<SearchRequest, "limit" \| "order" \| "maxPerSession"> = {}): SearchRequest` | Builds a normalized retrieval request with stable default limits and ordering. | function | internal | [line 63](../../src/retrieval/search-memory.ts#L63) |
-| `searchQueryFingerprint(query: string): string` | Creates a canonical fingerprint used to detect repeated queries. | function | internal | [line 92](../../src/retrieval/search-memory.ts#L92) |
-| `mergeOperatorHits(preferred: readonly RetrievalHit[], fallback: readonly RetrievalHit[], limit: number): RetrievalHit[]` | Merges operator-preferred and fallback hits without duplicate memories. | function | internal | [line 101](../../src/retrieval/search-memory.ts#L101) |
-| `coverageHits(store: MemoryToolStore, scopeId: string, queries: readonly string[], limit: number, maxPerSession: number \| undefined, signal?: AbortSignal): Promise<RetrievalHit[]>` | Runs each coverage query and merges deterministic session-diverse results under one budget. | function | internal | [line 114](../../src/retrieval/search-memory.ts#L114) |
-| `createSearchMemory(options: SearchMemoryOptions): ( params: { operator?: SearchOperator; queries: string[]; limit?: number }, signal?: AbortSignal, ) => Promise<SearchMemoryResult>` | Creates the search orchestrator for normalization, routing, coverage, expansion, and hit merging. | function | exported | [line 167](../../src/retrieval/search-memory.ts#L167) |
+| `normalizeStrings(values: readonly string[], label: string): string[]` | Validates, trims, and deduplicates a list of search values. | function | internal | [line 25](../../src/retrieval/search-memory.ts#L25) |
+| `searchQueryFingerprint(query: string): string` | Creates a canonical fingerprint used to detect repeated queries. | function | internal | [line 35](../../src/retrieval/search-memory.ts#L35) |
+| `createSearchMemory(options: SearchMemoryOptions): ( params: { operator?: string; queries: string[]; limit?: number }, signal?: AbortSignal, ) => Promise<SearchMemoryResult>` | Creates the search orchestrator for normalization, routing, coverage, expansion, and hit merging. | function | exported | [line 44](../../src/retrieval/search-memory.ts#L44) |
 ## `src/retrieval/temporal-annotation.ts`
 
 | Symbol | Purpose | Kind | Visibility | Source |
@@ -654,6 +680,25 @@ _No top-level functions, classes, or class methods._
 | `parseSourceTimestamp(value: string \| undefined): number \| undefined` | Parses source timestamp. | function | exported | [line 4](../../src/retrieval/temporal-annotation.ts#L4) |
 | `durationParts(milliseconds: number): string` | Implements the duration parts operation. | function | internal | [line 29](../../src/retrieval/temporal-annotation.ts#L29) |
 | `temporalAnnotation(memoryTimestamp: string \| undefined, questionDate: string \| undefined): string \| undefined` | Implements the temporal annotation operation. | function | exported | [line 43](../../src/retrieval/temporal-annotation.ts#L43) |
+## `src/retrieval/use-cases/execute-operator.ts`
+
+| Symbol | Purpose | Kind | Visibility | Source |
+|---|---|---|---|---|
+| `executeSearchOperator(registry: SearchOperatorRegistry, operatorId: string, context: SearchOperatorExecutionContext, input: SearchOperatorInput): Promise<ExecutedSearchOperator>` | Runs a registered operator and rejects candidate hits from another scope. | function | exported | [line 13](../../src/retrieval/use-cases/execute-operator.ts#L13) |
+## `src/retrieval/use-cases/operator-registry.ts`
+
+| Symbol | Purpose | Kind | Visibility | Source |
+|---|---|---|---|---|
+| `normalizedText(value: string, label: string): string` | Normalizes d text. | function | internal | [line 6](../../src/retrieval/use-cases/operator-registry.ts#L6) |
+| `catalogEntry(operator: SearchOperator): SearchOperatorCatalogEntry` | Implements the catalog entry operation. | function | internal | [line 12](../../src/retrieval/use-cases/operator-registry.ts#L12) |
+| `SearchOperatorRegistry` | Implements search operator registry. | class | exported | [line 27](../../src/retrieval/use-cases/operator-registry.ts#L27) |
+| `SearchOperatorRegistry.constructor(defaultOperatorId = "hybrid")` | Creates a search operator registry instance. | method | public | [line 33](../../src/retrieval/use-cases/operator-registry.ts#L33) |
+| `SearchOperatorRegistry.register(operator: SearchOperator): this` | Validates and registers one uniquely named search operator before freeze. | method | public | [line 40](../../src/retrieval/use-cases/operator-registry.ts#L40) |
+| `SearchOperatorRegistry.freeze(): this` | Seals the catalog after verifying its default operator exists. | method | public | [line 62](../../src/retrieval/use-cases/operator-registry.ts#L62) |
+| `SearchOperatorRegistry.get(operatorId: string): SearchOperator` | Resolves an allowlisted operator or reports the available catalog. | method | public | [line 72](../../src/retrieval/use-cases/operator-registry.ts#L72) |
+| `SearchOperatorRegistry.list(): SearchOperatorCatalogEntry[]` | Returns a detached runtime catalog for schemas, prompts, and manifests. | method | public | [line 84](../../src/retrieval/use-cases/operator-registry.ts#L84) |
+| `SearchOperatorRegistry.assertFrozen(): void` | Validates frozen and throws when invalid. | method | private | [line 89](../../src/retrieval/use-cases/operator-registry.ts#L89) |
+| `renderSearchOperatorCatalog(entries: readonly SearchOperatorCatalogEntry[]): string` | Renders operator capabilities into the catalog shown to the agent. | function | exported | [line 96](../../src/retrieval/use-cases/operator-registry.ts#L96) |
 ## `src/runtime.ts`
 
 _No top-level functions, classes, or class methods._

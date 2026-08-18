@@ -4,10 +4,12 @@ import { MemoryLedger } from "../src/ledger.js";
 import type { StoreSearchHit } from "../src/store.js";
 import {
   createFinishOnlyBeforeToolCall,
-  createPiMemTools,
+  createPiMemTools as createPiMemToolsWithRegistry,
   validateFinishToolBatch,
+  type CreatePiMemToolsOptions,
   type MemoryToolStore,
 } from "../src/tools.js";
+import { createSearchOperatorRegistry } from "../src/composition/create-search-operator-registry.js";
 import type { MemoryRecord, SearchRequest } from "../src/types.js";
 
 function record(memoryId: string, turnIndex: number): MemoryRecord {
@@ -44,6 +46,15 @@ function createStore(
       return [searched, expanded];
     },
   };
+}
+
+function createPiMemTools(
+  options: Omit<CreatePiMemToolsOptions, "operatorRegistry">,
+) {
+  return createPiMemToolsWithRegistry({
+    ...options,
+    operatorRegistry: createSearchOperatorRegistry(options.store),
+  });
 }
 
 describe("PiMem tools", () => {

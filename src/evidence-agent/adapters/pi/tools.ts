@@ -13,9 +13,10 @@ export { createFinishTool } from "./tools/finish-tool.js";
 export { createReadTool } from "./tools/read-tool.js";
 export {
   BashRoParameters,
+  createSearchParameters,
   FinishParameters,
   ReadParameters,
-  SearchParameters,
+  type SearchParametersSchema,
 } from "./tools/schemas.js";
 export { createSearchTool } from "./tools/search-tool.js";
 export {

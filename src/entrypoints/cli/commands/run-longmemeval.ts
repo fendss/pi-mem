@@ -46,6 +46,7 @@ export async function runLongMemEval(parsed: ParsedCommand): Promise<void> {
     const retrieval = await runQuestionWithRuntime(
       paths,
       context.store,
+      context.operatorRegistry,
       modelRuntime,
       question.scopeId,
       question.question,

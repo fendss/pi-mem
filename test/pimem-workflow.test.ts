@@ -5,6 +5,7 @@ import {
 import { describe, expect, it } from "vitest";
 import { runBenchmarkAnswer } from "../src/benchmark/answer-from-evidence.js";
 import { buildLongMemEvalAnswerPrompt } from "../src/benchmark/longmemeval/dataset-adapter.js";
+import { createSearchOperatorRegistry } from "../src/composition/create-search-operator-registry.js";
 import {
   PIMEM_SKILL_TEXT,
   runPiMem,
@@ -147,6 +148,7 @@ describe("PiMem offline workflow", () => {
 
     const retrieval = await runPiMem({
       store,
+      operatorRegistry: createSearchOperatorRegistry(store),
       modelRuntime: retrievalRuntime,
       scopeId: "scope-1",
       question: "What color is my bicycle?",

@@ -21,6 +21,7 @@ Compatibility facades preserve old import paths during the structural migration.
 | [`src/benchmark/use-cases/run-question.ts`](../../src/benchmark/use-cases/run-question.ts) | benchmark | use case | internal | Runs one question through injected evidence-agent dependencies. |
 | [`src/cli.ts`](../../src/cli.ts) | compatibility | compatibility facade | compatibility | Preserves a pre-refactor import path by re-exporting `./entrypoints/cli/main.js`. |
 | [`src/composition/create-retrieval-context.ts`](../../src/composition/create-retrieval-context.ts) | composition | composition root | internal | Wires a concrete store and optional embedder into the selected retrieval profile. |
+| [`src/composition/create-search-operator-registry.ts`](../../src/composition/create-search-operator-registry.ts) | composition | composition root | internal | Registers the allowlisted search operators and freezes their catalog for one runtime. |
 | [`src/composition/run-question.ts`](../../src/composition/run-question.ts) | composition | composition root | internal | Builds concrete model, store, and retrieval adapters for one question run. |
 | [`src/context.ts`](../../src/context.ts) | compatibility | compatibility facade | compatibility | Preserves a pre-refactor import path by re-exporting `./evidence-agent/adapters/pi/ephemeral-context.js`. |
 | [`src/database-evidence-operators.ts`](../../src/database-evidence-operators.ts) | compatibility | compatibility facade | compatibility | Preserves a pre-refactor import path by re-exporting `./retrieval/adapters/sqlite/database-evidence-operators.js`. |
@@ -81,6 +82,7 @@ Compatibility facades preserve old import paths during the structural migration.
 | [`src/request-gate.ts`](../../src/request-gate.ts) | compatibility | compatibility facade | compatibility | Preserves a pre-refactor import path by re-exporting `./platform/concurrency/request-gate.js`. |
 | [`src/retrieval-profile.ts`](../../src/retrieval-profile.ts) | compatibility | compatibility facade | compatibility | Preserves a pre-refactor import path by re-exporting `./retrieval/retrieval-profile.js`. |
 | [`src/retrieval/adapters/openai/openai-compatible-embedder.ts`](../../src/retrieval/adapters/openai/openai-compatible-embedder.ts) | retrieval | adapter | internal | Implements the embedder port with an OpenAI-compatible embeddings endpoint. |
+| [`src/retrieval/adapters/operators/builtins.ts`](../../src/retrieval/adapters/operators/builtins.ts) | retrieval | adapter | internal | Implements the built-in search operators over injected retrieval capabilities. |
 | [`src/retrieval/adapters/sqlite/database-evidence-operators.ts`](../../src/retrieval/adapters/sqlite/database-evidence-operators.ts) | retrieval | adapter | internal | Implements temporal and numeric evidence-operator queries over SQLite. |
 | [`src/retrieval/adapters/sqlite/evidence-fact-index.ts`](../../src/retrieval/adapters/sqlite/evidence-fact-index.ts) | retrieval | adapter | internal | Builds and inspects normalized temporal and numeric fact indexes in SQLite. |
 | [`src/retrieval/finalize-search-hits.ts`](../../src/retrieval/finalize-search-hits.ts) | retrieval | domain service | internal | Deduplicates, orders, and limits retrieval hits at the search boundary. |
@@ -88,14 +90,19 @@ Compatibility facades preserve old import paths during the structural migration.
 | [`src/retrieval/index.ts`](../../src/retrieval/index.ts) | retrieval | public API | public | Defines the public API exported by the retrieval context. |
 | [`src/retrieval/model/embedder.ts`](../../src/retrieval/model/embedder.ts) | retrieval | model | internal | Defines the technology-neutral embedding port. |
 | [`src/retrieval/model/embedding.ts`](../../src/retrieval/model/embedding.ts) | retrieval | model | internal | Defines embedding profiles, stored vectors, and embedding-index contracts. |
-| [`src/retrieval/model/retrieval.ts`](../../src/retrieval/model/retrieval.ts) | retrieval | model | internal | Defines retrieval requests, hits, operators, profiles, and metrics. |
+| [`src/retrieval/model/retrieval.ts`](../../src/retrieval/model/retrieval.ts) | retrieval | model | internal | Defines retrieval requests, hits, evidence sidecars, profiles, and metrics. |
+| [`src/retrieval/model/search-operator.ts`](../../src/retrieval/model/search-operator.ts) | retrieval | model | internal | Defines search-operator inputs, outputs, catalog metadata, and execution context. |
 | [`src/retrieval/operators/hybrid-search.ts`](../../src/retrieval/operators/hybrid-search.ts) | retrieval | operator | internal | Combines FTS and vector results using reciprocal-rank fusion. |
 | [`src/retrieval/operators/numeric-operator.ts`](../../src/retrieval/operators/numeric-operator.ts) | retrieval | operator | internal | Normalizes numeric constraints and executes numeric evidence queries. |
 | [`src/retrieval/operators/temporal-operator.ts`](../../src/retrieval/operators/temporal-operator.ts) | retrieval | operator | internal | Normalizes temporal constraints and executes temporal evidence queries. |
+| [`src/retrieval/ports/memory-tool-store.ts`](../../src/retrieval/ports/memory-tool-store.ts) | retrieval | port | internal | Defines the candidate-search and exact-read capabilities used by retrieval and evidence tools. |
+| [`src/retrieval/ports/search-operator.ts`](../../src/retrieval/ports/search-operator.ts) | retrieval | port | internal | Defines the stable candidate-only search-operator SPI. |
 | [`src/retrieval/ranking.ts`](../../src/retrieval/ranking.ts) | retrieval | domain service | internal | Defines deterministic retrieval ranking and reciprocal-rank fusion helpers. |
 | [`src/retrieval/retrieval-profile.ts`](../../src/retrieval/retrieval-profile.ts) | retrieval | domain service | internal | Resolves retrieval-profile names and creates profile-specific stores. |
-| [`src/retrieval/search-memory.ts`](../../src/retrieval/search-memory.ts) | retrieval | domain service | internal | Orchestrates request normalization, operator routing, coverage, expansion, and hit merging. |
+| [`src/retrieval/search-memory.ts`](../../src/retrieval/search-memory.ts) | retrieval | domain service | internal | Normalizes agent search calls and dispatches them through the frozen operator registry. |
 | [`src/retrieval/temporal-annotation.ts`](../../src/retrieval/temporal-annotation.ts) | retrieval | domain service | internal | Parses and annotates temporal facts present in memory text. |
+| [`src/retrieval/use-cases/execute-operator.ts`](../../src/retrieval/use-cases/execute-operator.ts) | retrieval | use case | internal | Executes one registered search operator and enforces result scope isolation. |
+| [`src/retrieval/use-cases/operator-registry.ts`](../../src/retrieval/use-cases/operator-registry.ts) | retrieval | use case | internal | Registers, validates, freezes, and describes the search-operator catalog. |
 | [`src/runtime.ts`](../../src/runtime.ts) | compatibility | compatibility facade | compatibility | Preserves a pre-refactor import path by re-exporting `./evidence-agent/run-pimem.js`. |
 | [`src/search-results.ts`](../../src/search-results.ts) | compatibility | compatibility facade | compatibility | Preserves a pre-refactor import path by re-exporting `./retrieval/finalize-search-hits.js`. |
 | [`src/store.ts`](../../src/store.ts) | compatibility | compatibility facade | compatibility | Preserves a pre-refactor import path by re-exporting `./platform/sqlite/pimem-store.js`. |

@@ -5,14 +5,6 @@ export type SearchOrder =
   | "chronological"
   | "reverse-chronological";
 
-export type SearchOperator =
-  | "hybrid"
-  | "lexical"
-  | "coverage"
-  | "temporal"
-  | "numeric"
-  | "history";
-
 export interface EvidenceOperatorSearchContext {
   operator: "temporal" | "numeric";
   maxCandidates: number;

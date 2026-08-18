@@ -1,13 +1,16 @@
-import { createSearchMemory } from "../../../../retrieval/index.js";
+import {
+  createSearchMemory,
+  renderSearchOperatorCatalog,
+} from "../../../../retrieval/index.js";
 import type { CreatePiMemToolsOptions, PiMemTools, SearchToolDetails } from "./contracts.js";
 import { renderCandidates, renderEvidenceOperator } from "./render-tool-result.js";
-import { SearchParameters } from "./schemas.js";
+import { createSearchParameters } from "./schemas.js";
 
 export function createSearchTool(
   options: CreatePiMemToolsOptions,
 ): PiMemTools["search"] {
   const searchMemory = createSearchMemory({
-    store: options.store,
+    operatorRegistry: options.operatorRegistry,
     scopeId: options.scopeId,
     ...(options.questionDate === undefined
       ? {}
@@ -16,16 +19,21 @@ export function createSearchTool(
       ? {}
       : { searchDefaults: options.searchDefaults }),
   });
+  const operatorCatalog = options.operatorRegistry.list();
+  const catalogText = renderSearchOperatorCatalog(operatorCatalog);
   return {
     name: "search",
     label: "Search memory",
-    description:
-      "Run one Agent-selected retrieval operator with focused queries. Hybrid is broad recall; lexical is exact text; coverage aggregates independent queries across sessions; temporal joins date facts; numeric joins typed number facts; history returns user claims chronologically. The harness never routes from question keywords or accepts SQL. Use returned candidate numbers with read.",
-    parameters: SearchParameters,
+    description: [
+      "Run one Agent-selected search operator with focused queries. The harness never routes from question keywords or accepts SQL. Use returned candidate numbers with read.",
+      catalogText,
+    ].join("\n"),
+    parameters: createSearchParameters(operatorCatalog.map((entry) => entry.id)),
     async execute(_toolCallId, params, signal) {
       const {
         request,
         operator,
+        operatorVersion,
         hits,
         operatorResult,
         repeatedQueries,
@@ -40,6 +48,7 @@ export function createSearchTool(
         kind: "search",
         request,
         operator,
+        operatorVersion,
         ...(operatorResult === undefined ? {} : { operatorResult }),
         candidateReferences,
         candidates,
