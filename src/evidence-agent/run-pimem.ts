@@ -29,7 +29,7 @@ import { assertNonEmpty, newRunId, sha256 } from "../util.js";
 export type PiMemSkill = "none" | "pimem-v0";
 
 export const PIMEM_HARNESS_VERSION = "pimem-operator-registry-v1";
-export const PIMEM_SKILL_VERSION = "pimem-v0-registry-1";
+export const PIMEM_SKILL_VERSION = "pimem-v0-registry-2";
 
 const DEFAULT_SKILL_PATH = fileURLToPath(
   new URL("../../.agents/skills/pimem-retrieval/SKILL.md", import.meta.url),
