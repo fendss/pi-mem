@@ -88,6 +88,12 @@ Just return the label CORRECT or WRONG in a json format with the key as "label":
 }}
 ```"""
 
+REFIND_2026_JUDGE_PROMPT = """Your task is to label an answer to a question as CORRECT or WRONG. You will be given: (1) a question, (2) a gold answer, and (3) a generated answer. The gold answer is concise and contains the ground-truth information. The generated answer might be longer. Be generous: if the generated answer contains the gold answer information (even verbatim inside a longer response), mark it as CORRECT. Otherwise, mark it as WRONG. Respond with either CORRECT or WRONG, and provide a brief reasoning.
+
+Question: {question}
+Gold answer: {gold_answer}
+Generated answer: {generated_answer}"""
+
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser()
@@ -113,6 +119,11 @@ def parse_args() -> argparse.Namespace:
     judge.add_argument("--output-dir", type=Path, required=True)
     judge.add_argument("--slots", type=int, default=32)
     judge.add_argument("--variant", required=True)
+    judge.add_argument(
+        "--protocol",
+        choices=("strict-v5", "refind-2026"),
+        default="strict-v5",
+    )
     return parser.parse_args()
 
 
@@ -367,15 +378,17 @@ def blocking_chat(
     prompt: str,
     max_tokens: int,
     timeout: int,
+    top_p: float | None = None,
 ) -> dict[str, Any]:
-    body = json.dumps(
-        {
-            "model": model,
-            "messages": [{"role": "user", "content": prompt}],
-            "temperature": 0,
-            "max_tokens": max_tokens,
-        }
-    ).encode("utf-8")
+    request_payload = {
+        "model": model,
+        "messages": [{"role": "user", "content": prompt}],
+        "temperature": 0,
+        "max_tokens": max_tokens,
+    }
+    if top_p is not None:
+        request_payload["top_p"] = top_p
+    body = json.dumps(request_payload).encode("utf-8")
     request = urllib.request.Request(
         endpoint(base_url),
         data=body,
@@ -577,6 +590,13 @@ def parse_label(content: str) -> str:
     return candidates[0].upper()
 
 
+def parse_refind_label(content: str) -> str:
+    normalized = content.casefold()
+    if "correct" in normalized and "wrong" not in normalized:
+        return "CORRECT"
+    return "WRONG"
+
+
 async def run_judge(args: argparse.Namespace) -> None:
     if args.slots <= 0:
         raise ValueError("--slots must be positive")
@@ -595,15 +615,29 @@ async def run_judge(args: argparse.Namespace) -> None:
     records_dir.mkdir(parents=True, exist_ok=True, mode=0o700)
     os.chmod(output_dir, 0o700)
     os.chmod(records_dir, 0o700)
+    prompt_template = (
+        REFIND_2026_JUDGE_PROMPT
+        if args.protocol == "refind-2026"
+        else JUDGE_PROMPT
+    )
     config = {
         "mode": "strict-longmemeval-judge",
         "variant": args.variant,
         "question_count": question_count,
         "input_hash": sha256_json(items),
-        "prompt_hash": hashlib.sha256(JUDGE_PROMPT.encode()).hexdigest(),
+        "prompt_hash": hashlib.sha256(prompt_template.encode()).hexdigest(),
         "model": model,
         "slots": args.slots,
     }
+    if args.protocol == "refind-2026":
+        config.update(
+            {
+                "mode": "refind-2026-longmemeval-judge",
+                "protocol": args.protocol,
+                "temperature": 0,
+                "top_p": 0.9,
+            }
+        )
     ensure_manifest(output_dir / "run-manifest.json", config)
     semaphore = asyncio.Semaphore(args.slots)
 
@@ -611,7 +645,7 @@ async def run_judge(args: argparse.Namespace) -> None:
         path = records_dir / safe_name(item["question_id"])
         if path.exists():
             return
-        prompt = JUDGE_PROMPT.format(
+        prompt = prompt_template.format(
             question=item["question"],
             gold_answer=item["answer"],
             generated_answer=item.get("response", ""),
@@ -626,9 +660,14 @@ async def run_judge(args: argparse.Namespace) -> None:
                     prompt=prompt,
                     max_tokens=256,
                     timeout=60,
+                    top_p=0.9 if args.protocol == "refind-2026" else None,
                 )
             try:
-                label = parse_label(response["content"])
+                label = (
+                    parse_refind_label(response["content"])
+                    if args.protocol == "refind-2026"
+                    else parse_label(response["content"])
+                )
                 break
             except ValueError:
                 print("judge label parse retry; waiting 1s", file=sys.stderr)

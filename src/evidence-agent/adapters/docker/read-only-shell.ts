@@ -1,16 +1,14 @@
 import { spawn } from "node:child_process";
 import { realpath, stat } from "node:fs/promises";
+import type {
+  ReadOnlyNavigation,
+  ReadOnlyNavigationResult,
+} from "../../ports/read-only-navigation.js";
 
 const DEFAULT_IMAGE = "dockerproxy.com/library/python:3.12-slim";
 const DEFAULT_MAX_OUTPUT_BYTES = 16 * 1024;
 
-export interface BashRoResult {
-  command: string;
-  stdout: string;
-  stderr: string;
-  exitCode: number | null;
-  truncated: boolean;
-}
+export type BashRoResult = ReadOnlyNavigationResult;
 
 export interface BashRoOptions {
   dockerBinary?: string;
@@ -61,7 +59,7 @@ export function buildBashRoDockerArgs(
  * Runs a shell inside a disposable, networkless container with exactly one
  * sanitized memory scope mounted read-only. It never invokes a host shell.
  */
-export class ReadOnlyBash {
+export class ReadOnlyBash implements ReadOnlyNavigation {
   private readonly dockerBinary: string;
   private readonly image: string;
   private readonly timeoutMs: number;

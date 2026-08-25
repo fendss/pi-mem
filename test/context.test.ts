@@ -1,6 +1,6 @@
 import type { AgentMessage } from "@earendil-works/pi-agent-core";
 import { describe, expect, it } from "vitest";
-import { createEphemeralMemoryContext } from "../src/context.js";
+import { createEphemeralMemoryContext } from "../src/evidence-agent/index.js";
 
 function toolResult(
   toolCallId: string,
@@ -41,18 +41,27 @@ describe("ephemeral memory context", () => {
     expect(transformed[2]).toBe(selectedRead);
     expect(transformed[3]).toBe(currentSearch);
     expect(JSON.stringify(oldSearch)).toContain("large noisy preview");
-    expect(context.snapshot()).toEqual({ expiredNavigationResults: 1 });
+    expect(context.snapshot()).toEqual({
+      expiredNavigationResults: 1,
+      compactedReadResults: 0,
+    });
   });
 
-  it("expires bash navigation but preserves errors", async () => {
+  it("expires bash and operator-definition navigation but preserves errors", async () => {
     const context = createEphemeralMemoryContext();
     const bash = toolResult("bash-1", "bash_ro", "many grep rows");
+    const definition = toolResult(
+      "define-1",
+      "define_operator",
+      "defined dual-recall",
+    );
     const error = {
       ...toolResult("search-error", "search", "failure"),
       isError: true,
     };
     const messages = [
       bash,
+      definition,
       error,
       { role: "user", content: "continue", timestamp: 2 } satisfies AgentMessage,
     ];
@@ -60,7 +69,29 @@ describe("ephemeral memory context", () => {
     const transformed = await context.transformContext(messages);
 
     expect(JSON.stringify(transformed[0])).toMatch(/expired from active/u);
-    expect(transformed[1]).toBe(error);
-    expect(context.snapshot()).toEqual({ expiredNavigationResults: 1 });
+    expect(JSON.stringify(transformed[1])).toMatch(/expired from active/u);
+    expect(transformed[2]).toBe(error);
+    expect(context.snapshot()).toEqual({
+      expiredNavigationResults: 2,
+      compactedReadResults: 0,
+    });
+  });
+
+  it("keeps read evidence for one reasoning turn then compacts its text", async () => {
+    const context = createEphemeralMemoryContext();
+    const oldRead = toolResult("read-1", "read", "bounded exact evidence");
+    const messages = [
+      oldRead,
+      { role: "user", content: "continue", timestamp: 2 } satisfies AgentMessage,
+    ];
+
+    const transformed = await context.transformContext(messages);
+
+    expect(JSON.stringify(transformed[0])).toMatch(/compacted after one reasoning turn/u);
+    expect(JSON.stringify(transformed[0])).not.toContain("bounded exact evidence");
+    expect(context.snapshot()).toEqual({
+      expiredNavigationResults: 0,
+      compactedReadResults: 1,
+    });
   });
 });

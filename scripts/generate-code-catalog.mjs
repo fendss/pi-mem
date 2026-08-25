@@ -10,46 +10,86 @@ const codeCatalogPath = resolve(projectRoot, "docs", "architecture", "code-catal
 const fileCatalogPath = resolve(projectRoot, "docs", "architecture", "file-catalog.md");
 
 const FILE_RESPONSIBILITIES = new Map(Object.entries({
+  "src/cli.ts": "Emits the stable build artifact that starts the PiMem CLI entrypoint.",
+  "src/memoryarena-public-api.ts": "Emits the stable build artifact that starts the MemoryArena Public HTTP entrypoint.",
+  "src/tau-knowledge-bridge.ts": "Emits the stable build artifact that starts the tau-Knowledge bridge entrypoint.",
+  "src/agent-runtime/interactive-memory-agent.ts": "Runs a stateful Pi Agent loop that interleaves memory operations with caller-owned environment tools.",
+  "src/benchmark/amabench/answer-contract.ts": "Builds AMA-Bench answer prompts exclusively from cited trajectory evidence.",
+  "src/benchmark/amabench/dataset-adapter.ts": "Pins and adapts AMA-Bench trajectories while separating runner queries from judge labels.",
+  "src/benchmark/amabench/evaluation-contract.ts": "Joins frozen AMA-Bench predictions to judge inputs and official episode submissions.",
+  "src/benchmark/amabench/judge.ts": "Runs and aggregates the pinned AMA-Bench binary judge protocol with explicit fallback accounting.",
   "src/benchmark/answer-from-evidence.ts": "Runs the benchmark answer-only model stage from grounded retrieval evidence.",
+  "src/benchmark/data-paths.ts": "Defines the shared workspace paths for evidence-based benchmark adapters.",
+  "src/benchmark/label-firewall.ts": "Rejects private evaluation labels at benchmark ingest boundaries before they reach core memory.",
   "src/benchmark/longmemeval/data-paths.ts": "Defines the filesystem paths used by a LongMemEval workspace.",
   "src/benchmark/longmemeval/dataset-adapter.ts": "Validates and adapts LongMemEval-S records into PiMem sessions and private questions.",
   "src/benchmark/longmemeval/private-question-store.ts": "Reads and atomically updates the private LongMemEval question map.",
+  "src/benchmark/memoryarena-public/adapters/filesystem-generation-store.ts": "Persists each official MemoryArena user's active PiMem generation and crash-resumable append ordinal.",
+  "src/benchmark/memoryarena-public/adapters/jsonl-operation-audit-sink.ts": "Durably records privacy-safe initialize, add, and wrap lifecycle events with retrieval and embedding usage deltas.",
+  "src/benchmark/memoryarena-public/adapters/jsonl-wrap-audit-sink.ts": "Writes serialized, permission-restricted MemoryArena wrap and retrieval audit records.",
+  "src/benchmark/memoryarena-public/adapters/measured-embedder.ts": "Attributes every embedding provider attempt to its originating MemoryArena add or wrap operation without serializing concurrent requests.",
+  "src/benchmark/memoryarena-public/adapters/pimem-memory-runtime.ts": "Adapts alternating MemoryArena add and wrap operations to immutable PiMem chunks and evidence retrieval.",
+  "src/benchmark/memoryarena-public/composition/create-runtime.ts": "Wires the MemoryArena HTTP memory boundary to one leased online PiMem runtime and durable audit state.",
+  "src/benchmark/memoryarena-public/model/memory-backend.ts": "Defines the MemoryArena Public memory-backend state, wire-neutral results, audit records, and errors.",
+  "src/benchmark/memoryarena-public/ports/memory-backend.ts": "Defines generation, source-chunk, retrieval, and audit capabilities required by the MemoryArena use case.",
+  "src/benchmark/memoryarena-public/use-cases/memory-backend.ts": "Implements initialize, add, and evidence-only prompt wrapping without benchmark-specific infrastructure dependencies.",
   "src/benchmark/model/benchmark-query.ts": "Defines the benchmark question model shared at the benchmark boundary.",
   "src/benchmark/model/benchmark-run.ts": "Defines durable benchmark prediction, success, and failure artifact records.",
-  "src/benchmark/use-cases/run-question.ts": "Runs one question through injected evidence-agent dependencies.",
+  "src/benchmark/model/evidence-benchmark-run.ts": "Defines text predictions plus durable evidence-benchmark run records.",
+  "src/benchmark/private-question-store.ts": "Atomically stores benchmark queries and labels by question identity with restricted permissions.",
+  "src/benchmark/tau-knowledge/data-paths.ts": "Defines the local workspace paths for pinned tau-Knowledge data.",
+  "src/benchmark/tau-knowledge/dataset-adapter.ts": "Pins, validates, and adapts the public tau-Knowledge document corpus without reading task gold.",
+  "src/benchmark/composition/ingest-evidence-benchmark.ts": "Wires benchmark sessions to SQLite ingest and optional embedding indexing.",
   "src/composition/create-retrieval-context.ts": "Wires a concrete store and optional embedder into the selected retrieval profile.",
+  "src/composition/create-read-only-navigation.ts": "Builds an optional containerized navigation binding for one immutable memory scope.",
+  "src/composition/ingest-memory-workspace.ts": "Wires immutable memory sessions to SQLite ingest and optional embedding indexing.",
   "src/composition/create-search-operator-registry.ts": "Registers the allowlisted search operators and freezes their catalog for one runtime.",
+  "src/composition/load-search-operator-plugins.ts": "Loads and fingerprints trusted local search-operator modules at composition time.",
   "src/composition/run-question.ts": "Builds concrete model, store, and retrieval adapters for one question run.",
   "src/entrypoints/cli/commands/benchmark-longmemeval.ts": "Executes resumable, concurrent LongMemEval benchmark runs and materializes their artifacts.",
+  "src/entrypoints/cli/commands/benchmark-evidence.ts": "Executes resumable AMA-Bench retrieval-answer runs without loading evaluation labels.",
+  "src/entrypoints/cli/commands/evaluate-benchmark.ts": "Scores frozen AMA-Bench predictions at the private-label boundary.",
+  "src/entrypoints/cli/commands/ingest-benchmark.ts": "Pins, selects, ingests, and manifests AMA-Bench source data.",
   "src/entrypoints/cli/commands/ingest-longmemeval.ts": "Ingests selected LongMemEval scopes and optionally builds embedding indexes.",
+  "src/entrypoints/cli/commands/ingest-tau-knowledge.ts": "Validates and ingests the pinned tau-Knowledge corpus with a durable retrieval manifest.",
   "src/entrypoints/cli/commands/longmemeval-suite.ts": "Orchestrates the complete benchmark, audit, judge, frozen-reanswer, and packaging suite.",
   "src/entrypoints/cli/commands/package-benchmark.ts": "Validates complete benchmark artifacts and creates their archive.",
   "src/entrypoints/cli/commands/prepare-longmemeval-eval.ts": "Joins predictions with source answers into evaluator input records.",
   "src/entrypoints/cli/commands/run-longmemeval.ts": "Runs retrieval and answer generation for one stored private LongMemEval question.",
   "src/entrypoints/cli/commands/run-memory.ts": "Runs one arbitrary question against a selected memory scope.",
   "src/entrypoints/cli/main.ts": "Routes CLI commands and normalizes top-level errors.",
+  "src/entrypoints/cli/evidence-benchmark-runtime.ts": "Provides shared model-role, provenance-hash, corpus-hash, and resumable-manifest utilities.",
   "src/entrypoints/cli/parse-command.ts": "Parses CLI arguments, validates flags, and derives model and retrieval options.",
   "src/entrypoints/cli/workflow-files.ts": "Provides atomic workflow file writes, optional JSON reads, and archive command execution.",
+  "src/entrypoints/tau-knowledge-bridge/main.ts": "Bridges official tau2 messages and environment tools to one stateful PiMem Agent session.",
   "src/entrypoints/ldbd-api/contracts.ts": "Validates and normalizes the LDBD Add/Search wire contracts.",
   "src/entrypoints/ldbd-api/inbox-store.ts": "Persists idempotent LDBD Add requests without benchmark questions or gold fields.",
   "src/entrypoints/ldbd-api/main.ts": "Starts the authenticated HTTP server for the LDBD memory API.",
   "src/entrypoints/ldbd-api/pimem-runtime.ts": "Materializes LDBD user messages as immutable scopes and runs PiMem retrieval.",
   "src/entrypoints/ldbd-api/service.ts": "Maps validated LDBD requests to inbox persistence and PiMem search.",
+  "src/entrypoints/memoryarena-public-api/application.ts": "Serializes each MemoryArena user's lifecycle and maps the official API envelopes to the injected backend.",
+  "src/entrypoints/memoryarena-public-api/contracts.ts": "Validates exact official MemoryArena initialize, add, and wrap request bodies while rejecting gold-bearing fields.",
+  "src/entrypoints/memoryarena-public-api/main.ts": "Starts the drop-in MemoryArena memory HTTP gateway backed by PiMem.",
   "src/evidence-agent/adapters/docker/read-only-shell.ts": "Runs allowlisted read-only shell commands in the memory-scope container.",
   "src/evidence-agent/adapters/pi/ephemeral-context.ts": "Builds the bounded ephemeral context passed to the Pi agent.",
+  "src/evidence-agent/adapters/pi/assistant-messages.ts": "Normalizes assistant text, response-model identity, and accumulated usage from Pi messages.",
+  "src/evidence-agent/adapters/pi/retrieval-prompt.ts": "Loads the retrieval Skill and renders the core system prompt with the active operator catalog.",
   "src/evidence-agent/adapters/pi/tools.ts": "Exports the Pi tool adapter API from its responsibility-specific modules.",
   "src/evidence-agent/adapters/pi/tools/bash-tool.ts": "Adapts the read-only shell capability to the Pi bash tool contract.",
   "src/evidence-agent/adapters/pi/tools/candidate-refs.ts": "Resolves and validates candidate references used by agent tools.",
   "src/evidence-agent/adapters/pi/tools/contracts.ts": "Defines stores, runtime state, and shared contracts required by Pi tools.",
   "src/evidence-agent/adapters/pi/tools/create-tools.ts": "Creates the complete Pi tool set for one evidence-agent run.",
-  "src/evidence-agent/adapters/pi/tools/finish-tool.ts": "Validates and records the agent's final evidence-backed answer.",
-  "src/evidence-agent/adapters/pi/tools/read-tool.ts": "Reads exact candidate memories and registers them as evidence.",
+  "src/evidence-agent/adapters/pi/tools/define-operator-tool.ts": "Maps a compact Agent request to one validated run-local declarative search operator.",
+  "src/evidence-agent/adapters/pi/tools/finish-tool.ts": "Validates and records the agent's final evidence selection.",
+  "src/evidence-agent/adapters/pi/tools/read-tool.ts": "Projects exact bounded excerpts from candidate memories and registers them as evidence.",
   "src/evidence-agent/adapters/pi/tools/render-tool-result.ts": "Renders structured tool results into the text observed by the agent.",
   "src/evidence-agent/adapters/pi/tools/schemas.ts": "Defines TypeBox input schemas for the Pi tools.",
   "src/evidence-agent/adapters/pi/tools/search-tool.ts": "Adapts retrieval orchestration to the Pi search-memory tool.",
   "src/evidence-agent/adapters/pi/tools/tool-protocol.ts": "Defines tool-call counting, time limits, and protocol errors.",
   "src/evidence-agent/model/evidence.ts": "Defines candidates, evidence, citations, metrics, and final agent results.",
-  "src/evidence-agent/model/memory-ledger.ts": "Tracks searched candidates, exact reads, evidence, and provenance during a run.",
+  "src/evidence-agent/model/memory-evidence.ts": "Builds bounded, source-hash-bound evidence projections from immutable memories.",
+  "src/evidence-agent/model/memory-ledger.ts": "Tracks searched candidates, bounded exact reads, evidence, and provenance during a run.",
+  "src/evidence-agent/ports/read-only-navigation.ts": "Defines the optional read-only navigation capability injected into an evidence-agent run.",
   "src/evidence-agent/run-pimem.ts": "Runs the Pi evidence agent and assembles its source-grounded result.",
   "src/memory/ingest-memory-sessions.ts": "Validates and ingests immutable memory sessions through the ingest port.",
   "src/memory/model/memory.ts": "Defines source-memory, session, scope, ingest, and export domain models.",
@@ -58,6 +98,7 @@ const FILE_RESPONSIBILITIES = new Map(Object.entries({
   "src/platform/concurrency/request-gate.ts": "Limits concurrent requests and request-start rate.",
   "src/platform/filesystem/jsonl-writer.ts": "Serializes append-only JSONL writes through a single promise chain.",
   "src/platform/pi/load-model-runtime.ts": "Loads and validates the configured Pi model runtime.",
+  "src/platform/pi/model-runtime-adapter.ts": "Defines freely registered model-protocol adapters for runtime-selected model IDs.",
   "src/platform/pi/openai-non-stream-transport.ts": "Adapts complete OpenAI Chat Completions responses to the Pi agent event protocol.",
   "src/platform/security/protected-environment.ts": "Loads permission-restricted environment files and validates required variables.",
   "src/platform/sqlite/memory-row.ts": "Maps the shared SQLite memory row shape to the memory domain model.",
@@ -71,39 +112,45 @@ const FILE_RESPONSIBILITIES = new Map(Object.entries({
   "src/retrieval/model/embedder.ts": "Defines the technology-neutral embedding port.",
   "src/retrieval/model/embedding.ts": "Defines embedding profiles, stored vectors, and embedding-index contracts.",
   "src/retrieval/model/retrieval.ts": "Defines retrieval requests, hits, evidence sidecars, profiles, and metrics.",
-  "src/retrieval/model/search-operator.ts": "Defines search-operator inputs, outputs, catalog metadata, and execution context.",
+  "src/retrieval/model/search-operator.ts": "Defines CandidateSets, executable operator contracts, and declarative run-local operator definitions.",
   "src/retrieval/operators/hybrid-search.ts": "Combines FTS and vector results using reciprocal-rank fusion.",
   "src/retrieval/operators/numeric-operator.ts": "Normalizes numeric constraints and executes numeric evidence queries.",
   "src/retrieval/operators/temporal-operator.ts": "Normalizes temporal constraints and executes temporal evidence queries.",
   "src/retrieval/ports/memory-tool-store.ts": "Defines the candidate-search and exact-read capabilities used by retrieval and evidence tools.",
+  "src/retrieval/ports/operator-catalog.ts": "Defines read-only and run-private operator catalog capabilities used across retrieval boundaries.",
   "src/retrieval/ports/search-operator.ts": "Defines the stable candidate-only search-operator SPI.",
+  "src/retrieval/ports/search-operator-plugin.ts": "Defines the deploy-time factory contract implemented by trusted local operator modules.",
   "src/retrieval/ranking.ts": "Defines deterministic retrieval ranking and reciprocal-rank fusion helpers.",
   "src/retrieval/retrieval-profile.ts": "Resolves retrieval-profile names and creates profile-specific stores.",
-  "src/retrieval/search-memory.ts": "Normalizes agent search calls and dispatches them through the frozen operator registry.",
+  "src/retrieval/search-memory.ts": "Normalizes Agent search calls and dispatches them through the current run catalog.",
   "src/retrieval/temporal-annotation.ts": "Parses and annotates temporal facts present in memory text.",
   "src/retrieval/use-cases/execute-operator.ts": "Executes one registered search operator and enforces result scope isolation.",
-  "src/retrieval/use-cases/operator-registry.ts": "Registers, validates, freezes, and describes the search-operator catalog.",
+  "src/retrieval/use-cases/build-declarative-operator.ts": "Validates and builds bounded declarative operator graphs as CandidateSet transformations.",
+  "src/retrieval/use-cases/operator-registry.ts": "Owns the frozen base catalog plus isolated, versioned run-local operator overlays.",
   "src/util.ts": "Provides shared hashing, safe path, source-text, and preview helpers.",
 }));
 
 const FUNCTION_PURPOSES = new Map(Object.entries({
-  "src/benchmark/answer-from-evidence.ts#lastAssistantMessage": "Returns the final assistant message emitted by the answer model.",
-  "src/benchmark/answer-from-evidence.ts#assistantText": "Extracts plain text from an assistant message.",
   "src/benchmark/answer-from-evidence.ts#returnedModelMatches": "Checks whether the provider's response model matches the requested model.",
   "src/benchmark/longmemeval/data-paths.ts#dataPaths": "Derives all persistent LongMemEval paths from one data directory.",
   "src/evidence-agent/adapters/pi/tools/search-tool.ts#createSearchTool": "Creates the Pi search tool that delegates retrieval and records returned candidates in the ledger.",
-  "src/evidence-agent/run-pimem.ts#orderCandidatesForEvidenceAttention": "Orders candidate memories for stable evidence review without changing their provenance.",
+  "src/evidence-agent/adapters/pi/tools/define-operator-tool.ts#createDefineOperatorTool": "Creates the compact Agent tool that assembles existing operators into one run-local operator.",
   "src/evidence-agent/run-pimem.ts#questionPrompt": "Builds the user prompt from the question and optional question date.",
-  "src/evidence-agent/run-pimem.ts#lastAssistantMessage": "Returns the final assistant message from the Pi conversation.",
-  "src/evidence-agent/run-pimem.ts#assistantText": "Extracts plain text from the final assistant message.",
   "src/evidence-agent/run-pimem.ts#runPiMem": "Runs one bounded evidence-agent session and returns its provenance-backed result.",
   "src/composition/create-search-operator-registry.ts#createSearchOperatorRegistry": "Registers built-in and additional operators, then freezes the catalog.",
+  "src/composition/create-search-operator-registry.ts#createSelectedSearchOperatorRegistry": "Registers an explicit allowlist of built-in and additional operators for one run.",
   "src/retrieval/adapters/operators/builtins.ts#builtInSearchOperators": "Creates the built-in search-operator implementations over one injected store.",
   "src/retrieval/use-cases/execute-operator.ts#executeSearchOperator": "Runs a registered operator and rejects candidate hits from another scope.",
+  "src/retrieval/use-cases/build-declarative-operator.ts#buildDeclarativeSearchOperator": "Validates a bounded operator graph and builds a candidate-only executable operator.",
   "src/retrieval/use-cases/operator-registry.ts#SearchOperatorRegistry.register": "Validates and registers one uniquely named search operator before freeze.",
   "src/retrieval/use-cases/operator-registry.ts#SearchOperatorRegistry.freeze": "Seals the catalog after verifying its default operator exists.",
   "src/retrieval/use-cases/operator-registry.ts#SearchOperatorRegistry.get": "Resolves an allowlisted operator or reports the available catalog.",
   "src/retrieval/use-cases/operator-registry.ts#SearchOperatorRegistry.list": "Returns a detached runtime catalog for schemas, prompts, and manifests.",
+  "src/retrieval/use-cases/operator-registry.ts#SearchOperatorRegistry.forkForRun": "Creates an isolated mutable overlay over the frozen base catalog.",
+  "src/retrieval/use-cases/operator-registry.ts#RunSearchOperatorCatalog.define": "Validates and registers one declarative operator only within the current run.",
+  "src/retrieval/use-cases/operator-registry.ts#RunSearchOperatorCatalog.identity": "Hashes the frozen base catalog and ordered run-local definitions.",
+  "src/retrieval/use-cases/operator-registry.ts#RunSearchOperatorCatalog.snapshots": "Returns detached normalized definitions for audit and later promotion.",
+  "src/retrieval/use-cases/operator-registry.ts#RunSearchOperatorCatalog.remainingDefinitions": "Reports the remaining bounded definition capacity for the current run.",
   "src/retrieval/use-cases/operator-registry.ts#renderSearchOperatorCatalog": "Renders operator capabilities into the catalog shown to the agent.",
   "src/entrypoints/ldbd-api/contracts.ts#parseAddRequest": "Validates one synchronous LDBD Add request and keeps only the memory contract fields.",
   "src/entrypoints/ldbd-api/contracts.ts#parseSearchRequest": "Validates one LDBD Search request with a bounded top-k and optional choices.",
@@ -139,7 +186,7 @@ const FUNCTION_PURPOSES = new Map(Object.entries({
   "src/platform/pi/openai-non-stream-transport.ts#emitCompletedMessage": "Emits one complete assistant response through the Pi event protocol.",
   "src/platform/pi/openai-non-stream-transport.ts#openAINonStreamingStreamFn": "Executes one non-streaming Chat Completions request and exposes it as a Pi event stream.",
   "src/evidence-agent/model/memory-ledger.ts#MemoryLedger.recordSearchHits": "Registers retrieval hits as candidates while preserving first-seen provenance.",
-  "src/evidence-agent/model/memory-ledger.ts#MemoryLedger.recordRead": "Registers exact memory reads and promotes them to eligible evidence.",
+  "src/evidence-agent/model/memory-ledger.ts#MemoryLedger.recordRead": "Registers bounded exact memory reads and promotes them to eligible evidence.",
   "src/evidence-agent/model/memory-ledger.ts#MemoryLedger.acceptSelection": "Validates and stores the agent's final evidence selection.",
   "src/evidence-agent/model/memory-ledger.ts#MemoryLedger.assertInvariants": "Verifies candidate, evidence, citation, and scope provenance invariants.",
 }));
@@ -360,7 +407,12 @@ function markdown(files) {
 
 function contextFor(projectPath) {
   const [, topLevel] = projectPath.split("/");
-  const contexts = new Set(["memory", "retrieval", "evidence-agent", "benchmark"]);
+  if (new Set([
+    "src/cli.ts",
+    "src/memoryarena-public-api.ts",
+    "src/tau-knowledge-bridge.ts",
+  ]).has(projectPath)) return "entrypoints";
+  const contexts = new Set(["memory", "retrieval", "evidence-agent", "agent-runtime", "benchmark"]);
   if (contexts.has(topLevel)) return topLevel;
   if (["entrypoints", "composition", "platform"].includes(topLevel)) return topLevel;
   return projectPath === "src/util.ts" ? "shared" : "compatibility";
@@ -373,12 +425,18 @@ function isCompatibilityFacade(projectPath, source) {
 
 function layerFor(projectPath, source) {
   if (isCompatibilityFacade(projectPath, source)) return "compatibility facade";
+  if (new Set([
+    "src/cli.ts",
+    "src/memoryarena-public-api.ts",
+    "src/tau-knowledge-bridge.ts",
+  ]).has(projectPath)) return "entry point";
   if (projectPath.endsWith("/index.ts")) return "public API";
   if (projectPath.includes("/model/")) return "model";
   if (projectPath.includes("/ports/")) return "port";
   if (projectPath.includes("/adapters/")) return "adapter";
   if (projectPath.includes("/operators/")) return "operator";
   if (projectPath.includes("/use-cases/")) return "use case";
+  if (projectPath.includes("/composition/")) return "composition root";
   if (projectPath.includes("/prompts/")) return "prompt policy";
   if (projectPath.includes("/entrypoints/cli/commands/")) return "command handler";
   if (projectPath === "src/entrypoints/cli/main.ts") return "entry point";
@@ -407,8 +465,10 @@ function fileResponsibility(projectPath, source) {
 }
 
 function fileCatalogMarkdown(files) {
+  let hasCompatibilityFacade = false;
   const rows = files.map(({ projectPath, source }) => {
     const layer = layerFor(projectPath, source);
+    hasCompatibilityFacade ||= layer === "compatibility facade";
     const status = layer === "compatibility facade"
       ? "compatibility"
       : layer === "public API"
@@ -421,7 +481,9 @@ function fileCatalogMarkdown(files) {
     "",
     "This generated catalog is the file-level directory for the project. Responsibilities are maintained in `scripts/generate-code-catalog.mjs`; generation fails when a primary source file has no description.",
     "",
-    "Compatibility facades preserve old import paths during the structural migration. New code must import from the context path named by the facade.",
+    hasCompatibilityFacade
+      ? "Compatibility facades preserve old import paths during structural migration. New code must import the canonical context path."
+      : "All source modules use canonical context paths; no source-level compatibility facades remain.",
     "",
     "| File | Context | Layer | Status | Responsibility |",
     "|---|---|---|---|---|",

@@ -1,4 +1,4 @@
-import type { MemoryRecord } from "../../../../memory/index.js";
+import type { MemoryEvidence } from "../../../model/memory-evidence.js";
 import {
   temporalAnnotation,
   type EvidenceOperatorResult,
@@ -87,14 +87,17 @@ export function renderCandidates(
 }
 
 export function renderMemories(
-  memories: readonly MemoryRecord[],
+  memories: readonly MemoryEvidence[],
   ledger: MemoryLedger,
   questionDate?: string,
 ): string {
   return memories
     .map((memory) => {
       const time = memory.timestamp ? ` ${memory.timestamp}` : "";
-      return `[candidate:${String(ledger.candidateRef(memory.memoryId))}; read:true]${time}${temporalSuffix(memory.timestamp, questionDate)} ${memory.role}\n${memory.content}`;
+      const projection = memory.truncated
+        ? ` | bounded_exact_excerpts=true | source_chars=${String(memory.sourceContentLength)}`
+        : "";
+      return `[candidate:${String(ledger.candidateRef(memory.memoryId))}; read:true]${time}${temporalSuffix(memory.timestamp, questionDate)} ${memory.role}${projection}\n${memory.content}`;
     })
     .join("\n\n");
 }

@@ -1,7 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { MemoryLedger } from "../src/ledger.js";
-import type { StoreSearchHit } from "../src/store.js";
-import type { MemoryRecord } from "../src/types.js";
+import { MemoryLedger } from "../src/evidence-agent/index.js";
+import {
+  MAX_SELECTED_EVIDENCE_CHARS,
+  projectMemoryEvidence,
+} from "../src/evidence-agent/index.js";
+import type { StoreSearchHit } from "../src/platform/sqlite/pimem-store.js";
+import type { MemoryRecord } from "../src/memory/index.js";
 
 function record(
   memoryId: string,
@@ -31,6 +35,10 @@ function hit(memory: MemoryRecord, rank: number): StoreSearchHit {
   };
 }
 
+function evidence(records: readonly MemoryRecord[]) {
+  return records.map((item) => projectMemoryEvidence(item, [item.content], 4_096));
+}
+
 describe("MemoryLedger", () => {
   it("keeps citations within evidence within candidates", () => {
     const ledger = new MemoryLedger("scope-1");
@@ -39,7 +47,7 @@ describe("MemoryLedger", () => {
     const expanded = record("m3", 2);
 
     ledger.recordSearchHits([hit(first, 1), hit(searchOnly, 2)]);
-    ledger.recordRead([first, expanded]);
+    ledger.recordRead(evidence([first, expanded]));
     ledger.acceptSelection({
       status: "sufficient",
       citations: [{ memoryId: expanded.memoryId, supports: "Direct support" }],
@@ -77,7 +85,7 @@ describe("MemoryLedger", () => {
     const ledger = new MemoryLedger("scope-1");
     const candidate = record("m1", 0);
     ledger.recordSearchHits([hit(candidate, 1)]);
-    ledger.recordRead([candidate]);
+    ledger.recordRead(evidence([candidate]));
     const selection = {
       status: "sufficient" as const,
       citations: [{ memoryId: "m1", supports: "Direct support" }],
@@ -117,6 +125,41 @@ describe("MemoryLedger", () => {
     ).toThrow(/read in this run/u);
   });
 
+  it("rejects duplicate citations", () => {
+    const ledger = new MemoryLedger("scope-1");
+    const candidate = record("m1", 0);
+    ledger.recordRead(evidence([candidate]));
+
+    expect(() => ledger.acceptSelection({
+      status: "sufficient",
+      citations: [
+        { memoryId: "m1", supports: "First statement." },
+        { memoryId: "m1", supports: "Repeated statement." },
+      ],
+      evidenceSummary: "Repeated source.",
+    })).toThrow(/Duplicate citation/u);
+  });
+
+  it("bounds the final cited evidence package", () => {
+    const ledger = new MemoryLedger("scope-1");
+    const sources = Array.from({ length: 33 }, (_, index) => ({
+      ...record(`m-${String(index)}`, index),
+      content: "x".repeat(8_192),
+    }));
+    ledger.recordRead(sources.map((source) =>
+      projectMemoryEvidence(source, ["x"], 8_192)
+    ));
+
+    expect(() => ledger.acceptSelection({
+      status: "sufficient",
+      citations: sources.map((source) => ({
+        memoryId: source.memoryId,
+        supports: "Direct source.",
+      })),
+      evidenceSummary: "An oversized source set.",
+    })).toThrow(new RegExp(String(MAX_SELECTED_EVIDENCE_CHARS), "u"));
+  });
+
   it("allows an insufficient selection with no citations", () => {
     const ledger = new MemoryLedger("scope-1");
     expect(
@@ -136,7 +179,7 @@ describe("MemoryLedger", () => {
     const ledger = new MemoryLedger("scope-1");
     const first = record("m1", 0);
     const second = record("m2", 1);
-    ledger.recordRead([first, second]);
+    ledger.recordRead(evidence([first, second]));
 
     expect(
       ledger.acceptSelection({
@@ -164,7 +207,7 @@ describe("MemoryLedger", () => {
   it("rejects inventory entries backed only by unread memory", () => {
     const ledger = new MemoryLedger("scope-1");
     const first = record("m1", 0);
-    ledger.recordRead([first]);
+    ledger.recordRead(evidence([first]));
 
     expect(() =>
       ledger.acceptSelection({
@@ -183,7 +226,7 @@ describe("MemoryLedger", () => {
   it("rejects records from another scope", () => {
     const ledger = new MemoryLedger("scope-1");
     const foreign = record("m1", 0, "scope-2");
-    expect(() => ledger.recordRead([foreign])).toThrow(/expected scope-1/u);
+    expect(() => ledger.recordRead(evidence([foreign]))).toThrow(/expected scope-1/u);
   });
 
   it("records bash-discovered source IDs as candidates, not evidence", () => {

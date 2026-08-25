@@ -1,6 +1,14 @@
 import { execFile } from "node:child_process";
 import { randomUUID } from "node:crypto";
-import { chmod, mkdir, readFile, rename, writeFile } from "node:fs/promises";
+import {
+  chmod,
+  mkdir,
+  open,
+  readFile,
+  rename,
+  unlink,
+  writeFile,
+} from "node:fs/promises";
 import { dirname } from "node:path";
 
 /** Writes a file through a permission-restricted temporary file and atomic rename. */
@@ -23,6 +31,54 @@ export async function writeAtomicJson(
   value: unknown,
 ): Promise<void> {
   await writeAtomicText(path, `${JSON.stringify(value, null, 2)}\n`);
+}
+
+export interface AtomicTextFile {
+  append(serialized: string): Promise<void>;
+  commit(): Promise<void>;
+  abort(): Promise<void>;
+}
+
+/** Opens a restricted temporary file for bounded-memory artifact materialization. */
+export async function createAtomicTextFile(
+  path: string,
+): Promise<AtomicTextFile> {
+  const directory = dirname(path);
+  await mkdir(directory, { recursive: true, mode: 0o700 });
+  await chmod(directory, 0o700);
+  const temporaryPath = `${path}.tmp-${process.pid}-${randomUUID()}`;
+  const handle = await open(temporaryPath, "wx", 0o600);
+  let state: "open" | "committed" | "aborted" = "open";
+  const closeAndRemove = async (): Promise<void> => {
+    try {
+      await handle.close();
+    } finally {
+      await unlink(temporaryPath).catch((error: unknown) => {
+        if (!(error instanceof Error && "code" in error && error.code === "ENOENT")) {
+          throw error;
+        }
+      });
+    }
+  };
+  return {
+    append: async (serialized) => {
+      if (state !== "open") throw new Error("Atomic text file is not open");
+      await handle.write(serialized);
+    },
+    commit: async () => {
+      if (state !== "open") throw new Error("Atomic text file is not open");
+      await handle.sync();
+      await handle.close();
+      await chmod(temporaryPath, 0o600);
+      await rename(temporaryPath, path);
+      state = "committed";
+    },
+    abort: async () => {
+      if (state !== "open") return;
+      state = "aborted";
+      await closeAndRemove();
+    },
+  };
 }
 
 /** Reads a JSON file, returning undefined only when the file is absent. */

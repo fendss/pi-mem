@@ -1,94 +1,41 @@
-import { readFileSync } from "node:fs";
-import { fileURLToPath } from "node:url";
 import { Agent } from "@earendil-works/pi-agent-core";
-import type { AssistantMessage } from "@earendil-works/pi-ai";
-import { ReadOnlyBash } from "./adapters/docker/read-only-shell.js";
 import { createEphemeralMemoryContext } from "./adapters/pi/ephemeral-context.js";
+import {
+  aggregateAssistantUsage,
+  assistantMessageText,
+  lastAssistantMessage,
+  validateResponseModels,
+} from "./adapters/pi/assistant-messages.js";
+import {
+  PI_MEM_BASE_SYSTEM_PROMPT,
+  piMemSystemPrompt,
+  type PiMemSkill,
+} from "./adapters/pi/retrieval-prompt.js";
 import { MemoryLedger } from "./model/memory-ledger.js";
 import type { PiModelRuntime } from "../platform/pi/load-model-runtime.js";
 import {
-  createFinishOnlyBeforeToolCall,
+  createToolProtocolBeforeToolCall,
   createPiMemTools,
   type MemoryToolStore,
 } from "./adapters/pi/tools.js";
 import type {
-  MemoryCandidate,
+  ModelUsage,
   PiMemResult,
   ToolTraceEntry,
 } from "./model/evidence.js";
 import type {
   RetrievalMetadata,
   RetrievalMetricsSnapshot,
-  SearchOperatorCatalogEntry,
+  SearchOperatorCatalogIdentity,
+  SearchOperatorDefinition,
+  SearchOperatorDefinitionSnapshot,
   SearchOperatorRegistry,
 } from "../retrieval/index.js";
-import { renderSearchOperatorCatalog } from "../retrieval/index.js";
 import type { MemoryRecord } from "../memory/index.js";
-import { assertNonEmpty, newRunId, sha256 } from "../util.js";
+import { assertNonEmpty, newRunId } from "../util.js";
+import type { ReadOnlyNavigationBinding } from "./ports/read-only-navigation.js";
 
-export type PiMemSkill = "none" | "pimem-v0";
-
-export const PIMEM_HARNESS_VERSION = "pimem-operator-registry-v1";
-export const PIMEM_SKILL_VERSION = "pimem-v0-registry-1";
-
-const DEFAULT_SKILL_PATH = fileURLToPath(
-  new URL("../../.agents/skills/pimem-retrieval/SKILL.md", import.meta.url),
-);
-
-export const PIMEM_SKILL_TEXT = readFileSync(DEFAULT_SKILL_PATH, "utf8");
-export const PIMEM_SKILL_HASH = sha256(PIMEM_SKILL_TEXT);
-
-const PI_MEM_BASE_SYSTEM_PROMPT = `You are PiMem: a memory retrieval and evidence-selection agent.
-
-Your only task is to locate immutable source memories relevant to the caller's question and return a compact cited evidence package. Do not generate or format the benchmark answer. Different callers apply different answer protocols after retrieval.
-
-Evidence policy:
-- Match question typos to the exact intended entity while treating merely similar entities as distractors.
-- Select direct source observations for every required subclaim.
-- Preserve exact names, titles, places, labels, values, source roles, and timestamps in the evidence summary.
-- Reconstruct temporal or update chains when the requested slot depends on order.
-- If a required entity or component remains unsupported after focused searches, mark the package insufficient rather than guessing or substituting zero.
-
-Tool policy:
-- search previews are ephemeral navigation. They remain in the audit trace but expire from active model context after one turn.
-- read only selected evidence. Every cited memory must be read.
-- bash_ro is a focused last resort for exact matching, not a mandatory full-scope scan. Its output is navigation and also expires.
-- Call finish alone with status, concise evidenceSummary, and citations. Count and inventory are optional evidence metadata.
-`;
-
-function activeSkillPrompt(): string {
-  return `<active_skill name="pimem-retrieval" version="${PIMEM_SKILL_VERSION}">\n${PIMEM_SKILL_TEXT}\n</active_skill>`;
-}
-
-export function piMemSystemPrompt(
-  skill: PiMemSkill = "pimem-v0",
-  basePrompt: string = PI_MEM_BASE_SYSTEM_PROMPT,
-  operatorCatalog: readonly SearchOperatorCatalogEntry[] = [],
-): string {
-  const catalogPrompt = operatorCatalog.length === 0
-    ? ""
-    : `<search_operator_catalog>\n${renderSearchOperatorCatalog(operatorCatalog)}\n</search_operator_catalog>`;
-  return [
-    basePrompt,
-    catalogPrompt,
-    ...(skill === "none" ? [] : [activeSkillPrompt()]),
-  ].filter(Boolean).join("\n\n");
-}
-
-export const PI_MEM_SYSTEM_PROMPT = piMemSystemPrompt();
-
-export function orderCandidatesForEvidenceAttention(
-  candidates: readonly MemoryCandidate[],
-): MemoryCandidate[] {
-  return candidates
-    .map((candidate, discoveryOrder) => ({ candidate, discoveryOrder }))
-    .sort((left, right) => {
-      const leftPriority = left.candidate.cited ? 0 : left.candidate.read ? 1 : 2;
-      const rightPriority = right.candidate.cited ? 0 : right.candidate.read ? 1 : 2;
-      return leftPriority - rightPriority || left.discoveryOrder - right.discoveryOrder;
-    })
-    .map(({ candidate }) => candidate);
-}
+export const PIMEM_HARNESS_VERSION = "pimem-declarative-operators-v1";
 
 export interface PiMemRuntimeStore extends MemoryToolStore {
   findMentionedMemoryIds(scopeId: string, text: string): string[];
@@ -104,14 +51,19 @@ export interface RunPiMemOptions {
   scopeId: string;
   question: string;
   questionDate?: string;
-  scopePath?: string;
-  bashRunner?: ReadOnlyBash;
+  readOnlyNavigation?: ReadOnlyNavigationBinding;
   maxTurns?: number;
   maxToolCalls?: number;
+  /** Optional evaluation/runtime budget for actual search executions. */
+  maxSearchCalls?: number;
   maxProtocolNudges?: number;
   maxRunMs?: number;
   systemPrompt?: string;
   skill?: PiMemSkill;
+  /** Approved declarative operators loaded into this run before the Agent starts. */
+  operatorDefinitions?: readonly SearchOperatorDefinition[];
+  /** Total preloaded plus Agent-created operators. Defaults to 2. */
+  maxOperatorDefinitions?: number;
 }
 
 export interface PiMemFailureDiagnostics {
@@ -123,6 +75,9 @@ export interface PiMemFailureDiagnostics {
   candidates: PiMemResult["candidates"];
   evidence: PiMemResult["evidence"];
   trace: ToolTraceEntry[];
+  operatorCatalog?: SearchOperatorCatalogIdentity;
+  operatorDefinitions?: SearchOperatorDefinitionSnapshot[];
+  usage: ModelUsage;
 }
 
 export class PiMemRunError extends Error {
@@ -145,66 +100,6 @@ function questionPrompt(question: string, questionDate?: string): string {
     "",
     "Use the available memory operations to find direct source coverage, verify every required evidence slot, and call finish with the cited evidence package. Do not answer the question.",
   ].join("\n");
-}
-
-function lastAssistantMessage(
-  messages: readonly unknown[],
-): AssistantMessage | undefined {
-  for (let index = messages.length - 1; index >= 0; index -= 1) {
-    const message = messages[index];
-    if (
-      typeof message === "object" &&
-      message !== null &&
-      "role" in message &&
-      message.role === "assistant"
-    ) {
-      return message as AssistantMessage;
-    }
-  }
-  return undefined;
-}
-
-function responseModelMatches(requested: string, actual: string): boolean {
-  return actual === requested || actual.startsWith(`${requested}-`);
-}
-
-function validateResponseModels(
-  messages: readonly unknown[],
-  requestedModel: string,
-): string[] {
-  const responseModels = new Set<string>();
-  for (const message of messages) {
-    if (
-      typeof message !== "object" || message === null ||
-      !("role" in message) || message.role !== "assistant"
-    ) continue;
-    const assistant = message as AssistantMessage;
-    const actual = assistant.responseModel ?? assistant.model;
-    if (!responseModelMatches(requestedModel, actual)) {
-      throw new Error(
-        `Provider substituted model ${actual}; expected ${requestedModel}`,
-      );
-    }
-    responseModels.add(actual);
-  }
-  if (responseModels.size === 0) {
-    throw new Error("Provider response model is missing");
-  }
-  return [...responseModels].sort();
-}
-
-function assistantText(message: AssistantMessage | undefined): string {
-  if (!message) return "";
-  return message.content
-    .filter(
-      (block): block is Extract<
-        AssistantMessage["content"][number],
-        { type: "text" }
-      > => block.type === "text",
-    )
-    .map((block) => block.text)
-    .join("\n")
-    .slice(0, 4_000);
 }
 
 /**
@@ -239,9 +134,16 @@ export async function runPiMem(
   const retrievalMetricsBefore =
     options.store.snapshotRetrievalMetrics?.() ?? zeroRetrievalMetrics;
   const ephemeralContext = createEphemeralMemoryContext();
+  const operatorCatalog = options.operatorRegistry.forkForRun(
+    options.maxOperatorDefinitions ?? 2,
+  );
+  for (const definition of options.operatorDefinitions ?? []) {
+    operatorCatalog.define(structuredClone(definition));
+  }
   const tools = createPiMemTools({
     store: options.store,
-    operatorRegistry: options.operatorRegistry,
+    operatorRegistry: operatorCatalog,
+    operatorDefinitions: operatorCatalog,
     scopeId,
     ledger,
     question,
@@ -252,24 +154,34 @@ export async function runPiMem(
       limit: 20,
       order: "relevance",
     },
-    ...(options.scopePath === undefined
+    ...(options.maxSearchCalls === undefined
+      ? {}
+      : {
+          searchGuidance:
+            `This run permits at most ${options.maxSearchCalls} search calls. ` +
+            "After the budget is exhausted, read the best existing candidates and finish.",
+        }),
+    ...(options.readOnlyNavigation === undefined
       ? {}
       : {
           bashRo: {
-            runner: options.bashRunner ?? new ReadOnlyBash(),
-            scopePath: options.scopePath,
+            ...options.readOnlyNavigation,
             store: options.store,
           },
         }),
 
   });
-  const enforceFinishOnly = createFinishOnlyBeforeToolCall();
+  const enforceToolProtocol = createToolProtocolBeforeToolCall({
+    ...(options.maxSearchCalls === undefined
+      ? {}
+      : { maxSearchCalls: options.maxSearchCalls }),
+  });
   const agent = new Agent({
     initialState: {
       systemPrompt: piMemSystemPrompt(
         options.skill ?? "pimem-v0",
         options.systemPrompt ?? PI_MEM_BASE_SYSTEM_PROMPT,
-        options.operatorRegistry.list(),
+        operatorCatalog.list(),
       ),
       model: options.modelRuntime.model,
       thinkingLevel: options.modelRuntime.thinkingLevel,
@@ -278,7 +190,7 @@ export async function runPiMem(
     streamFn: options.modelRuntime.streamFn,
     getApiKey: options.modelRuntime.getApiKey,
     transformContext: ephemeralContext.transformContext,
-    beforeToolCall: enforceFinishOnly,
+    beforeToolCall: enforceToolProtocol,
     toolExecution: "sequential",
     sessionId: runId,
   });
@@ -328,12 +240,16 @@ export async function runPiMem(
       scopeId,
       turns,
       toolCalls,
-      lastAssistantText: assistantText(
+      lastAssistantText: assistantMessageText(
         lastAssistantMessage(agent.state.messages),
+        4_000,
       ),
       candidates: ledger.candidates,
       evidence: ledger.evidence,
       trace: [...trace],
+      operatorCatalog: operatorCatalog.identity(),
+      operatorDefinitions: operatorCatalog.snapshots(),
+      usage: aggregateAssistantUsage(agent.state.messages),
     });
 
   const runTimer = setTimeout(() => {
@@ -391,24 +307,16 @@ export async function runPiMem(
     );
   }
   const candidates = ledger.candidates;
-  const exactCandidates = new Map(
-    options.store
-      .getRecords(scopeId, candidates.map((candidate) => candidate.memoryId))
-      .map((record) => [record.memoryId, record]),
+  const evidenceById = new Map(
+    ledger.evidence.map((item) => [item.memoryId, item]),
   );
-  const searchedMemories = orderCandidatesForEvidenceAttention(candidates).map((candidate) => {
-    const record = exactCandidates.get(candidate.memoryId);
-    if (!record) {
-      throw failure(`Candidate memory disappeared: ${candidate.memoryId}`);
+  const evidence = selection.citations.map((citation) => {
+    const item = evidenceById.get(citation.memoryId);
+    if (!item) {
+      throw failure(`Cited evidence disappeared: ${citation.memoryId}`);
     }
-    return {
-      ...record,
-      discoveries: candidate.discoveries,
-      read: candidate.read,
-      cited: candidate.cited,
-    };
+    return item;
   });
-  const evidence = ledger.evidence;
   const retrievalMetricsAfter =
     options.store.snapshotRetrievalMetrics?.() ?? zeroRetrievalMetrics;
   const retrievalMetrics = {
@@ -448,13 +356,17 @@ export async function runPiMem(
       ? {}
       : { inventory: selection.inventory }),
     candidates,
-    searchedMemories,
     evidence,
     trace,
+    operatorCatalog: operatorCatalog.identity(),
+    operatorDefinitions: operatorCatalog.snapshots(),
     metrics: {
       searchCalls: trace.filter((item) => item.toolName === "search").length,
       readCalls: trace.filter((item) => item.toolName === "read").length,
       bashCalls: trace.filter((item) => item.toolName === "bash_ro").length,
+      operatorDefinitionCalls: trace.filter(
+        (item) => item.toolName === "define_operator",
+      ).length,
       candidateCount: candidates.length,
       evidenceCount: evidence.length,
       citedCount: selection.citations.length,
@@ -462,6 +374,8 @@ export async function runPiMem(
       ...retrievalMetrics,
       expiredNavigationResults:
         ephemeralContext.snapshot().expiredNavigationResults,
+      compactedReadResults:
+        ephemeralContext.snapshot().compactedReadResults,
     },
     retrieval,
     retrievalModel: {
@@ -471,6 +385,7 @@ export async function runPiMem(
       thinkingLevel: options.modelRuntime.thinkingLevel,
       transport: options.modelRuntime.transport,
     },
+    usage: aggregateAssistantUsage(agent.state.messages),
   };
   return options.questionDate === undefined
     ? base

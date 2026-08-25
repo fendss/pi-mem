@@ -17,24 +17,6 @@ const ROLES = new Set<MemoryRole>([
 const ISO_LOCAL_TIMESTAMP =
   /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(?::\d{2}(?:\.\d{1,3})?)?(?:Z|[+-]\d{2}:\d{2})?$/u;
 
-const FORBIDDEN_METADATA_KEYS = new Set([
-  "answer",
-  "answerfixed",
-  "answersessionids",
-  "category",
-  "categoryname",
-  "evidence",
-  "evidenceqid",
-  "gold",
-  "goldevidence",
-  "hasanswer",
-  "label",
-  "labels",
-  "originalquestionid",
-  "questionid",
-  "questiontype",
-]);
-
 export interface IngestOptions {
   exportRoot?: string;
 }
@@ -44,10 +26,6 @@ export interface IngestScopeResult {
   status: ScopeIngestStatus;
   memoryCount: number;
   exportPath?: string;
-}
-
-function normalizedKey(key: string): string {
-  return key.normalize("NFKC").replace(/[^a-zA-Z0-9]/gu, "").toLowerCase();
 }
 
 function assertSafeJson(value: unknown, path: string): void {
@@ -73,9 +51,6 @@ function assertSafeJson(value: unknown, path: string): void {
   }
 
   for (const [key, child] of Object.entries(value)) {
-    if (FORBIDDEN_METADATA_KEYS.has(normalizedKey(key))) {
-      throw new Error(`${path} contains forbidden benchmark field: ${key}`);
-    }
     assertSafeJson(child, `${path}.${key}`);
   }
 }

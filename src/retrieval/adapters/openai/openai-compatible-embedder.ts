@@ -1,3 +1,4 @@
+import { AsyncLocalStorage } from "node:async_hooks";
 import type { AsyncRequestGate } from "../../../platform/concurrency/request-gate.js";
 import { sha256 } from "../../../util.js";
 import type {
@@ -20,8 +21,15 @@ export interface OpenAICompatibleEmbedderOptions {
   maxInputLength?: number;
   batchSize?: number;
   timeoutMs?: number;
+  maxRetries?: number;
+  retryBaseDelayMs?: number;
+  retryMaxDelayMs?: number;
   fetchImpl?: typeof fetch;
   requestGate?: AsyncRequestGate;
+}
+
+interface EmbeddingAttemptCapture {
+  observers: readonly ((metrics: EmbeddingMetrics) => void)[];
 }
 
 const SPECIAL_TOKEN_PATTERN =
@@ -34,12 +42,18 @@ const MAX_CODE_POINTS_PER_REQUEST = 75_000;
 class EmbeddingHttpError extends Error {
   readonly status: number;
   readonly dimensionsUnsupported: boolean;
+  readonly retryAfterMs: number | undefined;
 
-  constructor(status: number, dimensionsUnsupported = false) {
+  constructor(
+    status: number,
+    dimensionsUnsupported = false,
+    retryAfterMs?: number,
+  ) {
     super(`Embedding endpoint returned HTTP ${status}`);
     this.name = "EmbeddingHttpError";
     this.status = status;
     this.dimensionsUnsupported = dimensionsUnsupported;
+    this.retryAfterMs = retryAfterMs;
   }
 }
 
@@ -50,9 +64,23 @@ class EmbeddingResponseError extends Error {
   }
 }
 
+class EmbeddingTimeoutError extends Error {
+  constructor() {
+    super("Embedding request timed out");
+    this.name = "EmbeddingTimeoutError";
+  }
+}
+
 function positiveInteger(value: number, label: string): number {
   if (!Number.isSafeInteger(value) || value <= 0) {
     throw new Error(`${label} must be a positive integer`);
+  }
+  return value;
+}
+
+function nonNegativeInteger(value: number, label: string): number {
+  if (!Number.isSafeInteger(value) || value < 0) {
+    throw new Error(`${label} must be a non-negative integer`);
   }
   return value;
 }
@@ -138,6 +166,48 @@ function parsePositiveInteger(
   return positiveInteger(parsed, variable);
 }
 
+function parseNonNegativeInteger(
+  value: string | undefined,
+  fallback: number,
+  variable: string,
+): number {
+  if (value === undefined) return fallback;
+  return nonNegativeInteger(Number(value), variable);
+}
+
+function retryAfterMilliseconds(value: string | null): number | undefined {
+  if (value === null) return undefined;
+  const seconds = Number(value);
+  if (Number.isFinite(seconds) && seconds >= 0) {
+    return Math.ceil(seconds * 1_000);
+  }
+  const timestamp = Date.parse(value);
+  if (!Number.isFinite(timestamp)) return undefined;
+  return Math.max(0, timestamp - Date.now());
+}
+
+function retryableEmbeddingError(error: unknown): boolean {
+  if (error instanceof EmbeddingHttpError) {
+    return error.status === 408 || error.status === 425 || error.status === 429 ||
+      error.status >= 500;
+  }
+  return error instanceof EmbeddingTimeoutError || error instanceof TypeError;
+}
+
+function safeEmbeddingError(error: unknown, attempts?: number): Error {
+  const prefix = attempts === undefined
+    ? "Embedding request failed"
+    : `Embedding request failed after ${attempts} attempts`;
+  if (error instanceof EmbeddingHttpError) {
+    return new Error(`${prefix}: HTTP ${error.status}`);
+  }
+  if (error instanceof EmbeddingTimeoutError) {
+    return new Error(`${prefix}: timed out`);
+  }
+  if (error instanceof EmbeddingResponseError) return error;
+  return new Error(`${prefix}: transport error`);
+}
+
 async function wait(delayMs: number, signal?: AbortSignal): Promise<void> {
   if (signal?.aborted) throw new Error("Embedding request aborted");
   await new Promise<void>((resolve, reject) => {
@@ -188,11 +258,18 @@ export class OpenAICompatibleEmbedder implements Embedder {
   private readonly endpoint: string;
   private readonly apiKey: string;
   private readonly timeoutMs: number;
+  private readonly maxRetries: number;
+  private readonly retryBaseDelayMs: number;
+  private readonly retryMaxDelayMs: number;
   private readonly fetchImpl: typeof fetch;
   private readonly requestGate: AsyncRequestGate | undefined;
+  private readonly attemptCapture =
+    new AsyncLocalStorage<EmbeddingAttemptCapture>();
   private dimensionsParameterEnabled = true;
   private calls = 0;
   private latencyMs = 0;
+  private inputTokens = 0;
+  private usageMissingCalls = 0;
 
   constructor(options: OpenAICompatibleEmbedderOptions) {
     if (!options.apiKey.trim()) {
@@ -208,10 +285,23 @@ export class OpenAICompatibleEmbedder implements Embedder {
     );
     this.batchSize = positiveInteger(options.batchSize ?? 10, "batchSize");
     this.timeoutMs = positiveInteger(options.timeoutMs ?? 30_000, "timeoutMs");
+    this.maxRetries = nonNegativeInteger(options.maxRetries ?? 4, "maxRetries");
+    this.retryBaseDelayMs = positiveInteger(
+      options.retryBaseDelayMs ?? 1_000,
+      "retryBaseDelayMs",
+    );
+    this.retryMaxDelayMs = positiveInteger(
+      options.retryMaxDelayMs ?? 30_000,
+      "retryMaxDelayMs",
+    );
+    if (this.retryBaseDelayMs > this.retryMaxDelayMs) {
+      throw new Error("retryBaseDelayMs must not exceed retryMaxDelayMs");
+    }
     this.fetchImpl = options.fetchImpl ?? fetch;
     this.requestGate = options.requestGate;
     const profileConfig = JSON.stringify({
       provider: "openai-compatible",
+      endpointFingerprint: sha256(this.endpoint),
       model: this.model,
       dimensions: this.dimensions,
       similarity: "cosine",
@@ -260,6 +350,21 @@ export class OpenAICompatibleEmbedder implements Embedder {
         30_000,
         "PIMEM_EMBEDDING_TIMEOUT_MS",
       ),
+      maxRetries: parseNonNegativeInteger(
+        environment.PIMEM_EMBEDDING_MAX_RETRIES,
+        4,
+        "PIMEM_EMBEDDING_MAX_RETRIES",
+      ),
+      retryBaseDelayMs: parsePositiveInteger(
+        environment.PIMEM_EMBEDDING_RETRY_BASE_MS,
+        1_000,
+        "PIMEM_EMBEDDING_RETRY_BASE_MS",
+      ),
+      retryMaxDelayMs: parsePositiveInteger(
+        environment.PIMEM_EMBEDDING_RETRY_MAX_MS,
+        30_000,
+        "PIMEM_EMBEDDING_RETRY_MAX_MS",
+      ),
       ...(fetchImpl === undefined ? {} : { fetchImpl }),
       ...(requestGate === undefined ? {} : { requestGate }),
     });
@@ -280,7 +385,28 @@ export class OpenAICompatibleEmbedder implements Embedder {
   }
 
   snapshotMetrics(): EmbeddingMetrics {
-    return { calls: this.calls, latencyMs: this.latencyMs };
+    return {
+      calls: this.calls,
+      latencyMs: this.latencyMs,
+      inputTokens: this.inputTokens,
+      usageMissingCalls: this.usageMissingCalls,
+    };
+  }
+
+  /**
+   * Observes exact metrics for each provider request started by `operation`.
+   * This is intentionally independent of process-cumulative snapshots so
+   * concurrent logical operations can attribute their own attempts exactly.
+   */
+  captureEmbeddingAttempts<T>(
+    observer: (metrics: EmbeddingMetrics) => void,
+    operation: () => Promise<T>,
+  ): Promise<T> {
+    const parent = this.attemptCapture.getStore();
+    const capture: EmbeddingAttemptCapture = {
+      observers: [...(parent?.observers ?? []), observer],
+    };
+    return this.attemptCapture.run(capture, operation);
   }
 
   private async embed(
@@ -334,7 +460,8 @@ export class OpenAICompatibleEmbedder implements Embedder {
   ): Promise<number[][]> {
     let includeDimensions = this.dimensionsParameterEnabled;
     let usedNoDimensionsFallback = false;
-    let retryDelayMs = 1_000;
+    let retryDelayMs = this.retryBaseDelayMs;
+    let retries = 0;
     while (true) {
       try {
         const result = await this.requestThroughGate(
@@ -363,8 +490,19 @@ export class OpenAICompatibleEmbedder implements Embedder {
           }
         }
         if (signal?.aborted) throw new Error("Embedding request aborted");
-        await wait(retryDelayMs, signal);
-        retryDelayMs = Math.min(retryDelayMs * 2, 30_000);
+        if (!retryableEmbeddingError(error)) throw safeEmbeddingError(error);
+        if (retries >= this.maxRetries) {
+          throw safeEmbeddingError(error, retries + 1);
+        }
+        const requestedDelay = error instanceof EmbeddingHttpError
+          ? error.retryAfterMs
+          : undefined;
+        await wait(
+          Math.min(requestedDelay ?? retryDelayMs, this.retryMaxDelayMs),
+          signal,
+        );
+        retries += 1;
+        retryDelayMs = Math.min(retryDelayMs * 2, this.retryMaxDelayMs);
       }
     }
   }
@@ -385,7 +523,7 @@ export class OpenAICompatibleEmbedder implements Embedder {
     }, this.timeoutMs);
     timeout.unref();
     const started = performance.now();
-    this.calls += 1;
+    let inputTokens: number | undefined;
     try {
       const response = await this.fetchImpl(this.endpoint, {
         method: "POST",
@@ -402,9 +540,16 @@ export class OpenAICompatibleEmbedder implements Embedder {
       });
       if (!response.ok) {
         const errorText = await response.text().catch(() => "");
+        try {
+          inputTokens = this.parseInputTokens(JSON.parse(errorText));
+        } catch {
+          // Most error payloads do not expose usage. Missing usage is recorded
+          // for this provider attempt in the shared finally block below.
+        }
         throw new EmbeddingHttpError(
           response.status,
           response.status === 400 && /dimensions?/iu.test(errorText),
+          retryAfterMilliseconds(response.headers.get("retry-after")),
         );
       }
       let payload: unknown;
@@ -415,13 +560,31 @@ export class OpenAICompatibleEmbedder implements Embedder {
           "Embedding endpoint returned invalid JSON",
         );
       }
+      inputTokens = this.parseInputTokens(payload);
       return this.parseResponse(payload, inputs.length);
     } catch (error) {
-      if (timedOut) throw new Error("Embedding request timed out");
+      if (timedOut) throw new EmbeddingTimeoutError();
       if (signal?.aborted) throw new Error("Embedding request aborted");
       throw error;
     } finally {
-      this.latencyMs += performance.now() - started;
+      const latencyMs = performance.now() - started;
+      const metrics: EmbeddingMetrics = {
+        calls: 1,
+        latencyMs,
+        inputTokens: inputTokens ?? 0,
+        usageMissingCalls: inputTokens === undefined ? 1 : 0,
+      };
+      this.calls += 1;
+      this.latencyMs += latencyMs;
+      this.inputTokens += metrics.inputTokens ?? 0;
+      this.usageMissingCalls += metrics.usageMissingCalls ?? 0;
+      for (const observer of this.attemptCapture.getStore()?.observers ?? []) {
+        try {
+          observer(metrics);
+        } catch {
+          // Metrics observers must never replace a provider result or error.
+        }
+      }
       clearTimeout(timeout);
       signal?.removeEventListener("abort", abortFromParent);
     }
@@ -477,5 +640,21 @@ export class OpenAICompatibleEmbedder implements Embedder {
       );
     }
     return ordered as number[][];
+  }
+
+  private parseInputTokens(payload: unknown): number | undefined {
+    if (typeof payload !== "object" || payload === null || !("usage" in payload)) {
+      return undefined;
+    }
+    const usage = (payload as { usage?: unknown }).usage;
+    if (typeof usage !== "object" || usage === null) return undefined;
+    const record = usage as Record<string, unknown>;
+    for (const key of ["prompt_tokens", "input_tokens", "total_tokens"]) {
+      const value = record[key];
+      if (
+        typeof value === "number" && Number.isSafeInteger(value) && value >= 0
+      ) return value;
+    }
+    return undefined;
   }
 }

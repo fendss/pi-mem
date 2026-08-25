@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { runAsyncPool } from "../src/async-pool.js";
+import { runAsyncPool } from "../src/platform/concurrency/async-pool.js";
 
 function deferred(): {
   promise: Promise<void>;

@@ -1,7 +1,8 @@
-import { dataPaths } from "../../../benchmark/longmemeval/data-paths.js";
+import { join, resolve } from "node:path";
 import { runQuestion } from "../../../composition/run-question.js";
 import {
   assertOnlyFlags,
+  MODEL_RUNTIME_FLAG_NAMES,
   modelOptionsFor,
   optionalFlag,
   requiredFlag,
@@ -17,17 +18,15 @@ export async function runGeneric(parsed: ParsedCommand): Promise<void> {
     "question",
     "question-date",
     "retrieval-profile",
-    "agent-dir",
-    "provider",
-    "model",
-    "thinking-level",
-    "api-key-env",
-    "base-url-env",
-    "transport",
+    ...MODEL_RUNTIME_FLAG_NAMES,
     "skill",
   ]);
+  const dataDir = resolve(requiredFlag(parsed, "data-dir"));
   const result = await runQuestion(
-    dataPaths(requiredFlag(parsed, "data-dir")),
+    {
+      database: join(dataDir, "memory.sqlite"),
+      sanitized: join(dataDir, "sanitized"),
+    },
     retrievalProfileFor(parsed),
     requiredFlag(parsed, "scope"),
     requiredFlag(parsed, "question"),

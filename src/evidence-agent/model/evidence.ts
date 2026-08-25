@@ -1,7 +1,10 @@
-import type { MemoryRecord, MemoryRole } from "../../memory/index.js";
+import type { MemoryRole } from "../../memory/index.js";
+import type { MemoryEvidence } from "./memory-evidence.js";
 import type {
   RetrievalMetadata,
   RetrievalProfile,
+  SearchOperatorCatalogIdentity,
+  SearchOperatorDefinitionSnapshot,
 } from "../../retrieval/index.js";
 
 export interface CandidateDiscovery {
@@ -62,10 +65,22 @@ export interface ModelMetadata {
   transport: "sse" | "non-stream";
 }
 
-export interface SearchedMemory extends MemoryRecord {
-  discoveries: CandidateDiscovery[];
-  read: boolean;
-  cited: boolean;
+/** Provider-reported usage summed across every retrieval-Agent turn. */
+export interface ModelUsage {
+  input: number;
+  output: number;
+  cacheRead: number;
+  cacheWrite: number;
+  cacheWrite1h?: number;
+  reasoning?: number;
+  totalTokens: number;
+  cost: {
+    input: number;
+    output: number;
+    cacheRead: number;
+    cacheWrite: number;
+    total: number;
+  };
 }
 
 export interface PiMemResult {
@@ -79,13 +94,15 @@ export interface PiMemResult {
   count?: number;
   inventory?: EvidenceInventoryItem[];
   candidates: MemoryCandidate[];
-  searchedMemories: SearchedMemory[];
-  evidence: MemoryRecord[];
+  evidence: MemoryEvidence[];
   trace: ToolTraceEntry[];
+  operatorCatalog: SearchOperatorCatalogIdentity;
+  operatorDefinitions: SearchOperatorDefinitionSnapshot[];
   metrics: {
     searchCalls: number;
     readCalls: number;
     bashCalls: number;
+    operatorDefinitionCalls: number;
     candidateCount: number;
     evidenceCount: number;
     citedCount: number;
@@ -95,7 +112,9 @@ export interface PiMemResult {
     denseCandidateCount: number;
     rerankCandidateCount: number;
     expiredNavigationResults: number;
+    compactedReadResults: number;
   };
   retrieval: RetrievalMetadata;
   retrievalModel: ModelMetadata;
+  usage: ModelUsage;
 }

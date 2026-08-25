@@ -3,13 +3,15 @@ import {
   chunkTextBalanced,
   cleanEmbeddingText,
   OpenAICompatibleEmbedder,
-} from "../src/embedding.js";
-import { AsyncRequestGate } from "../src/request-gate.js";
+  type EmbeddingMetrics,
+} from "../src/retrieval/adapters/openai/openai-compatible-embedder.js";
+import { AsyncRequestGate } from "../src/platform/concurrency/request-gate.js";
 
 function responseFor(
   inputs: readonly string[],
   dimensions: number,
   reverse = false,
+  promptTokens?: number,
 ): Response {
   const data = inputs.map((input, index) => ({
     index,
@@ -17,7 +19,12 @@ function responseFor(
       dimension === 0 ? [...input].length : index + dimension,
     ),
   }));
-  return new Response(JSON.stringify({ data: reverse ? data.reverse() : data }), {
+  return new Response(JSON.stringify({
+    data: reverse ? data.reverse() : data,
+    ...(promptTokens === undefined
+      ? {}
+      : { usage: { prompt_tokens: promptTokens, total_tokens: promptTokens } }),
+  }), {
     status: 200,
     headers: { "content-type": "application/json" },
   });
@@ -67,6 +74,26 @@ describe("OpenAI-compatible embedding boundary", () => {
     expect(vectors[0]?.[1]).toBeCloseTo((1 + 2 + 3) / 3);
     expect(vectors[1]).toEqual([2, 4]);
     expect(embedder.snapshotMetrics().calls).toBe(1);
+    expect(embedder.snapshotMetrics().usageMissingCalls).toBe(1);
+  });
+
+  it("accounts for provider-reported embedding input tokens", async () => {
+    const fetchImpl = vi.fn(async (
+      _url: string | URL | Request,
+      init?: RequestInit,
+    ) => {
+      const body = JSON.parse(String(init?.body)) as { input: string[] };
+      return responseFor(body.input, 2, false, 17);
+    }) as unknown as typeof fetch;
+    const embedder = mockEmbedder(fetchImpl);
+
+    await embedder.embedDocuments(["memory"]);
+
+    expect(embedder.snapshotMetrics()).toMatchObject({
+      calls: 1,
+      inputTokens: 17,
+      usageMissingCalls: 0,
+    });
   });
 
   it("shares a global request gate across embedder instances", async () => {
@@ -103,68 +130,81 @@ describe("OpenAI-compatible embedding boundary", () => {
           { status: 400 },
         );
       }
-      return responseFor(body.input as string[], 2);
+      return responseFor(body.input as string[], 2, false, 17);
     }) as unknown as typeof fetch;
     const embedder = mockEmbedder(fetchImpl);
 
     await expect(embedder.embedQueries(["query"])).resolves.toHaveLength(1);
     expect(bodies[0]).toHaveProperty("dimensions", 2);
     expect(bodies[1]).not.toHaveProperty("dimensions");
-    expect(embedder.snapshotMetrics().calls).toBe(2);
+    expect(embedder.snapshotMetrics()).toMatchObject({
+      calls: 2,
+      inputTokens: 17,
+      usageMissingCalls: 1,
+    });
   });
 
-  it("retries unrelated bad requests indefinitely without removing dimensions", async () => {
-    vi.useFakeTimers();
-    try {
-      const bodies: Array<Record<string, unknown>> = [];
-      const fetchImpl = vi.fn(async (_url: string | URL | Request, init?: RequestInit) => {
-        const body = JSON.parse(String(init?.body)) as Record<string, unknown>;
-        bodies.push(body);
-        if (bodies.length <= 2) {
-          return new Response(
-            JSON.stringify({ error: { message: "input batch is too large" } }),
-            { status: 400 },
-          );
-        }
-        return responseFor(body.input as string[], 2);
-      }) as unknown as typeof fetch;
-      const embedder = mockEmbedder(fetchImpl);
+  it("fails fast on unrelated bad requests without removing dimensions", async () => {
+    const bodies: Array<Record<string, unknown>> = [];
+    const fetchImpl = vi.fn(async (_url: string | URL | Request, init?: RequestInit) => {
+      bodies.push(JSON.parse(String(init?.body)) as Record<string, unknown>);
+      return new Response(
+        JSON.stringify({ error: { message: "input batch is too large" } }),
+        { status: 400 },
+      );
+    }) as unknown as typeof fetch;
+    const embedder = mockEmbedder(fetchImpl);
 
-      const pending = embedder.embedQueries(["query"]);
-      await vi.advanceTimersByTimeAsync(3_000);
-      await expect(pending).resolves.toHaveLength(1);
-      expect(bodies).toHaveLength(3);
-      expect(bodies.every((body) => body.dimensions === 2)).toBe(true);
-    } finally {
-      vi.useRealTimers();
-    }
+    await expect(embedder.embedQueries(["query"]))
+      .rejects.toThrow("Embedding request failed: HTTP 400");
+    expect(bodies).toHaveLength(1);
+    expect(bodies[0]?.dimensions).toBe(2);
   });
 
-  it("backs off through rate limits indefinitely", async () => {
+  it("attributes missing usage for each 429/5xx retry before a metered success", async () => {
     vi.useFakeTimers();
     try {
       let calls = 0;
       const fetchImpl = vi.fn(async (_url: string | URL | Request, init?: RequestInit) => {
         calls += 1;
-        if (calls <= 3) return new Response("rate limited", { status: 429 });
+        if (calls === 1) return new Response("rate limited", { status: 429 });
+        if (calls === 2) return new Response("unavailable", { status: 503 });
         const body = JSON.parse(String(init?.body)) as { input: string[] };
-        return responseFor(body.input, 2);
+        return responseFor(body.input, 2, false, 17);
       }) as unknown as typeof fetch;
       const requestGate = new AsyncRequestGate(1, 10_000);
       const gatedCalls = vi.spyOn(requestGate, "run");
       const embedder = mockEmbedder(fetchImpl, { requestGate });
+      const attempts: EmbeddingMetrics[] = [];
 
-      const pending = embedder.embedDocuments(["query"]);
-      await vi.advanceTimersByTimeAsync(7_000);
+      const pending = embedder.captureEmbeddingAttempts(
+        (metrics) => attempts.push(metrics),
+        () => embedder.embedDocuments(["query"]),
+      );
+      await vi.advanceTimersByTimeAsync(3_000);
       await expect(pending).resolves.toHaveLength(1);
-      expect(calls).toBe(4);
-      expect(gatedCalls).toHaveBeenCalledTimes(4);
+      expect(calls).toBe(3);
+      expect(gatedCalls).toHaveBeenCalledTimes(3);
+      expect(attempts.map(({ calls: attemptCalls, inputTokens, usageMissingCalls }) => ({
+        calls: attemptCalls,
+        inputTokens,
+        usageMissingCalls,
+      }))).toEqual([
+        { calls: 1, inputTokens: 0, usageMissingCalls: 1 },
+        { calls: 1, inputTokens: 0, usageMissingCalls: 1 },
+        { calls: 1, inputTokens: 17, usageMissingCalls: 0 },
+      ]);
+      expect(embedder.snapshotMetrics()).toMatchObject({
+        calls: 3,
+        inputTokens: 17,
+        usageMissingCalls: 2,
+      });
     } finally {
       vi.useRealTimers();
     }
   });
 
-  it("retries transient transport failures indefinitely", async () => {
+  it("retries transient transport failures within a bounded retry budget", async () => {
     vi.useFakeTimers();
     try {
       let calls = 0;
@@ -185,38 +225,51 @@ describe("OpenAI-compatible embedding boundary", () => {
     }
   });
 
-  it("retries wrong dimensions, non-finite values, and duplicate indexes", async () => {
-    vi.useFakeTimers();
-    try {
-      const expectRetry = async (
-        firstResponse: unknown,
-        inputs: string[],
-      ): Promise<void> => {
-        let calls = 0;
-        const fetchImpl = vi.fn(async (_url: string | URL | Request, init?: RequestInit) => {
-          calls += 1;
-          if (calls === 1) return firstResponse as Response;
-          const body = JSON.parse(String(init?.body)) as { input: string[] };
-          return responseFor(body.input, 2);
-        }) as unknown as typeof fetch;
-        const pending = mockEmbedder(fetchImpl).embedDocuments(inputs);
-        await vi.advanceTimersByTimeAsync(1_000);
-        await expect(pending).resolves.toHaveLength(inputs.length);
-        expect(calls).toBe(2);
-      };
-
-      await expectRetry(responseFor(["x"], 1), ["x"]);
-      await expectRetry({
+  it("fails fast on malformed embedding responses", async () => {
+    const malformed = [
+      responseFor(["x"], 1),
+      {
         ok: true,
         status: 200,
         json: async () => ({ data: [{ index: 0, embedding: [0, Number.NaN] }] }),
-      }, ["x"]);
-      await expectRetry(new Response(JSON.stringify({
+      } as Response,
+      new Response(JSON.stringify({
         data: [
           { index: 0, embedding: [0, 1] },
           { index: 0, embedding: [1, 0] },
         ],
-      }), { status: 200 }), ["x", "y"]);
+      }), { status: 200 }),
+    ];
+    for (const response of malformed) {
+      const fetchImpl = vi.fn(async () => response) as unknown as typeof fetch;
+      await expect(mockEmbedder(fetchImpl).embedDocuments(
+        response === malformed[2] ? ["x", "y"] : ["x"],
+      )).rejects.toThrow(/Embedding (response|endpoint)/u);
+      expect(fetchImpl).toHaveBeenCalledTimes(1);
+    }
+  });
+
+  it("honors Retry-After and leaves exhaustion to outer resume", async () => {
+    vi.useFakeTimers();
+    try {
+      const fetchImpl = vi.fn(async () => new Response("busy", {
+        status: 429,
+        headers: { "retry-after": "2" },
+      })) as unknown as typeof fetch;
+      const embedder = mockEmbedder(fetchImpl, { maxRetries: 2 });
+
+      const pending = embedder.embedQueries(["query"]);
+      const rejection = expect(pending).rejects.toThrow(
+        "Embedding request failed after 3 attempts: HTTP 429",
+      );
+      await vi.advanceTimersByTimeAsync(4_000);
+      await rejection;
+      expect(fetchImpl).toHaveBeenCalledTimes(3);
+      expect(embedder.snapshotMetrics()).toMatchObject({
+        calls: 3,
+        inputTokens: 0,
+        usageMissingCalls: 3,
+      });
     } finally {
       vi.useRealTimers();
     }
@@ -240,20 +293,34 @@ describe("OpenAI-compatible embedding boundary", () => {
       }) as unknown as typeof fetch,
       { apiKey: secret },
     );
-    const controller = new AbortController();
-    const pending = embedder.embedQueries(["query"], { signal: controller.signal });
-    await vi.waitFor(() => expect(calls).toBeGreaterThan(0));
-    controller.abort();
     let message = "";
     try {
-      await pending;
+      await embedder.embedQueries(["query"]);
     } catch (error) {
       message = error instanceof Error ? error.message : String(error);
     }
-    expect(message).toMatch(/aborted/u);
+    expect(calls).toBe(1);
+    expect(message).toMatch(/transport error/u);
     expect(message).not.toContain(secret);
     expect(embedder.profileId).not.toContain("embedding.invalid");
     expect(embedder.profileId).not.toContain(secret);
+  });
+
+  it("binds the embedding profile to the normalized endpoint without exposing it", () => {
+    const fetchImpl = vi.fn() as unknown as typeof fetch;
+    const first = mockEmbedder(fetchImpl, {
+      baseUrl: "https://embedding-a.invalid/v1/",
+    });
+    const equivalent = mockEmbedder(fetchImpl, {
+      baseUrl: "https://embedding-a.invalid/v1",
+    });
+    const second = mockEmbedder(fetchImpl, {
+      baseUrl: "https://embedding-b.invalid/v1",
+    });
+
+    expect(first.profileId).toBe(equivalent.profileId);
+    expect(first.profileId).not.toBe(second.profileId);
+    expect(first.profileId).not.toContain("embedding-a.invalid");
   });
 
   it("sends the key only as an Authorization header", async () => {

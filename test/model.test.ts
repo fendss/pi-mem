@@ -2,7 +2,10 @@ import { mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import { loadPiModelRuntime } from "../src/model.js";
+import {
+  loadPiModelRuntime,
+} from "../src/platform/pi/load-model-runtime.js";
+import { PiModelRuntimeAdapterRegistry } from "../src/platform/pi/model-runtime-adapter.js";
 
 const temporaryDirectories: string[] = [];
 
@@ -12,6 +15,7 @@ async function createAgentDir(input?: {
   modelApi?: string;
   defaultProvider?: string;
   defaultModel?: string;
+  completionsCompat?: Record<string, unknown>;
 }): Promise<string> {
   const root = await mkdtemp(join(tmpdir(), "pi-mem-model-"));
   temporaryDirectories.push(root);
@@ -44,6 +48,7 @@ async function createAgentDir(input?: {
               }
             : {
                 maxTokensField: "max_tokens",
+                ...input?.completionsCompat,
               },
           models: [
             {
@@ -93,6 +98,118 @@ afterEach(async () => {
 });
 
 describe("loadPiModelRuntime", () => {
+  it("loads a reasoning chat-completions model without a catalog entry", async () => {
+    const previous = process.env["PIMEM_REASONING_TEST_KEY"];
+    process.env["PIMEM_REASONING_TEST_KEY"] = "runtime-only-key";
+    try {
+      const runtime = await loadPiModelRuntime({
+        modelAdapterId: "openai-reasoning-completions",
+        providerId: "reasoning-provider",
+        modelId: "reasoning-model",
+        baseUrl: "https://reasoning.example/v1",
+        apiKeyEnv: "PIMEM_REASONING_TEST_KEY",
+      });
+      expect(runtime.modelAdapterId).toBe("openai-reasoning-completions");
+      expect(runtime.transport).toBe("non-stream");
+      expect(runtime.model).toMatchObject({
+        api: "openai-completions",
+        reasoning: true,
+        compat: {
+          supportsReasoningEffort: true,
+          maxTokensField: "max_completion_tokens",
+        },
+      });
+    } finally {
+      if (previous === undefined) {
+        delete process.env["PIMEM_REASONING_TEST_KEY"];
+      } else {
+        process.env["PIMEM_REASONING_TEST_KEY"] = previous;
+      }
+    }
+  });
+
+  it("accepts a freely registered protocol adapter", async () => {
+    const registry = new PiModelRuntimeAdapterRegistry();
+    registry.register({
+      id: "custom-completions",
+      defaultTransport: "sse",
+      createModel(input) {
+        return {
+          id: input.modelId,
+          name: input.modelId,
+          provider: input.providerId,
+          api: "openai-completions",
+          baseUrl: input.baseUrl,
+          reasoning: false,
+          input: ["text"],
+          cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+          contextWindow: input.contextWindow ?? 8_192,
+          maxTokens: input.maxTokens ?? 1_024,
+        };
+      },
+    });
+    const previous = process.env["PIMEM_CUSTOM_TEST_KEY"];
+    process.env["PIMEM_CUSTOM_TEST_KEY"] = "runtime-only-key";
+    try {
+      const runtime = await loadPiModelRuntime({
+        modelAdapterId: "custom-completions",
+        modelAdapterRegistry: registry,
+        providerId: "custom-provider",
+        modelId: "model-not-in-any-catalog",
+        baseUrl: "https://custom.example/v1",
+        apiKeyEnv: "PIMEM_CUSTOM_TEST_KEY",
+      });
+      expect(runtime.modelAdapterId).toBe("custom-completions");
+      expect(runtime.model.id).toBe("model-not-in-any-catalog");
+    } finally {
+      if (previous === undefined) delete process.env["PIMEM_CUSTOM_TEST_KEY"];
+      else process.env["PIMEM_CUSTOM_TEST_KEY"] = previous;
+    }
+  });
+
+  it("loads arbitrary Qwen model IDs through a protocol adapter without a catalog", async () => {
+    const previous = process.env["PIMEM_QWEN_TEST_KEY"];
+    process.env["PIMEM_QWEN_TEST_KEY"] = "runtime-only-key";
+    try {
+      const runtime = await loadPiModelRuntime({
+        modelAdapterId: "qwen-completions",
+        providerId: "siliconflow",
+        modelId: "Qwen/a-future-model",
+        baseUrl: "https://api.example/v1/",
+        apiKeyEnv: "PIMEM_QWEN_TEST_KEY",
+        thinkingLevel: "high",
+        contextWindow: 65_536,
+        maxTokens: 4_096,
+      });
+
+      expect(runtime.modelAdapterId).toBe("qwen-completions");
+      expect(runtime.modelId).toBe("Qwen/a-future-model");
+      expect(runtime.requestPolicy).toEqual({
+        timeoutMs: 1_800_000,
+        maxRetries: 3,
+        maxRetryDelayMs: 60_000,
+      });
+      expect(runtime.model).toMatchObject({
+        id: "Qwen/a-future-model",
+        provider: "siliconflow",
+        api: "openai-completions",
+        baseUrl: "https://api.example/v1",
+        reasoning: true,
+        contextWindow: 65_536,
+        maxTokens: 4_096,
+        compat: {
+          supportsDeveloperRole: false,
+          supportsReasoningEffort: false,
+          thinkingFormat: "qwen",
+        },
+      });
+      expect(await runtime.getApiKey("siliconflow")).toBe("runtime-only-key");
+    } finally {
+      if (previous === undefined) delete process.env["PIMEM_QWEN_TEST_KEY"];
+      else process.env["PIMEM_QWEN_TEST_KEY"] = previous;
+    }
+  });
+
   it("loads only the configured default model and resolves its trusted command", async () => {
     const agentDir = await createAgentDir();
     const runtime = await loadPiModelRuntime({ agentDir });
@@ -125,6 +242,37 @@ describe("loadPiModelRuntime", () => {
 
     expect(runtime.transport).toBe("non-stream");
     expect(typeof runtime.streamFn).toBe("function");
+  });
+
+  it("preserves Qwen thinking compatibility for the streaming transport", async () => {
+    const agentDir = await createAgentDir({
+      completionsCompat: {
+        supportsStore: false,
+        supportsDeveloperRole: false,
+        supportsReasoningEffort: false,
+        supportsUsageInStreaming: true,
+        thinkingFormat: "qwen",
+        supportsStrictMode: false,
+      },
+    });
+    const runtime = await loadPiModelRuntime({
+      agentDir,
+      thinkingLevel: "high",
+    });
+
+    expect(runtime.thinkingLevel).toBe("high");
+    expect(runtime.model).toMatchObject({
+      api: "openai-completions",
+      compat: {
+        supportsStore: false,
+        supportsDeveloperRole: false,
+        supportsReasoningEffort: false,
+        supportsUsageInStreaming: true,
+        maxTokensField: "max_tokens",
+        thinkingFormat: "qwen",
+        supportsStrictMode: false,
+      },
+    });
   });
 
   it("loads an openai-responses provider with the official streaming transport", async () => {

@@ -2,9 +2,9 @@ import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import { ingestMemorySessions } from "../src/ingest.js";
-import { MemoryStore } from "../src/store.js";
-import type { MemorySessionInput } from "../src/types.js";
+import { ingestMemorySessions } from "../src/memory/index.js";
+import { MemoryStore } from "../src/platform/sqlite/pimem-store.js";
+import type { MemorySessionInput } from "../src/memory/index.js";
 
 const temporaryPaths: string[] = [];
 
@@ -121,16 +121,20 @@ describe("deterministic ingest and source store", () => {
     }
   });
 
-  it("rejects benchmark labels hidden in metadata", async () => {
+  it("preserves domain metadata without knowing benchmark vocabulary", async () => {
     const { store } = await temporaryStore();
-    const unsafe = sessions();
-    unsafe[0]!.turns[0]!.metadata = {
-      answer: "must never be indexed",
+    const input = sessions();
+    input[0]!.turns[0]!.metadata = {
+      answer: "A legitimate field in a caller-owned domain",
     };
     try {
-      await expect(ingestMemorySessions(store, unsafe)).rejects.toThrow(
-        /forbidden benchmark field/u,
-      );
+      await ingestMemorySessions(store, input);
+      expect(
+        store.getRecords("scope-1", ["m-000000000000000000000001"])[0]
+          ?.metadata,
+      ).toMatchObject({
+        turn: { answer: "A legitimate field in a caller-owned domain" },
+      });
     } finally {
       store.close();
     }

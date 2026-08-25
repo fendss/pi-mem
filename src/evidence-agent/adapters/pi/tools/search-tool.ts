@@ -36,6 +36,7 @@ export function createSearchTool(
         operatorVersion,
         hits,
         operatorResult,
+        composition,
         repeatedQueries,
       } = await searchMemory(params, signal);
 
@@ -50,6 +51,7 @@ export function createSearchTool(
         operator,
         operatorVersion,
         ...(operatorResult === undefined ? {} : { operatorResult }),
+        ...(composition === undefined ? {} : { composition }),
         candidateReferences,
         candidates,
         ...(repeatedQueries.length === 0 ? {} : { repeatedQueries }),

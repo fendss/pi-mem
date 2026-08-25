@@ -1,6 +1,10 @@
 #!/usr/bin/env node
 import { benchmarkLongMemEval } from "./commands/benchmark-longmemeval.js";
+import { benchmarkEvidence } from "./commands/benchmark-evidence.js";
+import { evaluateBenchmark } from "./commands/evaluate-benchmark.js";
+import { ingestBenchmark } from "./commands/ingest-benchmark.js";
 import { ingestLongMemEval } from "./commands/ingest-longmemeval.js";
+import { ingestTauKnowledge } from "./commands/ingest-tau-knowledge.js";
 import { longMemEvalSuite } from "./commands/longmemeval-suite.js";
 import { packageBenchmark } from "./commands/package-benchmark.js";
 import { prepareLongMemEvalEvaluation } from "./commands/prepare-longmemeval-eval.js";
@@ -12,7 +16,11 @@ function printHelp(): void {
   process.stdout.write(`PiMem \u2014 minimal source-grounded memory agent
 
 Commands:
+  ingest-benchmark --benchmark ama-bench --source FILE --data-dir DIR [--case-id ID ...] [--retrieval-profile fts5|pimem-hybrid]
+  benchmark        --benchmark ama-bench --data-dir DIR --output-dir DIR [--case-id ID ...] [--retrieval-profile fts5|pimem-hybrid] [--skill none|pimem-v0] [--model-adapter ID] [--model ID] [--slots N] [--stage-timeout-ms N] [--resume-infrastructure-only true]
+  evaluate-benchmark --benchmark ama-bench --data-dir DIR --predictions FILE --output FILE [--judge-model ID] [--slots N] [--stage-timeout-ms N]
   ingest-longmemeval --source FILE --data-dir DIR [--question-id ID ...] [--retrieval-profile fts5|pimem-hybrid] [--embedding-slots N] [--embedding-rps N]
+  ingest-tau-knowledge --tau-root DIR --data-dir DIR [--retrieval-profile fts5|pimem-hybrid] [--embedding-slots N] [--embedding-rps N]
   run-longmemeval    --data-dir DIR --question-id ID [--retrieval-profile fts5|pimem-hybrid] [--model ID] [--skill none|pimem-v0]
   benchmark-longmemeval --data-dir DIR --output-dir DIR [--question-id ID ...] [--retrieval-profile fts5|pimem-hybrid] [--model ID] [--skill none|pimem-v0] [--slots N]
   longmemeval-suite --source FILE --data-dir DIR --output-dir DIR --embedding-env FILE --answer-env FILE --judge-env FILE --retrieval-agent-dir DIR --retrieval-provider ID --retrieval-model ID --answer-agent-dir DIR --answer-provider ID --answer-model ID --archive FILE.tar.gz --evaluation-archive FILE.tar.gz [--retrieval-env FILE] [--skill none|pimem-v0] [--slots N] [--frozen-slots N] [--judge-slots N]
@@ -25,8 +33,20 @@ Commands:
 async function main(): Promise<void> {
   const parsed = parseCommand(process.argv.slice(2));
   switch (parsed.command) {
+    case "ingest-benchmark":
+      await ingestBenchmark(parsed);
+      return;
+    case "benchmark":
+      await benchmarkEvidence(parsed);
+      return;
+    case "evaluate-benchmark":
+      await evaluateBenchmark(parsed);
+      return;
     case "ingest-longmemeval":
       await ingestLongMemEval(parsed);
+      return;
+    case "ingest-tau-knowledge":
+      await ingestTauKnowledge(parsed);
       return;
     case "run-longmemeval":
       await runLongMemEval(parsed);

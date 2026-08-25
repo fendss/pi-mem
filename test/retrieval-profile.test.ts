@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   DEFAULT_RETRIEVAL_PROFILE,
   parseRetrievalProfile,
-} from "../src/retrieval-profile.js";
+} from "../src/retrieval/retrieval-profile.js";
 
 describe("retrieval profile selection", () => {
   it("keeps FTS5 as the default", () => {

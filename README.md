@@ -16,7 +16,11 @@ finish(sufficient | insufficient, citations)
 caller-owned benchmark answer adapter
 ```
 
-PiMem stops at the cited evidence package. It does not own answer formatting or a universal answer prompt. Each benchmark adapter supplies its own answer protocol after retrieval. Ingest never invokes a generative model.
+For offline QA, PiMem stops at the cited evidence package. It does not own
+answer formatting or a universal answer prompt; each benchmark adapter supplies
+its own answer protocol. For an interactive environment, the same Agent keeps
+the search/read loop and delegates environment actions back to the official
+runner. Ingest never invokes a generative model.
 
 ## Architecture navigation
 
@@ -36,7 +40,8 @@ PiMem stops at the cited evidence package. It does not own answer formatting or 
 - networkless, read-only Docker shell over one sanitized scope;
 - Pi Core retrieval-agent loop with internally consistent evidence summaries, citation supports, counts, and inventories;
 - structured `sufficient` / `insufficient` evidence selection;
-- benchmark-owned answer adapters, including LongMemEval-S;
+- benchmark integrations for LongMemEval-S, AMA-Bench v4, and the official
+  τ-Knowledge interactive environment;
 - automatic candidate, evidence, citation and tool-trace export;
 - trusted LongMemEval-S adapter with memory/private/gold separation.
 
@@ -202,7 +207,7 @@ scope index is an error; hybrid never silently falls back to FTS5.
 
 `longmemeval-suite` loads only mode-`0600`, runner-owned protected environment files. Retrieval and answer files may both use the conventional `OPENAI_API_KEY` and `OPENAI_API_BASE` names: the suite reads them separately and maps them to process-only role-specific variables before starting the benchmark, so neither credential can overwrite the other. `--retrieval-env` defaults to `--answer-env` for backward compatibility. The paired `--retrieval-*` and `--answer-*` flags independently select agent directory, provider, model, thinking level, credential-variable names, base-URL-variable names, and transport. Each omitted role flag falls back to its legacy unprefixed form (`--agent-dir`, `--provider`, `--model`, `--thinking-level`, `--api-key-env`, `--base-url-env`, or `--transport`), so existing suite commands retain their behavior. The answer role also owns the frozen re-answer stage.
 
-The suite fails fast on `401`, `403`, or invalid-token errors, while `429`, timeout, transport, and transient upstream failures remain durably resumable. The command owns progress, retry waves, completeness/provenance audit, benchmark packaging, evaluator preparation, Judger v5, a gold-isolated frozen re-answer over the current run's exact `searchedMemories`, paired comparison, and evaluation packaging.
+The suite fails fast on `401`, `403`, or invalid-token errors, while `429`, timeout, transport, and transient upstream failures remain durably resumable. The command owns progress, retry waves, completeness/provenance audit, benchmark packaging, evaluator preparation, Judger v5, a gold-isolated frozen re-answer over the current run's cited Evidence, paired comparison, and evaluation packaging.
 
 The batch command accepts `--slots 1..256`. Each asynchronous slot runs one
 fresh Agent at a time and takes the next unanswered question immediately after
@@ -219,10 +224,10 @@ materializes:
 - `traces.jsonl`: complete PiMem retrieval traces plus benchmark answer metadata;
 - `results.json`: one JSON document containing every durable two-stage record;
 - `failures.jsonl`: unresolved per-question failures, empty after full success;
-- `run-manifest.json`: question-set hash, model, retrieval profile, slot count,
-  and system-prompt hash, with no endpoint or credential.
+- `run-manifest.json`: question-set hash, model, normalized endpoint, retrieval
+  profile, slot count, and system-prompt hash, with no credential.
 
-Every result includes exact `searchedMemories`, selected read evidence, citations, candidate provenance, retrieval-agent metadata, benchmark answer prompt identity/hash, answer-model metadata, retrieval metadata, and metrics. The retrieval skill never contains LongMemEval answer formatting rules. `package-benchmark` refuses incomplete or failed runs and creates a
+Every result includes compact Candidates, selected bounded exact Evidence, citations, candidate provenance, retrieval-agent metadata, benchmark answer prompt identity/hash, answer-model metadata, retrieval metadata, and metrics. Each Evidence excerpt records source offsets and the immutable source hash; full Candidate source payloads are not duplicated into result artifacts. The retrieval skill never contains LongMemEval answer formatting rules. `package-benchmark` refuses incomplete or failed runs and creates a
 `0600` tar.gz containing the consolidated artifacts plus SHA-256 checksums.
 Runner outputs may contain raw question IDs and memory contents, but they are
 never mounted into another Agent's memory scope.
@@ -231,14 +236,225 @@ never mounted into another Agent's memory scope.
 Agent runs are finished does it read gold answers/types and create the array
 accepted by LongMemEval's `longmemeval_evaluate.py`.
 
-Run commands read Pi model configuration from `~/.pi/agent` by default.
-`--agent-dir`, `--provider`, `--model`, and `--thinking-level` can select another
-preconfigured model without mutating global settings. Model calls default to
-`--transport sse`; use `--transport non-stream` for an OpenAI-compatible
-provider whose JSON Chat Completions endpoint is available but SSE is not.
-The selected transport is recorded in benchmark artifacts. Provider credentials must
-remain trusted `!command` entries (for example, a command that reads a
-process-only environment variable); CLI flags never accept or print API keys.
+Run commands read Pi model configuration from `~/.pi/agent` by default for
+backward compatibility. For runtime-selected models, `--model-adapter` bypasses
+the model catalog: provider endpoint and credential stay runtime inputs while
+`--model` may be any model ID supported by that endpoint. Built-in protocol
+adapters are `openai-completions`, `openai-responses`, and
+`qwen-completions`; the last maps Pi thinking levels to Qwen's
+`enable_thinking` request field. `--context-window` and `--max-tokens` override
+adapter defaults when a service exposes different limits. The same flags accept
+`retrieval-`, `answer-`, and `judge-` prefixes in benchmark commands.
+
+Code integrations can register another `PiModelRuntimeAdapter` in
+`PiModelRuntimeAdapterRegistry` without modifying provider or model catalogs.
+Only a genuinely different wire protocol or compatibility behavior needs a new
+adapter; changing from one model ID to another does not. Model calls default to
+`--transport sse`; use `--transport non-stream` only for compatible Chat
+Completions services. Provider credentials remain process-only environment
+variables or trusted `!command` entries; CLI flags never accept or print keys.
+
+### AMA-Bench v4
+
+The adapter accepts only the pinned official open-ended file: dataset revision
+`a5777378066f53229a94557a7b192435cd027909`,
+`test/open_end_qa_set.jsonl` (208 episodes, 2,496 questions). Ingest verifies
+its exact SHA-256 before writing any data.
+
+```bash
+mkdir -p ./vendor/ama-bench/test
+curl --fail --location \
+  'https://huggingface.co/datasets/AMA-bench/AMA-bench/resolve/a5777378066f53229a94557a7b192435cd027909/test/open_end_qa_set.jsonl?download=true' \
+  --output ./vendor/ama-bench/test/open_end_qa_set.jsonl
+
+npm run cli -- ingest-benchmark \
+  --benchmark ama-bench \
+  --source ./vendor/ama-bench/test/open_end_qa_set.jsonl \
+  --data-dir ./data/ama-v4 \
+  --retrieval-profile fts5
+
+npm run cli -- benchmark \
+  --benchmark ama-bench \
+  --data-dir ./data/ama-v4 \
+  --output-dir ./runs/ama-v4 \
+  --retrieval-profile fts5 \
+  --skill pimem-v0 \
+  --retrieval-agent-dir "$HOME/.pi/agent" \
+  --answer-agent-dir "$HOME/.pi/agent" \
+  --slots 16 \
+  --stage-timeout-ms 1800000
+
+npm run cli -- evaluate-benchmark \
+  --benchmark ama-bench \
+  --data-dir ./data/ama-v4 \
+  --predictions ./runs/ama-v4/predictions.jsonl \
+  --output ./runs/ama-v4/evaluation.json \
+  --judge-agent-dir "$HOME/.pi/agent" \
+  --slots 16 \
+  --stage-timeout-ms 1800000
+```
+
+AMA-Bench evaluation is model-judged and therefore requires a configured Pi
+judge runtime. The command above uses that agent directory's default model;
+the independent `--judge-provider`, `--judge-model`, `--judge-thinking-level`,
+and transport flags can pin another configured judge without exposing a
+credential on the command line. Judge results are checkpointed per question;
+a complete 2,496-question evaluation also emits the official episode-level
+submission JSONL.
+
+`--stage-timeout-ms` is an infrastructure deadline for each retrieval, answer,
+or judge stage; it does not change model reasoning or benchmark semantics. The
+30-minute Qwen recipe keeps `enable_thinking=true` while allowing a multi-turn
+retrieval Agent to finish. Provider capacity should be controlled with
+`--slots`, not by disabling thinking or shortening the official output budget.
+
+### τ-Knowledge (τ-Banking)
+
+This integration pins official `tau2-bench` revision
+`a2c024725189473d2d7cea3a5cfdbcc67478e41f` (698 documents, 97 tasks).
+PiMem verifies the exact document and task hashes, while the official runner
+continues to own user simulation, banking tools, database state, checkpoints,
+and task evaluation. The thin bridge translates only messages and tool schemas;
+it never executes or evaluates a banking action itself.
+
+```bash
+git clone https://github.com/sierra-research/tau2-bench.git ./vendor/tau2-bench
+git -C ./vendor/tau2-bench checkout a2c024725189473d2d7cea3a5cfdbcc67478e41f
+
+npm run build
+npm run cli -- ingest-tau-knowledge \
+  --tau-root ./vendor/tau2-bench \
+  --data-dir ./data/tau-knowledge \
+  --retrieval-profile fts5
+
+# Leaderboard-parity canary. OPENAI_API_KEY/OPENAI_API_BASE are consumed by the
+# official runner for GPT-5.2 low user simulation. The PiMem variables point to
+# the same protected credential without placing secrets on the command line.
+uv run --frozen --project ./vendor/tau2-bench --extra knowledge -- \
+  python ./integrations/tau-knowledge/run_tau_knowledge.py \
+  --tau-root ./vendor/tau2-bench \
+  --pimem-root "$PWD" \
+  --data-dir ./data/tau-knowledge \
+  --output-dir ./runs/tau-knowledge-pimem-canary \
+  --condition pimem \
+  --run-kind canary \
+  --task-id task_001 \
+  --skill pimem-v0 \
+  --operator hybrid --operator lexical --operator coverage \
+  --agent-dir "$HOME/.pi/agent" \
+  --provider pimem-openai-responses \
+  --model gpt-5.4 \
+  --thinking-level xhigh \
+  --api-key-env PIMEM_RETRIEVAL_API_KEY \
+  --base-url-env PIMEM_RETRIEVAL_BASE_URL \
+  --transport sse \
+  --slots 1
+```
+
+Add `--validate-only --allow-dirty` during local development to validate the
+official runner registration and run configuration without making model calls
+or creating result artifacts. Formal runs reject dirty PiMem and τ checkouts by
+default.
+
+The integration hard-codes the current official τ-Knowledge banking-domain recipe rather than
+silently accepting a cheaper substitute: `tau2-bench` v1.0.1, `base` split,
+GPT-5.4 with `xhigh` reasoning, GPT-5.2 with `low` reasoning as the user
+simulator, temperature 0, seed 300, 200 maximum steps, and four trials over all
+97 tasks. Canary runs keep both models and the seed fixed, reducing only the
+task set and trial count. GPT-4o-mini is not a valid parity substitute.
+
+Run the official AllTools calibration first. It uses the unmodified official
+Agent scaffold with BM25, `text-embedding-3-large`, and sandboxed shell access:
+
+```bash
+uv run --frozen --project ./vendor/tau2-bench --extra knowledge -- \
+  python ./integrations/tau-knowledge/run_tau_knowledge.py \
+  --tau-root ./vendor/tau2-bench \
+  --pimem-root "$PWD" \
+  --data-dir ./data/tau-knowledge \
+  --output-dir ./runs/tau-official-alltools \
+  --condition official-alltools \
+  --run-kind formal \
+  --slots 3
+```
+
+Then run the two PiMem conditions with the exact same protected endpoints,
+model, user simulator, task set, seed, trial count, limits, and concurrency:
+
+```bash
+for skill in none pimem-v0; do
+  uv run --frozen --project ./vendor/tau2-bench --extra knowledge -- \
+    python ./integrations/tau-knowledge/run_tau_knowledge.py \
+    --tau-root ./vendor/tau2-bench \
+    --pimem-root "$PWD" \
+    --data-dir ./data/tau-knowledge \
+    --output-dir "./runs/tau-pimem-${skill}" \
+    --condition pimem \
+    --run-kind formal \
+    --skill "$skill" \
+    --operator hybrid --operator lexical --operator coverage \
+    --agent-dir "$HOME/.pi/agent" \
+    --provider pimem-openai-responses \
+    --model gpt-5.4 \
+    --thinking-level xhigh \
+    --api-key-env PIMEM_RETRIEVAL_API_KEY \
+    --base-url-env PIMEM_RETRIEVAL_BASE_URL \
+    --transport sse \
+    --slots 3
+done
+```
+
+The formal experiment therefore has one leaderboard calibration and one clean
+PiMem A/B. The AllTools score establishes that the model, user simulator, API,
+official environment, and evaluator reproduce the expected difficulty. The
+`none` versus `pimem-v0` comparison tests adaptive routing with the same PiMem
+operator surface. PiMem remains a custom submission and must not be reported as
+an official AllTools result.
+
+For the operator-addition condition, pass a trusted local ESM module with
+`--operator-module ./operators/my-operator.mjs`. It must export only the narrow
+composition factory `createSearchOperators(store)` and return one or more
+`SearchOperator` objects. The module executes as local code, is loaded once per
+task process, and its path and SHA-256 are recorded in the run identity. The
+registry still rejects duplicate IDs and freezes before the Agent starts; no
+benchmark adapter, search tool, or Skill edit is needed.
+
+The runner registers a custom, metadata-honest `pimem` retrieval condition:
+the official prompt supplies no upstream knowledge-base tool, and PiMem alone
+supplies search/read. Gold `required_documents`, evaluation criteria, and
+initial-state annotations never enter the PiMem corpus or prompt. Runs are
+marked custom submissions because the Agent scaffold and retrieval tools differ
+from the paper's single-tool conditions. Use the same pinned checkout, user
+simulator, model, seed, and trial count for `--skill none` versus
+`--skill pimem-v0`; operator-addition experiments add only the corresponding
+`--operator-module` while holding the built-in `--operator` set fixed.
+
+AMA ingest stores sanitized memories, private questions, and private labels
+separately. `benchmark` never loads `private/labels.jsonl`;
+`evaluate-benchmark` reads it only after the frozen prediction file exists.
+The pinned data identity is recorded in `dataset-manifest.json`, and model
+outputs retain the same resumable `records/`, `predictions.jsonl`,
+`traces.jsonl`, `failures.jsonl`, and `run-manifest.json` layout used by the
+LongMemEval workflow. Evaluation manifests bind scores to the frozen
+prediction file, source run, query set, label set, dataset track, code
+fingerprint and judge identity. τ-Knowledge instead uses the official
+`tau2-bench` result/checkpoint format plus a PiMem run manifest.
+
+### MemoryArena Public
+
+The [`integrations/memoryarena-public`](integrations/memoryarena-public/README.md)
+integration runs the complete pinned public release: 701 task groups and 4,850
+subtasks across shopping, progressive search, travel, math, and physics. The
+official task agents, prompts, models, limits, environments, and evaluators stay
+unchanged; PiMem replaces only the official memory HTTP service.
+
+One task group is the recovery boundary. Timeout, 429, transient network, and
+provider 5xx failures are retried in a fresh PiMem scope and remain pending on
+exhaustion, so they never become a benchmark score of zero. The run directory
+contains a concrete release-bound task manifest, accepted and retry trajectories,
+raw PiMem traces, resumable judge-response cache, completeness gates, and
+coverage-aware token/cost indexes. Formal runs require a clean, revision-locked
+PiMem worktree and all 701 accepted task records before official scoring starts.
 
 ## Frozen selection replay
 

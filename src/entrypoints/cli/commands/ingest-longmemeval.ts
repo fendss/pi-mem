@@ -1,4 +1,5 @@
 import { resolve } from "node:path";
+import { assertBenchmarkLabelFirewall } from "../../../benchmark/index.js";
 import { loadLongMemEvalS } from "../../../benchmark/longmemeval/dataset-adapter.js";
 import { dataPaths } from "../../../benchmark/longmemeval/data-paths.js";
 import { mergePrivateQuestions } from "../../../benchmark/longmemeval/private-question-store.js";
@@ -73,6 +74,7 @@ export async function ingestLongMemEval(parsed: ParsedCommand): Promise<void> {
   const sessions = adapted.memorySessions.filter((session) =>
     selectedScopes.has(session.scopeId),
   );
+  assertBenchmarkLabelFirewall(sessions);
   const store = await MemoryStore.create(paths.database);
   try {
     const results = await ingestMemorySessions(store, sessions, {

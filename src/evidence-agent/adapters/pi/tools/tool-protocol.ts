@@ -49,3 +49,31 @@ export function createFinishOnlyBeforeToolCall(
     };
   };
 }
+
+export function createToolProtocolBeforeToolCall(options: {
+  maxSearchCalls?: number;
+} = {}): (
+  context: BeforeToolCallContext,
+  signal?: AbortSignal,
+) => Promise<BeforeToolCallResult | undefined> {
+  const enforceFinishOnly = createFinishOnlyBeforeToolCall();
+  let admittedSearchCalls = 0;
+  return async (context, signal) => {
+    const finishResult = await enforceFinishOnly(context, signal);
+    if (finishResult !== undefined) return finishResult;
+    if (
+      context.toolCall.name !== "search" ||
+      options.maxSearchCalls === undefined
+    ) {
+      return undefined;
+    }
+    if (admittedSearchCalls >= options.maxSearchCalls) {
+      return {
+        block: true,
+        reason: `Search budget exhausted after ${options.maxSearchCalls} calls. Use existing candidates, read the needed sources, and call finish.`,
+      };
+    }
+    admittedSearchCalls += 1;
+    return undefined;
+  };
+}

@@ -16,4 +16,6 @@ Organize the source by four bounded contexts: `memory`, `retrieval`, `evidence-a
 - The top-level tree describes product capabilities.
 - Contexts expose explicit public APIs.
 - SQLite, Pi Agent, OpenAI, Docker, filesystem, and Python remain replaceable details.
-- Migration requires temporary compatibility facades and characterization tests.
+- Migration used temporary compatibility facades and characterization tests;
+  the facades were removed after all internal consumers moved to canonical
+  context APIs.

@@ -1,7 +1,11 @@
 import { Agent } from "@earendil-works/pi-agent-core";
 import type { AssistantMessage } from "@earendil-works/pi-ai";
 import type { PiModelRuntime } from "../platform/pi/load-model-runtime.js";
-import type { ModelMetadata } from "../evidence-agent/index.js";
+import {
+  assistantMessageText,
+  lastAssistantMessage,
+  type ModelMetadata,
+} from "../evidence-agent/index.js";
 import { assertNonEmpty, newRunId, sha256 } from "../util.js";
 
 export interface BenchmarkAnswerPrompt {
@@ -27,36 +31,6 @@ export interface BenchmarkAnswerResult {
     responseModel: string;
   };
   usage: AssistantMessage["usage"];
-}
-
-function lastAssistantMessage(
-  messages: readonly unknown[],
-): AssistantMessage | undefined {
-  for (let index = messages.length - 1; index >= 0; index -= 1) {
-    const message = messages[index];
-    if (
-      typeof message === "object" &&
-      message !== null &&
-      "role" in message &&
-      message.role === "assistant"
-    ) {
-      return message as AssistantMessage;
-    }
-  }
-  return undefined;
-}
-
-function assistantText(message: AssistantMessage): string {
-  return message.content
-    .filter(
-      (block): block is Extract<
-        AssistantMessage["content"][number],
-        { type: "text" }
-      > => block.type === "text",
-    )
-    .map((block) => block.text)
-    .join("\n")
-    .trim();
 }
 
 export function returnedModelMatches(requested: string, returned: string): boolean {
@@ -120,7 +94,7 @@ export async function runBenchmarkAnswer(options: {
         `Benchmark answer stage stopped with ${message.stopReason}`,
     );
   }
-  const answer = assistantText(message);
+  const answer = assistantMessageText(message).trim();
   if (!answer) throw new Error("Benchmark answer stage returned empty text");
   const responseModel = message.responseModel ?? message.model;
   if (!returnedModelMatches(options.modelRuntime.modelId, responseModel)) {

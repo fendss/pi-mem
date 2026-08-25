@@ -1,12 +1,13 @@
 import { describe, expect, it } from "vitest";
-import { buildAggregateOperatorResult } from "../src/aggregate-operator.js";
+import { buildAggregateOperatorResult } from "../src/retrieval/operators/numeric-operator.js";
 import {
   buildTimelineOperatorResult,
   resolveTemporalQuestion,
   temporalAuxiliaryRequest,
-} from "../src/timeline-operator.js";
-import type { StoreSearchHit } from "../src/store.js";
-import type { MemoryRecord, SearchRequest } from "../src/types.js";
+} from "../src/retrieval/operators/temporal-operator.js";
+import type { StoreSearchHit } from "../src/platform/sqlite/pimem-store.js";
+import type { MemoryRecord } from "../src/memory/index.js";
+import type { SearchRequest } from "../src/retrieval/index.js";
 
 function hit(
   memoryId: string,

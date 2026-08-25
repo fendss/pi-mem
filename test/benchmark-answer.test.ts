@@ -7,8 +7,8 @@ import {
 import {
   returnedModelMatches,
   runBenchmarkAnswer,
-} from "../src/benchmark-answer.js";
-import type { PiModelRuntime } from "../src/model.js";
+} from "../src/benchmark/answer-from-evidence.js";
+import type { PiModelRuntime } from "../src/platform/pi/load-model-runtime.js";
 
 describe("benchmark answer boundary", () => {
   it("accepts dated deployments of the requested model", () => {
@@ -45,6 +45,7 @@ describe("benchmark answer boundary", () => {
       timestamp: Date.now(),
     } satisfies AssistantMessage;
     const runtime = {
+      modelAdapterId: "test-adapter",
       providerId: "test-provider",
       modelId: "gpt-4o-mini",
       thinkingLevel: "off",
@@ -117,6 +118,7 @@ describe("benchmark answer boundary", () => {
       timestamp: Date.now(),
     } satisfies AssistantMessage;
     const runtime = {
+      modelAdapterId: "test-adapter",
       providerId: "test-provider",
       modelId: "gpt-4o-mini",
       thinkingLevel: "off",

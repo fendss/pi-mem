@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { temporalAnnotation } from "../src/temporal.js";
+import { temporalAnnotation } from "../src/retrieval/index.js";
 
 describe("temporal annotations", () => {
   it("relates timezone-free source timestamps to the question date", () => {

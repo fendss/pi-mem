@@ -24,6 +24,127 @@ async function close(server: Server): Promise<void> {
 }
 
 describe("OpenAI non-stream transport", () => {
+  it("retries a transient provider response without changing Qwen thinking", async () => {
+    const payloads: Array<Record<string, unknown>> = [];
+    const server = createServer(async (request, response) => {
+      const chunks: Buffer[] = [];
+      for await (const chunk of request) chunks.push(Buffer.from(chunk));
+      payloads.push(JSON.parse(Buffer.concat(chunks).toString("utf8")) as
+        Record<string, unknown>);
+      if (payloads.length === 1) {
+        response.writeHead(503, {
+          "content-type": "application/json",
+          "retry-after": "0",
+        });
+        response.end(JSON.stringify({ error: { message: "temporary" } }));
+        return;
+      }
+      response.writeHead(200, { "content-type": "application/json" });
+      response.end(JSON.stringify({
+        id: "chatcmpl-retried",
+        model: "Qwen/Qwen3-32B",
+        choices: [{
+          finish_reason: "stop",
+          message: { content: "OK", reasoning_content: "Checked." },
+        }],
+      }));
+    });
+    const baseUrl = await listen(server);
+    try {
+      const model: Model<"openai-completions"> = {
+        id: "Qwen/Qwen3-32B",
+        name: "Qwen3 32B",
+        api: "openai-completions",
+        provider: "siliconflow",
+        baseUrl,
+        reasoning: true,
+        input: ["text"],
+        cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+        contextWindow: 32_768,
+        maxTokens: 8_192,
+        compat: {
+          maxTokensField: "max_tokens",
+          supportsReasoningEffort: false,
+          thinkingFormat: "qwen",
+        },
+      };
+      const stream = await openAINonStreamingStreamFn(model, {
+        messages: [{ role: "user", content: "Reply OK.", timestamp: 1 }],
+      }, { apiKey: "test-key", reasoning: "high" });
+      for await (const _event of stream) {
+        // Drain the retried response.
+      }
+      const result = await stream.result();
+
+      expect(result.stopReason).toBe("stop");
+      expect(payloads).toHaveLength(2);
+      expect(payloads[0]).toEqual(payloads[1]);
+      expect(payloads.every((payload) => payload.enable_thinking === true))
+        .toBe(true);
+    } finally {
+      await close(server);
+    }
+  });
+
+  it("maps Pi thinking levels to Qwen enable_thinking", async () => {
+    let requestPayload: Record<string, unknown> | undefined;
+    const server = createServer(async (request, response) => {
+      const chunks: Buffer[] = [];
+      for await (const chunk of request) chunks.push(Buffer.from(chunk));
+      requestPayload = JSON.parse(Buffer.concat(chunks).toString("utf8")) as
+        Record<string, unknown>;
+      response.writeHead(200, { "content-type": "application/json" });
+      response.end(JSON.stringify({
+        id: "chatcmpl-qwen",
+        model: "Qwen/Qwen3-32B",
+        choices: [{
+          finish_reason: "stop",
+          message: { content: "OK", reasoning_content: "Checked." },
+        }],
+        usage: { prompt_tokens: 2, completion_tokens: 2 },
+      }));
+    });
+    const baseUrl = await listen(server);
+    try {
+      const model: Model<"openai-completions"> = {
+        id: "Qwen/Qwen3-32B",
+        name: "Qwen3 32B",
+        api: "openai-completions",
+        provider: "siliconflow",
+        baseUrl,
+        reasoning: true,
+        input: ["text"],
+        cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+        contextWindow: 32_768,
+        maxTokens: 8_192,
+        compat: {
+          maxTokensField: "max_tokens",
+          supportsDeveloperRole: false,
+          supportsReasoningEffort: false,
+          thinkingFormat: "qwen",
+        },
+      };
+      const stream = await openAINonStreamingStreamFn(model, {
+        messages: [{ role: "user", content: "Reply OK.", timestamp: 1 }],
+      }, {
+        apiKey: "test-key",
+        reasoning: "high",
+      });
+      for await (const _event of stream) {
+        // Drain the complete response so the request body can be inspected.
+      }
+      expect(requestPayload).toMatchObject({
+        model: "Qwen/Qwen3-32B",
+        stream: false,
+        enable_thinking: true,
+        max_tokens: 8_192,
+      });
+      expect(requestPayload).not.toHaveProperty("reasoning_effort");
+    } finally {
+      await close(server);
+    }
+  });
+
   it("maps complete tool calls and usage onto the Pi event protocol", async () => {
     let requestPayload: Record<string, unknown> | undefined;
     let authorization: string | undefined;

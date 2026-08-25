@@ -6,11 +6,11 @@ import type {
   Embedder,
   EmbeddingMetrics,
   EmbeddingRequestOptions,
-} from "../src/embedding.js";
-import { embeddingProfile } from "../src/embedding-index.js";
-import { HybridMemoryStore } from "../src/hybrid-search.js";
-import { ingestMemorySessions } from "../src/ingest.js";
-import { MemoryStore } from "../src/store.js";
+} from "../src/retrieval/index.js";
+import { embeddingProfile } from "../src/retrieval/index.js";
+import { HybridMemoryStore } from "../src/retrieval/operators/hybrid-search.js";
+import { ingestMemorySessions } from "../src/memory/index.js";
+import { MemoryStore } from "../src/platform/sqlite/pimem-store.js";
 
 const temporaryPaths: string[] = [];
 
@@ -99,6 +99,21 @@ afterEach(async () => {
 });
 
 describe("PiMem hybrid search", () => {
+  it("treats a known empty scope as a valid search with no hits", async () => {
+    const root = await mkdtemp(join(tmpdir(), "pi-mem-hybrid-empty-"));
+    temporaryPaths.push(root);
+    const raw = await MemoryStore.create(join(root, "memory.sqlite"));
+    const embedder = new QueryEmbedder();
+    try {
+      const hybrid = new HybridMemoryStore(raw, embedder);
+      await expect(hybrid.search("empty-scope", { queries: ["anything"] }))
+        .resolves.toEqual([]);
+      expect(embedder.queryCalls).toBe(0);
+    } finally {
+      raw.close();
+    }
+  });
+
   it("fails closed before embedding a query when the scope index is incomplete", async () => {
     const { raw, embedder, hybrid } = await createStore(false);
     try {

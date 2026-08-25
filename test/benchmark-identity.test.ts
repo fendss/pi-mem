@@ -8,7 +8,7 @@ import {
   benchmarkModelOptionsFor,
   benchmarkQuestionSetHash,
   benchmarkSourceRevision,
-} from "../src/entrypoints/cli/commands/benchmark-longmemeval.js";
+} from "../src/entrypoints/cli/evidence-benchmark-runtime.js";
 import {
   suiteBenchmarkEnvironment,
   suiteModelConfigurationFor,
@@ -39,6 +39,43 @@ function question(overrides: Partial<LongMemEvalPrivateQuestion> = {}):
 }
 
 describe("benchmark run identity", () => {
+  it("configures suite roles through adapters without agent directories", () => {
+    const parsed = parseCommand([
+      "longmemeval-suite",
+      "--model-adapter", "qwen-completions",
+      "--provider", "siliconflow",
+      "--model", "Qwen/Qwen3-32B",
+      "--context-window", "32768",
+      "--max-tokens", "8192",
+      "--thinking-level", "high",
+    ]);
+
+    expect(suiteModelConfigurationFor(parsed)).toEqual({
+      retrieval: {
+        modelAdapter: "qwen-completions",
+        provider: "siliconflow",
+        model: "Qwen/Qwen3-32B",
+        contextWindow: "32768",
+        maxTokens: "8192",
+        thinkingLevel: "high",
+        apiKeySourceEnv: "OPENAI_API_KEY",
+        baseUrlSourceEnv: "OPENAI_API_BASE",
+        transport: "sse",
+      },
+      answer: {
+        modelAdapter: "qwen-completions",
+        provider: "siliconflow",
+        model: "Qwen/Qwen3-32B",
+        contextWindow: "32768",
+        maxTokens: "8192",
+        thinkingLevel: "high",
+        apiKeySourceEnv: "OPENAI_API_KEY",
+        baseUrlSourceEnv: "OPENAI_API_BASE",
+        transport: "sse",
+      },
+    });
+  });
+
   it("isolates suite retrieval and answer credentials with conventional names", () => {
     const parsed = parseCommand([
       "longmemeval-suite",

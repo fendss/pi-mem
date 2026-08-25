@@ -3,7 +3,7 @@ import type {
   SearchOperatorInput,
   SearchOperatorOutput,
 } from "../model/search-operator.js";
-import type { SearchOperatorRegistry } from "./operator-registry.js";
+import type { SearchOperatorCatalog } from "../ports/operator-catalog.js";
 
 export interface ExecutedSearchOperator extends SearchOperatorOutput {
   operator: string;
@@ -11,7 +11,7 @@ export interface ExecutedSearchOperator extends SearchOperatorOutput {
 }
 
 export async function executeSearchOperator(
-  registry: SearchOperatorRegistry,
+  registry: SearchOperatorCatalog,
   operatorId: string,
   context: SearchOperatorExecutionContext,
   input: SearchOperatorInput,

@@ -22,10 +22,19 @@
     "docs:catalog:check": "node scripts/generate-code-catalog.mjs --check",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
-    "test:python": "python3 -m unittest scripts/test_longmemeval_frozen_eval.py",
+    "test:python:memoryarena-public": "python3 -B -m unittest discover -s integrations/memoryarena-public/tests -p 'test_*.py'",
+    "test:python": "python3 -m unittest scripts/test_longmemeval_frozen_eval.py scripts/test_tau_knowledge_provider_health.py scripts/test_tau_knowledge_result_integrity.py && npm run test:python:memoryarena-public && python3 -m py_compile integrations/tau-knowledge/pimem_tau_agent.py integrations/tau-knowledge/provider_health.py integrations/tau-knowledge/result_integrity.py integrations/tau-knowledge/run_tau_knowledge.py integrations/memoryarena-public/bootstrap.py && python3 -m compileall -q integrations/memoryarena-public/runtime integrations/memoryarena-public/upstream",
     "check": "npm run docs:catalog:check && npm run typecheck && npm test -- --maxWorkers=4 && npm run test:python && npm run build",
     "cli": "node --disable-warning=ExperimentalWarning dist/cli.js",
-    "serve:ldbd": "node --disable-warning=ExperimentalWarning dist/entrypoints/ldbd-api/main.js"
+    "serve:ldbd": "node --disable-warning=ExperimentalWarning dist/entrypoints/ldbd-api/main.js",
+    "serve:memoryarena-public": "node --disable-warning=ExperimentalWarning dist/memoryarena-public-api.js",
+    "memoryarena-public:bootstrap": "python3 integrations/memoryarena-public/bootstrap.py",
+    "memoryarena-public:hydrate": "PYTHONPATH=integrations/memoryarena-public python3 -m upstream.hydrate",
+    "memoryarena-public:assets": "PYTHONPATH=integrations/memoryarena-public python3 -m upstream.assets",
+    "memoryarena-public:manifest": "PYTHONPATH=integrations/memoryarena-public python3 -m upstream.manifest",
+    "memoryarena-public:prepare": "PYTHONPATH=integrations/memoryarena-public python3 -m upstream.prepare",
+    "memoryarena-public:run": "python3 integrations/memoryarena-public/runtime/run_memoryarena_public.py",
+    "memoryarena-public:evaluate": "PYTHONPATH=integrations/memoryarena-public python3 -m upstream.evaluator"
   },
   "dependencies": {
     "@earendil-works/pi-agent-core": "0.82.1",

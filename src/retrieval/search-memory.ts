@@ -3,8 +3,9 @@ import type {
   RetrievalHit,
   SearchRequest,
 } from "./model/retrieval.js";
+import type { SearchOperatorCompositionTrace } from "./model/search-operator.js";
 import { executeSearchOperator } from "./use-cases/execute-operator.js";
-import type { SearchOperatorRegistry } from "./use-cases/operator-registry.js";
+import type { SearchOperatorCatalog } from "./ports/operator-catalog.js";
 
 export interface SearchMemoryResult {
   request: SearchRequest;
@@ -12,11 +13,12 @@ export interface SearchMemoryResult {
   operatorVersion: string;
   hits: RetrievalHit[];
   operatorResult?: EvidenceOperatorResult;
+  composition?: SearchOperatorCompositionTrace;
   repeatedQueries: string[];
 }
 
 interface SearchMemoryOptions {
-  operatorRegistry: SearchOperatorRegistry;
+  operatorRegistry: SearchOperatorCatalog;
   scopeId: string;
   questionDate?: string;
   searchDefaults?: Pick<SearchRequest, "limit" | "order" | "maxPerSession">;
@@ -82,6 +84,9 @@ export function createSearchMemory(options: SearchMemoryOptions): (
       ...(executed.operatorResult === undefined
         ? {}
         : { operatorResult: executed.operatorResult }),
+      ...(executed.composition === undefined
+        ? {}
+        : { composition: executed.composition }),
     };
   };
 }

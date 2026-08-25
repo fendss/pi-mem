@@ -1,10 +1,11 @@
 import type { AgentMessage } from "@earendil-works/pi-agent-core";
 import type { ToolResultMessage } from "@earendil-works/pi-ai";
 
-const EPHEMERAL_TOOLS = new Set(["search", "bash_ro"]);
+const NAVIGATION_TOOLS = new Set(["search", "define_operator", "bash_ro"]);
 
 export interface EphemeralContextSnapshot {
   expiredNavigationResults: number;
+  compactedReadResults: number;
 }
 
 export interface EphemeralMemoryContext {
@@ -28,7 +29,8 @@ function trailingToolResultStart(messages: readonly AgentMessage[]): number {
  * in model context.
  */
 export function createEphemeralMemoryContext(): EphemeralMemoryContext {
-  const expiredIds = new Set<string>();
+  const expiredNavigationIds = new Set<string>();
+  const compactedReadIds = new Set<string>();
   return {
     async transformContext(messages): Promise<AgentMessage[]> {
       const currentBatchStart = trailingToolResultStart(messages);
@@ -36,26 +38,32 @@ export function createEphemeralMemoryContext(): EphemeralMemoryContext {
         if (
           index >= currentBatchStart ||
           !isToolResult(message) ||
-          !EPHEMERAL_TOOLS.has(message.toolName) ||
+          (!NAVIGATION_TOOLS.has(message.toolName) && message.toolName !== "read") ||
           message.isError
         ) {
           return message;
         }
-        expiredIds.add(message.toolCallId);
+        const read = message.toolName === "read";
+        if (read) compactedReadIds.add(message.toolCallId);
+        else expiredNavigationIds.add(message.toolCallId);
         return {
           ...message,
           content: [{
             type: "text" as const,
-            text:
-              `[${message.toolName} navigation output expired from active ` +
-              "context; full output remains in the audit trace. Read selected " +
-              "memory IDs or run a focused search for an uncovered subclaim.]",
+            text: read
+              ? "[read evidence text compacted after one reasoning turn; it remains eligible for citation and in the audit trace. Re-read the candidate if exact wording is needed again.]"
+              : `[${message.toolName} navigation output expired from active ` +
+                "context; full output remains in the audit trace. Read selected " +
+                "candidate numbers or run a focused search for an uncovered subclaim.]",
           }],
         };
       });
     },
     snapshot(): EphemeralContextSnapshot {
-      return { expiredNavigationResults: expiredIds.size };
+      return {
+        expiredNavigationResults: expiredNavigationIds.size,
+        compactedReadResults: compactedReadIds.size,
+      };
     },
   };
 }

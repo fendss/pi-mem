@@ -15,6 +15,9 @@ import { convertMessages } from "@earendil-works/pi-ai/api/openai-completions";
 type JsonObject = Record<string, unknown>;
 type MessageCompat = Parameters<typeof convertMessages>[2];
 
+const MAX_TRANSIENT_ATTEMPTS = 4;
+const RETRY_DELAYS_MS = [1_000, 3_000, 7_000] as const;
+
 interface ChatCompletionToolCall {
   id?: unknown;
   type?: unknown;
@@ -146,7 +149,9 @@ function buildPayload(
   if (options?.temperature !== undefined) {
     payload.temperature = options.temperature;
   }
-  if (
+  if (model.reasoning && compat.thinkingFormat === "qwen") {
+    payload.enable_thinking = options?.reasoning !== undefined;
+  } else if (
     model.reasoning &&
     options?.reasoning !== undefined &&
     compat.supportsReasoningEffort
@@ -318,6 +323,45 @@ function errorMessageFromBody(text: string): string {
   return trimmed ? trimmed.slice(0, 2_000) : "empty response body";
 }
 
+function transientHttpStatus(status: number): boolean {
+  return status === 408 || status === 429 || status >= 500;
+}
+
+function retryDelayMs(response: Response, retryIndex: number): number {
+  const retryAfter = response.headers.get("retry-after")?.trim();
+  if (retryAfter) {
+    const seconds = Number(retryAfter);
+    if (Number.isFinite(seconds) && seconds >= 0) {
+      return Math.min(60_000, Math.round(seconds * 1_000));
+    }
+    const date = Date.parse(retryAfter);
+    if (Number.isFinite(date)) {
+      return Math.min(60_000, Math.max(0, date - Date.now()));
+    }
+  }
+  return RETRY_DELAYS_MS[Math.min(retryIndex, RETRY_DELAYS_MS.length - 1)]!;
+}
+
+async function waitForRetry(
+  delayMs: number,
+  signal: AbortSignal | undefined,
+): Promise<void> {
+  if (signal?.aborted) throw signal.reason;
+  if (delayMs <= 0) return;
+  await new Promise<void>((resolve, reject) => {
+    const timer = setTimeout(done, delayMs);
+    function done(): void {
+      signal?.removeEventListener("abort", aborted);
+      resolve();
+    }
+    function aborted(): void {
+      clearTimeout(timer);
+      reject(signal?.reason);
+    }
+    signal?.addEventListener("abort", aborted, { once: true });
+  });
+}
+
 function emitCompletedMessage(
   stream: ReturnType<typeof createAssistantMessageEventStream>,
   message: AssistantMessage,
@@ -420,26 +464,56 @@ export const openAINonStreamingStreamFn: StreamFn = (
       const finalPayload = asObject(payload, "OpenAI request payload");
       finalPayload.stream = false;
       delete finalPayload.stream_options;
-
-      const response = await fetch(
-        `${model.baseUrl.replace(/\/+$/u, "")}/chat/completions`,
-        {
-          method: "POST",
-          headers: requestHeaders(model, options),
-          body: JSON.stringify(finalPayload),
-          ...(options?.signal === undefined
-            ? {}
-            : { signal: options.signal }),
-        },
-      );
-      await options?.onResponse?.(
-        {
-          status: response.status,
-          headers: Object.fromEntries(response.headers.entries()),
-        },
-        model,
-      );
-      const bodyText = await response.text();
+      const requestUrl =
+        `${model.baseUrl.replace(/\/+$/u, "")}/chat/completions`;
+      const requestInit: RequestInit = {
+        method: "POST",
+        headers: requestHeaders(model, options),
+        body: JSON.stringify(finalPayload),
+        ...(options?.signal === undefined
+          ? {}
+          : { signal: options.signal }),
+      };
+      let response: Response | undefined;
+      let bodyText: string | undefined;
+      for (let attempt = 0; attempt < MAX_TRANSIENT_ATTEMPTS; attempt += 1) {
+        try {
+          response = await fetch(requestUrl, requestInit);
+        } catch (error) {
+          if (options?.signal?.aborted || attempt + 1 >= MAX_TRANSIENT_ATTEMPTS) {
+            throw error;
+          }
+          await waitForRetry(RETRY_DELAYS_MS[attempt]!, options?.signal);
+          continue;
+        }
+        await options?.onResponse?.(
+          {
+            status: response.status,
+            headers: Object.fromEntries(response.headers.entries()),
+          },
+          model,
+        );
+        try {
+          bodyText = await response.text();
+        } catch (error) {
+          if (options?.signal?.aborted || attempt + 1 >= MAX_TRANSIENT_ATTEMPTS) {
+            throw error;
+          }
+          await waitForRetry(RETRY_DELAYS_MS[attempt]!, options?.signal);
+          continue;
+        }
+        if (
+          !response.ok && transientHttpStatus(response.status) &&
+          attempt + 1 < MAX_TRANSIENT_ATTEMPTS
+        ) {
+          await waitForRetry(retryDelayMs(response, attempt), options?.signal);
+          continue;
+        }
+        break;
+      }
+      if (response === undefined || bodyText === undefined) {
+        throw new Error("Provider request exhausted without a response");
+      }
       if (!response.ok) {
         throw new Error(
           `HTTP ${response.status}: ${errorMessageFromBody(bodyText)}`,

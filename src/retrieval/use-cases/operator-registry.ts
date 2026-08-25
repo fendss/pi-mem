@@ -1,5 +1,17 @@
-import type { SearchOperatorCatalogEntry } from "../model/search-operator.js";
+import type {
+  DefinedSearchOperator,
+  SearchOperatorCatalogEntry,
+  SearchOperatorCatalogIdentity,
+  SearchOperatorDefinition,
+  SearchOperatorDefinitionSnapshot,
+} from "../model/search-operator.js";
+import type {
+  RuntimeSearchOperatorCatalog,
+  SearchOperatorCatalog,
+} from "../ports/operator-catalog.js";
 import type { SearchOperator } from "../ports/search-operator.js";
+import { sha256 } from "../../util.js";
+import { buildDeclarativeSearchOperator } from "./build-declarative-operator.js";
 
 const OPERATOR_ID = /^[a-z][a-z0-9._-]{0,63}$/u;
 
@@ -86,10 +98,111 @@ export class SearchOperatorRegistry {
     return [...this.operators.values()].map(catalogEntry);
   }
 
+  forkForRun(maxDefinitions = 2): RuntimeSearchOperatorCatalog {
+    this.assertFrozen();
+    return new RunSearchOperatorCatalog(this, maxDefinitions);
+  }
+
   private assertFrozen(): void {
     if (!this.frozen) {
       throw new Error("Search operator registry must be frozen before use");
     }
+  }
+}
+
+class RunSearchOperatorCatalog implements RuntimeSearchOperatorCatalog {
+  readonly defaultOperatorId: string;
+
+  private readonly definitions = new Map<string, {
+    operator: SearchOperator;
+    definition: SearchOperatorDefinition;
+    definitionHash: string;
+    revision: number;
+  }>();
+  private revision = 0;
+
+  constructor(
+    private readonly base: SearchOperatorRegistry,
+    private readonly maxDefinitions: number,
+  ) {
+    if (
+      !Number.isInteger(maxDefinitions) ||
+      maxDefinitions < 0 ||
+      maxDefinitions > 8
+    ) {
+      throw new Error(
+        "Run operator definition budget must be an integer between 0 and 8",
+      );
+    }
+    this.defaultOperatorId = base.defaultOperatorId;
+  }
+
+  get(operatorId: string): SearchOperator {
+    const custom = this.definitions.get(operatorId);
+    if (custom !== undefined) return custom.operator;
+    return this.base.get(operatorId);
+  }
+
+  list(): SearchOperatorCatalogEntry[] {
+    return [
+      ...this.base.list(),
+      ...[...this.definitions.values()].map(({ operator }) =>
+        catalogEntry(operator)
+      ),
+    ];
+  }
+
+  define(source: SearchOperatorDefinition): DefinedSearchOperator {
+    if (this.definitions.size >= this.maxDefinitions) {
+      throw new Error(
+        `Run operator definition budget exhausted (${this.maxDefinitions})`,
+      );
+    }
+    const requestedId = source.id.trim();
+    if (this.list().some((entry) => entry.id === requestedId)) {
+      throw new Error(`Search operator ${requestedId} is already registered`);
+    }
+    const nextRevision = this.revision + 1;
+    const built = buildDeclarativeSearchOperator(this, source, nextRevision);
+    this.definitions.set(built.operator.id, {
+      operator: built.operator,
+      definition: built.definition,
+      definitionHash: built.definitionHash,
+      revision: nextRevision,
+    });
+    this.revision = nextRevision;
+    return {
+      id: built.operator.id,
+      version: built.operator.version,
+      definitionHash: built.definitionHash,
+      catalog: this.identity(),
+    };
+  }
+
+  identity(): SearchOperatorCatalogIdentity {
+    return {
+      revision: this.revision,
+      hash: sha256(JSON.stringify({
+        base: this.base.list(),
+        definitions: [...this.definitions.entries()].map(([id, entry]) => ({
+          id,
+          version: entry.operator.version,
+          definitionHash: entry.definitionHash,
+        })),
+      })),
+    };
+  }
+
+  snapshots(): SearchOperatorDefinitionSnapshot[] {
+    return [...this.definitions.values()].map((entry) => ({
+      revision: entry.revision,
+      definitionHash: entry.definitionHash,
+      definition: structuredClone(entry.definition),
+    }));
+  }
+
+  remainingDefinitions(): number {
+    return this.maxDefinitions - this.definitions.size;
   }
 }
 
@@ -98,7 +211,7 @@ export function renderSearchOperatorCatalog(
 ): string {
   if (entries.length === 0) return "No search operators are available.";
   return [
-    "Available search operators (frozen for this run):",
+    "Available search operators:",
     ...entries.flatMap((entry) => [
       `- ${entry.id}@${entry.version} | cost=${entry.guide.cost} | ${entry.guide.summary}`,
       `  use_when=${entry.guide.useWhen.join("; ")}`,

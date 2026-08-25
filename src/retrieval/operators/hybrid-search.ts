@@ -115,7 +115,7 @@ export class HybridMemoryStore {
     const profile = embeddingProfile(this.embedder);
     const status = this.rawStore.getEmbeddingIndexStatus(scopeId, profile);
     if (status.total === 0) {
-      throw new Error(`Hybrid search scope is empty: ${scopeId}`);
+      return [];
     }
     if (status.missing !== 0) {
       throw new Error(

@@ -11,8 +11,18 @@ export type {
   SearchRequest,
 } from "./model/retrieval.js";
 export type {
+  CandidateSet,
+  DefinedSearchOperator,
   SearchOperatorCatalogEntry,
+  SearchOperatorCatalogIdentity,
+  SearchOperatorCombineMethod,
+  SearchOperatorCompositionStepTrace,
+  SearchOperatorCompositionTrace,
   SearchOperatorCost,
+  SearchOperatorDefinition,
+  SearchOperatorDefinitionCombineStep,
+  SearchOperatorDefinitionSearchStep,
+  SearchOperatorDefinitionSnapshot,
   SearchOperatorExecutionContext,
   SearchOperatorGuide,
   SearchOperatorInput,
@@ -39,10 +49,22 @@ export type {
   SearchOperatorStore,
 } from "./ports/memory-tool-store.js";
 export type { SearchOperator } from "./ports/search-operator.js";
+export type {
+  RuntimeSearchOperatorCatalog,
+  SearchOperatorCatalog,
+} from "./ports/operator-catalog.js";
+export type {
+  SearchOperatorPluginFactory,
+  SearchOperatorPluginModule,
+} from "./ports/search-operator-plugin.js";
 export {
   SearchOperatorRegistry,
   renderSearchOperatorCatalog,
 } from "./use-cases/operator-registry.js";
+export {
+  buildDeclarativeSearchOperator,
+  type BuiltDeclarativeSearchOperator,
+} from "./use-cases/build-declarative-operator.js";
 export {
   executeSearchOperator,
   type ExecutedSearchOperator,

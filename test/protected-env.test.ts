@@ -5,7 +5,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import {
   loadProtectedEnvironment,
   requireEnvironmentVariable,
-} from "../src/protected-env.js";
+} from "../src/platform/security/protected-environment.js";
 
 const roots: string[] = [];
 

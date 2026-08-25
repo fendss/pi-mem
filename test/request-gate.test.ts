@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { AsyncRequestGate } from "../src/request-gate.js";
+import { AsyncRequestGate } from "../src/platform/concurrency/request-gate.js";
 
 describe("AsyncRequestGate", () => {
   it("bounds active operations", async () => {

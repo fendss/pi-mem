@@ -2,12 +2,14 @@ import { runBenchmarkAnswer } from "../../../benchmark/answer-from-evidence.js";
 import { dataPaths } from "../../../benchmark/longmemeval/data-paths.js";
 import { buildLongMemEvalAnswerPrompt } from "../../../benchmark/longmemeval/dataset-adapter.js";
 import { readPrivateQuestions } from "../../../benchmark/longmemeval/private-question-store.js";
-import { runQuestionWithRuntime } from "../../../benchmark/use-cases/run-question.js";
+import { createReadOnlyScopeNavigation } from "../../../composition/create-read-only-navigation.js";
+import { runPiMem } from "../../../evidence-agent/index.js";
 import { createRetrievalContext } from "../../../composition/create-retrieval-context.js";
 import { loadPiModelRuntime } from "../../../platform/pi/load-model-runtime.js";
 import { MemoryStore } from "../../../platform/sqlite/pimem-store.js";
 import {
   assertOnlyFlags,
+  MODEL_RUNTIME_FLAG_NAMES,
   modelOptionsFor,
   requiredFlag,
   retrievalProfileFor,
@@ -20,13 +22,7 @@ export async function runLongMemEval(parsed: ParsedCommand): Promise<void> {
     "data-dir",
     "question-id",
     "retrieval-profile",
-    "agent-dir",
-    "provider",
-    "model",
-    "thinking-level",
-    "api-key-env",
-    "base-url-env",
-    "transport",
+    ...MODEL_RUNTIME_FLAG_NAMES,
     "skill",
   ]);
   const paths = dataPaths(requiredFlag(parsed, "data-dir"));
@@ -43,16 +39,21 @@ export async function runLongMemEval(parsed: ParsedCommand): Promise<void> {
       rawStore,
       retrievalProfileFor(parsed),
     );
-    const retrieval = await runQuestionWithRuntime(
-      paths,
-      context.store,
-      context.operatorRegistry,
+    const retrieval = await runPiMem({
+      store: context.store,
+      operatorRegistry: context.operatorRegistry,
       modelRuntime,
-      question.scopeId,
-      question.question,
-      question.questionDate,
-      { skill: skillFor(parsed) },
-    );
+      scopeId: question.scopeId,
+      question: question.question,
+      ...(question.questionDate === undefined
+        ? {}
+        : { questionDate: question.questionDate }),
+      skill: skillFor(parsed),
+      readOnlyNavigation: createReadOnlyScopeNavigation(
+        paths.sanitized,
+        question.scopeId,
+      ),
+    });
     const answer = await runBenchmarkAnswer({
       modelRuntime,
       prompt: buildLongMemEvalAnswerPrompt(question.question, retrieval),

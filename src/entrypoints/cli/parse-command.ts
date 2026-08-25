@@ -10,6 +10,19 @@ export interface ParsedCommand {
   flags: Map<string, string[]>;
 }
 
+export const MODEL_RUNTIME_FLAG_NAMES = [
+  "agent-dir",
+  "provider",
+  "model",
+  "model-adapter",
+  "context-window",
+  "max-tokens",
+  "thinking-level",
+  "api-key-env",
+  "base-url-env",
+  "transport",
+] as const;
+
 export function parseCommand(argv: string[]): ParsedCommand {
   const [command, ...tokens] = argv;
   if (!command) return { command: "help", flags: new Map() };
@@ -92,6 +105,9 @@ export function modelOptionsFor(
   const apiKeyEnv = optionalFlag(parsed, "api-key-env");
   const baseUrlEnv = optionalFlag(parsed, "base-url-env");
   const transport = optionalFlag(parsed, "transport") ?? "sse";
+  const modelAdapterId = optionalFlag(parsed, "model-adapter");
+  const contextWindow = optionalFlag(parsed, "context-window");
+  const maxTokens = optionalFlag(parsed, "max-tokens");
   const acceptedThinkingLevels = new Set([
     "off",
     "minimal",
@@ -110,6 +126,25 @@ export function modelOptionsFor(
   if (transport !== "sse" && transport !== "non-stream") {
     throw new Error(`Unknown model transport: ${transport}`);
   }
+  const parseOptionalPositiveInteger = (
+    raw: string | undefined,
+    name: string,
+  ): number | undefined => {
+    if (raw === undefined) return undefined;
+    const value = Number(raw);
+    if (!Number.isSafeInteger(value) || value <= 0) {
+      throw new Error(`--${name} must be a positive integer`);
+    }
+    return value;
+  };
+  const parsedContextWindow = parseOptionalPositiveInteger(
+    contextWindow,
+    "context-window",
+  );
+  const parsedMaxTokens = parseOptionalPositiveInteger(
+    maxTokens,
+    "max-tokens",
+  );
   const baseUrl = baseUrlEnv === undefined
     ? undefined
     : requireEnvironmentVariable(process.env, baseUrlEnv);
@@ -130,6 +165,11 @@ export function modelOptionsFor(
         }),
     ...(apiKeyEnv === undefined ? {} : { apiKeyEnv }),
     ...(baseUrl === undefined ? {} : { baseUrl }),
+    ...(modelAdapterId === undefined ? {} : { modelAdapterId }),
+    ...(parsedContextWindow === undefined
+      ? {}
+      : { contextWindow: parsedContextWindow }),
+    ...(parsedMaxTokens === undefined ? {} : { maxTokens: parsedMaxTokens }),
     transport,
   };
 }

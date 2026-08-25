@@ -20,6 +20,7 @@ import {
 } from "../../../platform/security/protected-environment.js";
 import {
   assertOnlyFlags,
+  MODEL_RUNTIME_FLAG_NAMES,
   optionalFlag,
   positiveIntegerFlag,
   positiveNumberFlag,
@@ -161,7 +162,7 @@ async function auditLongMemEvalSuite(
     ) {
       throw new Error(`Suite provenance violation: ${record.question_id}`);
     }
-    searchedMemories += retrieval.searchedMemories.length;
+    searchedMemories += retrieval.candidates.length;
     evidence += evidenceIds.size;
     citations += citationIds.size;
     retrievalStatuses.set(
@@ -286,7 +287,10 @@ async function packageEvaluationArtifacts(
 type SuiteModelRole = "retrieval" | "answer";
 
 export interface SuiteModelRoleConfiguration {
-  agentDir: string;
+  agentDir?: string;
+  modelAdapter?: string;
+  contextWindow?: string;
+  maxTokens?: string;
   provider: string;
   model: string;
   thinkingLevel: string;
@@ -326,8 +330,20 @@ function modelRoleConfiguration(
   parsed: ParsedCommand,
   role: SuiteModelRole,
 ): SuiteModelRoleConfiguration {
+  const modelAdapter = roleFlag(parsed, role, "model-adapter");
+  const agentDir = roleFlag(parsed, role, "agent-dir");
+  const contextWindow = roleFlag(parsed, role, "context-window");
+  const maxTokens = roleFlag(parsed, role, "max-tokens");
+  if (modelAdapter === undefined && agentDir === undefined) {
+    throw new Error(
+      `Expected --${role}-model-adapter or --${role}-agent-dir`,
+    );
+  }
   return {
-    agentDir: resolve(requiredRoleFlag(parsed, role, "agent-dir")),
+    ...(agentDir === undefined ? {} : { agentDir: resolve(agentDir) }),
+    ...(modelAdapter === undefined ? {} : { modelAdapter }),
+    ...(contextWindow === undefined ? {} : { contextWindow }),
+    ...(maxTokens === undefined ? {} : { maxTokens }),
     provider: requiredRoleFlag(parsed, role, "provider"),
     model: requiredRoleFlag(parsed, role, "model"),
     thinkingLevel: roleFlag(parsed, role, "thinking-level") ?? "off",
@@ -346,6 +362,40 @@ export function suiteModelConfigurationFor(
     retrieval: modelRoleConfiguration(parsed, "retrieval"),
     answer: modelRoleConfiguration(parsed, "answer"),
   };
+}
+
+function suiteRoleRuntimeArguments(
+  role: SuiteModelRole,
+  configuration: SuiteModelRoleConfiguration,
+  apiKeyEnvironment: string,
+  baseUrlEnvironment: string,
+): string[] {
+  return [
+    ...(configuration.agentDir === undefined
+      ? []
+      : [`--${role}-agent-dir`, configuration.agentDir]),
+    ...(configuration.modelAdapter === undefined
+      ? []
+      : [`--${role}-model-adapter`, configuration.modelAdapter]),
+    ...(configuration.contextWindow === undefined
+      ? []
+      : [`--${role}-context-window`, configuration.contextWindow]),
+    ...(configuration.maxTokens === undefined
+      ? []
+      : [`--${role}-max-tokens`, configuration.maxTokens]),
+    `--${role}-provider`,
+    configuration.provider,
+    `--${role}-model`,
+    configuration.model,
+    `--${role}-thinking-level`,
+    configuration.thinkingLevel,
+    `--${role}-api-key-env`,
+    apiKeyEnvironment,
+    `--${role}-base-url-env`,
+    baseUrlEnvironment,
+    `--${role}-transport`,
+    configuration.transport,
+  ];
 }
 
 const RETRIEVAL_API_KEY_ENV = "PIMEM_RETRIEVAL_API_KEY";
@@ -398,31 +448,13 @@ export async function longMemEvalSuite(parsed: ParsedCommand): Promise<void> {
     "retrieval-profile",
     "skill",
     "slots",
-    "agent-dir",
-    "retrieval-agent-dir",
-    "answer-agent-dir",
-    "provider",
-    "retrieval-provider",
-    "answer-provider",
-    "model",
-    "retrieval-model",
-    "answer-model",
-    "thinking-level",
-    "retrieval-thinking-level",
-    "answer-thinking-level",
+    ...MODEL_RUNTIME_FLAG_NAMES,
+    ...MODEL_RUNTIME_FLAG_NAMES.map((name) => `retrieval-${name}`),
+    ...MODEL_RUNTIME_FLAG_NAMES.map((name) => `answer-${name}`),
     "embedding-env",
     "retrieval-env",
     "answer-env",
     "judge-env",
-    "api-key-env",
-    "retrieval-api-key-env",
-    "answer-api-key-env",
-    "base-url-env",
-    "retrieval-base-url-env",
-    "answer-base-url-env",
-    "transport",
-    "retrieval-transport",
-    "answer-transport",
     "retry-delay-seconds",
     "archive",
     "judge-script",
@@ -554,34 +586,18 @@ export async function longMemEvalSuite(parsed: ParsedCommand): Promise<void> {
         skill,
         "--slots",
         String(slots),
-        "--retrieval-agent-dir",
-        models.retrieval.agentDir,
-        "--retrieval-provider",
-        models.retrieval.provider,
-        "--retrieval-model",
-        models.retrieval.model,
-        "--retrieval-thinking-level",
-        models.retrieval.thinkingLevel,
-        "--retrieval-api-key-env",
-        RETRIEVAL_API_KEY_ENV,
-        "--retrieval-base-url-env",
-        RETRIEVAL_BASE_URL_ENV,
-        "--retrieval-transport",
-        models.retrieval.transport,
-        "--answer-agent-dir",
-        models.answer.agentDir,
-        "--answer-provider",
-        models.answer.provider,
-        "--answer-model",
-        models.answer.model,
-        "--answer-thinking-level",
-        models.answer.thinkingLevel,
-        "--answer-api-key-env",
-        ANSWER_API_KEY_ENV,
-        "--answer-base-url-env",
-        ANSWER_BASE_URL_ENV,
-        "--answer-transport",
-        models.answer.transport,
+        ...suiteRoleRuntimeArguments(
+          "retrieval",
+          models.retrieval,
+          RETRIEVAL_API_KEY_ENV,
+          RETRIEVAL_BASE_URL_ENV,
+        ),
+        ...suiteRoleRuntimeArguments(
+          "answer",
+          models.answer,
+          ANSWER_API_KEY_ENV,
+          ANSWER_BASE_URL_ENV,
+        ),
       ];
       const code = await runLoggedChild({
         file: process.execPath,

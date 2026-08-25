@@ -5,7 +5,13 @@ import { describe, expect, it } from "vitest";
 
 const projectRoot = resolve(import.meta.dirname, "../..");
 const sourceRoot = resolve(projectRoot, "src");
-const contexts = ["memory", "retrieval", "evidence-agent", "benchmark"] as const;
+const contexts = [
+  "memory",
+  "retrieval",
+  "evidence-agent",
+  "agent-runtime",
+  "benchmark",
+] as const;
 
 async function listTypeScriptFiles(directory: string): Promise<string[]> {
   const entries = await readdir(directory, { withFileTypes: true });
@@ -45,9 +51,15 @@ function importedContext(path: string, specifier: string): typeof contexts[numbe
 describe("architecture dependency rules", () => {
   it("keeps bounded-context dependencies pointing inward", async () => {
     const forbidden: Record<typeof contexts[number], ReadonlySet<string>> = {
-      memory: new Set(["retrieval", "evidence-agent", "benchmark"]),
-      retrieval: new Set(["evidence-agent", "benchmark"]),
-      "evidence-agent": new Set(["benchmark"]),
+      memory: new Set([
+        "retrieval",
+        "evidence-agent",
+        "agent-runtime",
+        "benchmark",
+      ]),
+      retrieval: new Set(["evidence-agent", "agent-runtime", "benchmark"]),
+      "evidence-agent": new Set(["agent-runtime", "benchmark"]),
+      "agent-runtime": new Set(["benchmark"]),
       benchmark: new Set(),
     };
     const violations: string[] = [];
@@ -117,6 +129,38 @@ describe("architecture dependency rules", () => {
         }
       }
     }
+    expect(violations).toEqual([]);
+  });
+
+  it("keeps evaluation vocabulary outside the PiMem core", async () => {
+    const coreDirectories = [
+      "memory",
+      "retrieval",
+      "evidence-agent",
+      "agent-runtime",
+      "platform",
+      "composition",
+    ];
+    const evaluationVocabulary =
+      /\b(?:benchmark|longmemeval|amabench|memoryarena|gold|judge|dataset|submission)\b|tau[- ]knowledge/giu;
+    const violations: string[] = [];
+
+    const coreFiles = (
+      await Promise.all(coreDirectories.map((directory) =>
+        listTypeScriptFiles(resolve(sourceRoot, directory))
+      ))
+    ).flat();
+    for (const path of coreFiles) {
+      const source = await readFile(path, "utf8");
+      const matches = [...source.matchAll(evaluationVocabulary)]
+        .map((match) => match[0].toLowerCase());
+      if (matches.length > 0) {
+        violations.push(
+          `${relative(projectRoot, path)}: ${[...new Set(matches)].join(", ")}`,
+        );
+      }
+    }
+
     expect(violations).toEqual([]);
   });
 });

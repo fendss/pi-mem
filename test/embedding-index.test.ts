@@ -6,13 +6,13 @@ import type {
   Embedder,
   EmbeddingMetrics,
   EmbeddingRequestOptions,
-} from "../src/embedding.js";
+} from "../src/retrieval/index.js";
 import {
   embeddingProfile,
   indexScopeEmbeddings,
-} from "../src/embedding-index.js";
-import { ingestMemorySessions } from "../src/ingest.js";
-import { MemoryStore } from "../src/store.js";
+} from "../src/retrieval/index.js";
+import { ingestMemorySessions } from "../src/memory/index.js";
+import { MemoryStore } from "../src/platform/sqlite/pimem-store.js";
 
 const temporaryPaths: string[] = [];
 

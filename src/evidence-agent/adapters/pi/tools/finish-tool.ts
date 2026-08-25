@@ -10,7 +10,7 @@ export function createFinishTool(
     name: "finish",
     label: "Finish",
     description:
-      "Submit an internally consistent evidence package. Cite only candidate numbers that were explicitly read in this run; the harness converts them to exact source IDs and enforces provenance. Cover every independent evidence need. Keep citation supports atomic and source-local; make evidenceSummary a lossless ledger of those facts; keep inventory, count, summary, supports, and raw citations consistent. Do not generate the benchmark answer.",
+      "Submit an internally consistent evidence package. Cite only candidate numbers that were explicitly read in this run; the harness converts them to exact source IDs and enforces provenance. Cover every independent evidence need. Keep citation supports atomic and source-local; make evidenceSummary a lossless ledger of those facts; keep inventory, count, summary, supports, and raw citations consistent. Do not generate the caller's final response.",
     parameters: FinishParameters,
     executionMode: "sequential",
     async execute(_toolCallId, params) {

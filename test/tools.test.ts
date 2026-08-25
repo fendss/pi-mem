@@ -1,16 +1,18 @@
 import type { BeforeToolCallContext } from "@earendil-works/pi-agent-core";
 import { describe, expect, it } from "vitest";
-import { MemoryLedger } from "../src/ledger.js";
-import type { StoreSearchHit } from "../src/store.js";
+import { MemoryLedger } from "../src/evidence-agent/index.js";
+import type { StoreSearchHit } from "../src/platform/sqlite/pimem-store.js";
 import {
   createFinishOnlyBeforeToolCall,
+  createToolProtocolBeforeToolCall,
   createPiMemTools as createPiMemToolsWithRegistry,
   validateFinishToolBatch,
   type CreatePiMemToolsOptions,
   type MemoryToolStore,
-} from "../src/tools.js";
+} from "../src/evidence-agent/adapters/pi/tools.js";
 import { createSearchOperatorRegistry } from "../src/composition/create-search-operator-registry.js";
-import type { MemoryRecord, SearchRequest } from "../src/types.js";
+import type { MemoryRecord } from "../src/memory/index.js";
+import type { SearchRequest } from "../src/retrieval/index.js";
 
 function record(memoryId: string, turnIndex: number): MemoryRecord {
   return {
@@ -106,6 +108,49 @@ describe("PiMem tools", () => {
     expect(finishResult.terminate).toBe(true);
     expect(finishResult.details.selection.citations[0]?.memoryId).toBe("m2");
     expect(ledger.selection?.status).toBe("sufficient");
+  });
+
+  it("keeps oversized source payloads out of structured read audit details", async () => {
+    const searched = {
+      ...record("m-large", 0),
+      content:
+        `Step 5:\n${"private-payload ".repeat(40_000)}` +
+        "World Bank indicator completed successfully.",
+    };
+    const store: MemoryToolStore = {
+      search(_scopeId, request) {
+        return [{
+          record: searched,
+          query: request.queries[0] ?? "",
+          retriever: "fts5",
+          rank: 1,
+          score: 1,
+          preview: "World Bank indicator result",
+        }];
+      },
+      read() {
+        return [searched];
+      },
+    };
+    const tools = createPiMemTools({
+      store,
+      scopeId: "scope-1",
+      ledger: new MemoryLedger("scope-1"),
+      question: "When did the World Bank indicator complete successfully?",
+    });
+    await tools.search.execute("search-large", {
+      queries: ["World Bank indicator completed successfully"],
+    });
+
+    const result = await tools.read.execute("read-large", { candidateRefs: [1] });
+
+    expect(result.details.evidence[0]).toMatchObject({
+      memoryId: "m-large",
+      truncated: true,
+      sourceContentLength: searched.content.length,
+    });
+    expect(JSON.stringify(result.details).length).toBeLessThan(2_500);
+    expect(JSON.stringify(result.content).length).toBeLessThan(10_000);
   });
 
   it("keeps history routing simple and chronological", async () => {
@@ -483,6 +528,27 @@ describe("PiMem tools", () => {
     await expect(hook(unsafeContext)).resolves.toEqual({
       block: true,
       reason: "finish must be the final tool call in its turn",
+    });
+  });
+
+  it("blocks search after the configured execution budget", async () => {
+    const hook = createToolProtocolBeforeToolCall({ maxSearchCalls: 2 });
+    const context = {
+      assistantMessage: {
+        content: [
+          { type: "toolCall", id: "1", name: "search", arguments: {} },
+        ],
+      },
+      toolCall: { type: "toolCall", id: "1", name: "search", arguments: {} },
+      args: {},
+      context: { systemPrompt: "", messages: [], tools: [] },
+    } as unknown as BeforeToolCallContext;
+
+    await expect(hook(context)).resolves.toBeUndefined();
+    await expect(hook(context)).resolves.toBeUndefined();
+    await expect(hook(context)).resolves.toEqual({
+      block: true,
+      reason: "Search budget exhausted after 2 calls. Use existing candidates, read the needed sources, and call finish.",
     });
   });
 });

@@ -1,4 +1,3 @@
-import { execFileSync } from "node:child_process";
 import { chmod, mkdir, readFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import {
@@ -18,29 +17,37 @@ import {
   type LongMemEvalPrivateQuestion,
 } from "../../../benchmark/longmemeval/dataset-adapter.js";
 import { readPrivateQuestions } from "../../../benchmark/longmemeval/private-question-store.js";
-import { runQuestionWithRuntime } from "../../../benchmark/use-cases/run-question.js";
+import { createReadOnlyScopeNavigation } from "../../../composition/create-read-only-navigation.js";
 import { createRetrievalContext } from "../../../composition/create-retrieval-context.js";
 import {
   PIMEM_HARNESS_VERSION,
   PIMEM_SKILL_HASH,
   PIMEM_SKILL_VERSION,
+  MAX_EVIDENCE_CHARS_PER_MEMORY,
+  MAX_READ_RESULT_CHARS,
+  MAX_SELECTED_EVIDENCE_CHARS,
   PiMemRunError,
   piMemSystemPrompt,
+  runPiMem,
   type PiMemResult,
 } from "../../../evidence-agent/index.js";
 import { runAsyncPool } from "../../../platform/concurrency/async-pool.js";
-import {
-  loadPiModelRuntime,
-  type LoadPiModelRuntimeOptions,
-  type PiModelRuntime,
-} from "../../../platform/pi/load-model-runtime.js";
+import { loadPiModelRuntime } from "../../../platform/pi/load-model-runtime.js";
 import { MemoryStore } from "../../../platform/sqlite/pimem-store.js";
 import { embeddingProfile } from "../../../retrieval/index-scope-embeddings.js";
 import type { RetrievalMetadata } from "../../../retrieval/index.js";
 import { safePathSegment, sha256 } from "../../../util.js";
 import {
+  benchmarkModelOptionsFor,
+  benchmarkQuerySetHash,
+  benchmarkRuntimeIdentity,
+  benchmarkSelectedCorpusHash,
+  benchmarkSourceRevision,
+  ensureBenchmarkRunManifest,
+} from "../evidence-benchmark-runtime.js";
+import {
   assertOnlyFlags,
-  modelOptionsFor,
+  MODEL_RUNTIME_FLAG_NAMES,
   positiveIntegerFlag,
   requiredFlag,
   retrievalProfileFor,
@@ -57,129 +64,6 @@ const BENCHMARK_MAX_RUN_MS = 300_000;
 const BENCHMARK_MAX_TURNS = 64;
 const BENCHMARK_MAX_TOOL_CALLS = 80;
 const MOL_VERSION = "search-read-finish-v0";
-const BENCHMARK_MODEL_FLAGS = [
-  "agent-dir",
-  "provider",
-  "model",
-  "thinking-level",
-  "api-key-env",
-  "base-url-env",
-  "transport",
-] as const;
-
-type BenchmarkModelRole = "retrieval" | "answer";
-
-/** Resolves one stage's model flags, falling back field-by-field to legacy flags. */
-export function benchmarkModelOptionsFor(
-  parsed: ParsedCommand,
-  role: BenchmarkModelRole,
-): LoadPiModelRuntimeOptions {
-  const flags = new Map<string, string[]>();
-  for (const name of BENCHMARK_MODEL_FLAGS) {
-    const values = parsed.flags.get(`${role}-${name}`) ?? parsed.flags.get(name);
-    if (values !== undefined) flags.set(name, values);
-  }
-  return modelOptionsFor({ command: parsed.command, flags });
-}
-
-function benchmarkRuntimeIdentity(
-  runtime: PiModelRuntime,
-): Record<string, unknown> {
-  return {
-    providerId: runtime.providerId,
-    modelId: runtime.modelId,
-    thinkingLevel: runtime.thinkingLevel,
-    transport: runtime.transport,
-    api: runtime.model.api,
-  };
-}
-
-export function benchmarkSourceRevision(): {
-  commit: string;
-  dirty: boolean | null;
-  fingerprint?: string;
-} {
-  const declaredCommit = process.env.PIMEM_SOURCE_COMMIT?.trim();
-  const declaredDirty = process.env.PIMEM_SOURCE_DIRTY?.trim();
-  const declaredFingerprint = process.env.PIMEM_SOURCE_FINGERPRINT?.trim();
-  if (
-    declaredCommit !== undefined || declaredDirty !== undefined ||
-    declaredFingerprint !== undefined
-  ) {
-    if (!declaredCommit || !/^[a-f0-9]{40}$/u.test(declaredCommit)) {
-      throw new Error("PIMEM_SOURCE_COMMIT must be a full lowercase Git SHA");
-    }
-    if (declaredDirty !== "true" && declaredDirty !== "false") {
-      throw new Error("PIMEM_SOURCE_DIRTY must be true or false");
-    }
-    if (
-      declaredFingerprint !== undefined &&
-      !/^[a-f0-9]{64}$/u.test(declaredFingerprint)
-    ) {
-      throw new Error("PIMEM_SOURCE_FINGERPRINT must be a SHA-256 digest");
-    }
-    return {
-      commit: declaredCommit,
-      dirty: declaredDirty === "true",
-      ...(declaredFingerprint === undefined
-        ? {}
-        : { fingerprint: declaredFingerprint }),
-    };
-  }
-  const projectRoot = resolve(import.meta.dirname, "../../../..");
-  try {
-    const commit = execFileSync("git", ["rev-parse", "HEAD"], {
-      cwd: projectRoot,
-      encoding: "utf8",
-      stdio: ["ignore", "pipe", "ignore"],
-    }).trim();
-    const status = execFileSync(
-      "git",
-      ["status", "--porcelain", "--untracked-files=normal"],
-      {
-        cwd: projectRoot,
-        encoding: "utf8",
-        stdio: ["ignore", "pipe", "ignore"],
-      },
-    ).trim();
-    return { commit, dirty: status.length > 0 };
-  } catch {
-    return { commit: "unavailable", dirty: null };
-  }
-}
-
-export function benchmarkQuestionSetHash(
-  questions: readonly LongMemEvalPrivateQuestion[],
-): string {
-  const identity = questions
-    .map((item) => ({
-      questionId: item.questionId,
-      scopeId: item.scopeId,
-      question: item.question,
-      ...(item.questionDate === undefined
-        ? {}
-        : { questionDate: item.questionDate }),
-    }))
-    .sort((left, right) => left.questionId.localeCompare(right.questionId));
-  return sha256(JSON.stringify(identity));
-}
-
-export async function benchmarkCorpusHash(
-  sanitizedRoot: string,
-  questions: readonly LongMemEvalPrivateQuestion[],
-): Promise<string> {
-  const scopeIds = [...new Set(questions.map((item) => item.scopeId))].sort();
-  const scopes = await Promise.all(scopeIds.map(async (scopeId) => ({
-    scopeId,
-    memoryHash: sha256(
-      await readFile(
-        join(sanitizedRoot, safePathSegment(scopeId), "memory.jsonl"),
-        "utf8",
-      ),
-    ),
-  })));
-  return sha256(JSON.stringify(scopes));
-}
 
 function successRecordPath(recordsDir: string, questionId: string): string {
   return join(recordsDir, `${safePathSegment(questionId)}.json`);
@@ -233,32 +117,6 @@ function predictionFor(
     },
     run_id: retrieval.runId,
   };
-}
-
-async function ensureBenchmarkManifest(
-  path: string,
-  config: Record<string, unknown>,
-): Promise<void> {
-  const existing = await readJsonFileIfPresent<{
-    schema_version: number;
-    config: Record<string, unknown>;
-  }>(path);
-  if (existing) {
-    if (
-      existing.schema_version !== 1 ||
-      JSON.stringify(existing.config) !== JSON.stringify(config)
-    ) {
-      throw new Error(
-        "Benchmark output directory has a different run configuration",
-      );
-    }
-    return;
-  }
-  await writeAtomicJson(path, {
-    schema_version: 1,
-    created_at: new Date().toISOString(),
-    config,
-  });
 }
 
 async function loadSuccessRecords(
@@ -388,33 +246,19 @@ export async function benchmarkLongMemEval(
     "question-id",
     "retrieval-profile",
     "slots",
-    "agent-dir",
-    "provider",
-    "model",
-    "thinking-level",
-    "api-key-env",
-    "base-url-env",
-    "transport",
-    "retrieval-agent-dir",
-    "retrieval-provider",
-    "retrieval-model",
-    "retrieval-thinking-level",
-    "retrieval-api-key-env",
-    "retrieval-base-url-env",
-    "retrieval-transport",
-    "answer-agent-dir",
-    "answer-provider",
-    "answer-model",
-    "answer-thinking-level",
-    "answer-api-key-env",
-    "answer-base-url-env",
-    "answer-transport",
+    "max-search-calls",
+    ...MODEL_RUNTIME_FLAG_NAMES,
+    ...MODEL_RUNTIME_FLAG_NAMES.map((name) => `retrieval-${name}`),
+    ...MODEL_RUNTIME_FLAG_NAMES.map((name) => `answer-${name}`),
     "skill",
   ]);
   const paths = dataPaths(requiredFlag(parsed, "data-dir"));
   const outputDir = resolve(requiredFlag(parsed, "output-dir"));
   const retrievalProfile = retrievalProfileFor(parsed);
   const slots = positiveIntegerFlag(parsed, "slots", 1, 256);
+  const maxSearchCalls = parsed.flags.has("max-search-calls")
+    ? positiveIntegerFlag(parsed, "max-search-calls", 1, 1_000)
+    : undefined;
   const skill = skillFor(parsed);
   const requestedIds = new Set(parsed.flags.get("question-id") ?? []);
   const privateQuestions = await readPrivateQuestions(paths.privateQuestions);
@@ -494,11 +338,11 @@ export async function benchmarkLongMemEval(
       process.stderr.write(`Embedding preflight: ${indexed}/${total} indexed\n`);
     }
 
-    await ensureBenchmarkManifest(join(outputDir, "run-manifest.json"), {
+    await ensureBenchmarkRunManifest(join(outputDir, "run-manifest.json"), {
       benchmark: "LongMemEval-S",
       question_count: selected.length,
-      question_set_hash: benchmarkQuestionSetHash(selected),
-      corpus_hash: await benchmarkCorpusHash(paths.sanitized, selected),
+      question_set_hash: benchmarkQuerySetHash(selected),
+      corpus_hash: await benchmarkSelectedCorpusHash(paths.sanitized, selected),
       source_revision: benchmarkSourceRevision(),
       retrieval,
       retrieval_model: benchmarkRuntimeIdentity(retrievalModelRuntime),
@@ -526,6 +370,11 @@ export async function benchmarkLongMemEval(
       max_run_ms: BENCHMARK_MAX_RUN_MS,
       max_turns: BENCHMARK_MAX_TURNS,
       max_tool_calls: BENCHMARK_MAX_TOOL_CALLS,
+      max_search_calls: maxSearchCalls ?? null,
+      max_read_result_chars: MAX_READ_RESULT_CHARS,
+      max_evidence_chars_per_memory: MAX_EVIDENCE_CHARS_PER_MEMORY,
+      max_selected_evidence_chars: MAX_SELECTED_EVIDENCE_CHARS,
+      max_citations: 32,
     });
 
     const runOne = async (
@@ -537,21 +386,25 @@ export async function benchmarkLongMemEval(
         return;
       }
       try {
-        const retrievalResult = await runQuestionWithRuntime(
-          paths,
-          retrievalContexts[slot - 1]!.store,
-          retrievalContexts[slot - 1]!.operatorRegistry,
-          retrievalModelRuntime,
-          question.scopeId,
-          question.question,
-          question.questionDate,
-          {
-            maxRunMs: BENCHMARK_MAX_RUN_MS,
-            maxTurns: BENCHMARK_MAX_TURNS,
-            maxToolCalls: BENCHMARK_MAX_TOOL_CALLS,
-            skill,
-          },
-        );
+        const retrievalResult = await runPiMem({
+          store: retrievalContexts[slot - 1]!.store,
+          operatorRegistry: retrievalContexts[slot - 1]!.operatorRegistry,
+          modelRuntime: retrievalModelRuntime,
+          scopeId: question.scopeId,
+          question: question.question,
+          ...(question.questionDate === undefined
+            ? {}
+            : { questionDate: question.questionDate }),
+          maxRunMs: BENCHMARK_MAX_RUN_MS,
+          maxTurns: BENCHMARK_MAX_TURNS,
+          maxToolCalls: BENCHMARK_MAX_TOOL_CALLS,
+          ...(maxSearchCalls === undefined ? {} : { maxSearchCalls }),
+          skill,
+          readOnlyNavigation: createReadOnlyScopeNavigation(
+            paths.sanitized,
+            question.scopeId,
+          ),
+        });
         const answerResult = await runBenchmarkAnswer({
           modelRuntime: answerModelRuntime,
           prompt: buildLongMemEvalAnswerPrompt(

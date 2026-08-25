@@ -2,7 +2,7 @@ import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import { JsonlWriter } from "../src/jsonl-writer.js";
+import { JsonlWriter } from "../src/platform/filesystem/jsonl-writer.js";
 
 const temporaryDirectories: string[] = [];
 

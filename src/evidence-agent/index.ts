@@ -4,23 +4,50 @@ export type {
   EvidenceInventoryItem,
   MemoryCandidate,
   ModelMetadata,
+  ModelUsage,
   PiMemResult,
   PiMemSelection,
-  SearchedMemory,
   ToolTraceEntry,
 } from "./model/evidence.js";
+export type {
+  EvidenceExcerpt,
+  MemoryEvidence,
+} from "./model/memory-evidence.js";
 export {
-  PI_MEM_SYSTEM_PROMPT,
+  MAX_EVIDENCE_CHARS_PER_MEMORY,
+  MAX_READ_RESULT_CHARS,
+  MAX_SELECTED_EVIDENCE_CHARS,
+  projectMemoryEvidence,
+  projectMemoryEvidenceBatch,
+  renderEvidenceExcerpts,
+} from "./model/memory-evidence.js";
+export {
   PIMEM_HARNESS_VERSION,
-  PIMEM_SKILL_HASH,
-  PIMEM_SKILL_TEXT,
-  PIMEM_SKILL_VERSION,
   PiMemRunError,
-  orderCandidatesForEvidenceAttention,
-  piMemSystemPrompt,
   runPiMem,
   type PiMemFailureDiagnostics,
   type PiMemRuntimeStore,
-  type PiMemSkill,
   type RunPiMemOptions,
 } from "./run-pimem.js";
+export {
+  PI_MEM_BASE_SYSTEM_PROMPT,
+  PIMEM_SKILL_HASH,
+  PIMEM_SKILL_TEXT,
+  PIMEM_SKILL_VERSION,
+  piMemSystemPrompt,
+  type PiMemSkill,
+} from "./adapters/pi/retrieval-prompt.js";
+export {
+  aggregateAssistantUsage,
+  assistantMessageText,
+  lastAssistantMessage,
+  validateResponseModels,
+} from "./adapters/pi/assistant-messages.js";
+export type {
+  ReadOnlyNavigation,
+  ReadOnlyNavigationBinding,
+  ReadOnlyNavigationResult,
+} from "./ports/read-only-navigation.js";
+export { createEphemeralMemoryContext } from "./adapters/pi/ephemeral-context.js";
+export { createPiMemTools } from "./adapters/pi/tools.js";
+export { MemoryLedger } from "./model/memory-ledger.js";

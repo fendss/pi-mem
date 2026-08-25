@@ -1,6 +1,7 @@
 import type { CreatePiMemToolsOptions, PiMemTools, ReadToolDetails } from "./contracts.js";
 import { normalizeHarnessRefs } from "./candidate-refs.js";
 import { renderMemories } from "./render-tool-result.js";
+import { projectMemoryEvidenceBatch } from "../../../model/memory-evidence.js";
 import { ReadParameters } from "./schemas.js";
 
 export function createReadTool(
@@ -23,7 +24,7 @@ export function createReadTool(
             requestedMemoryIds: [],
             contextBefore: params.contextBefore ?? 0,
             contextAfter: params.contextAfter ?? 0,
-            memories: [],
+            evidence: [],
             evidenceReferences: [],
             expandedMemoryIds: [],
             candidates: [],
@@ -39,7 +40,17 @@ export function createReadTool(
         contextBefore,
         contextAfter,
       );
-      const recorded = options.ledger.recordRead(memories);
+      const projected = projectMemoryEvidenceBatch(memories, (memory) => {
+        const candidate = options.ledger.selectCandidates([memory.memoryId])[0];
+        return [
+          ...(options.question === undefined ? [] : [options.question]),
+          ...(options.evidenceFocus?.() ?? []),
+          ...(candidate?.discoveries.flatMap((discovery) =>
+            discovery.query === undefined ? [] : [discovery.query]
+          ) ?? []),
+        ];
+      });
+      const recorded = options.ledger.recordRead(projected);
       const requested = new Set(memoryIds);
       const expandedMemoryIds = recorded
         .map((memory) => memory.memoryId)
@@ -58,7 +69,20 @@ export function createReadTool(
         requestedMemoryIds: memoryIds,
         contextBefore,
         contextAfter,
-        memories: recorded,
+        evidence: recorded.map((item) => ({
+          memoryId: item.memoryId,
+          scopeId: item.scopeId,
+          sessionId: item.sessionId,
+          turnIndex: item.turnIndex,
+          contentHash: item.contentHash,
+          sourceContentHash: item.sourceContentHash,
+          sourceContentLength: item.sourceContentLength,
+          truncated: item.truncated,
+          excerpts: item.excerpts.map((excerpt) => ({
+            start: excerpt.start,
+            end: excerpt.end,
+          })),
+        })),
         evidenceReferences,
         expandedMemoryIds,
         candidates,

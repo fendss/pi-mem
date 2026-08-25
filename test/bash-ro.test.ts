@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildBashRoDockerArgs, ReadOnlyBash } from "../src/bash-ro.js";
+import { buildBashRoDockerArgs, ReadOnlyBash } from "../src/evidence-agent/adapters/docker/read-only-shell.js";
 
 describe("read-only bash sandbox", () => {
   it("builds a networkless, least-privilege, read-only container", () => {

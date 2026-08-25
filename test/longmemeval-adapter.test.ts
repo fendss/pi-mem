@@ -8,8 +8,8 @@ import {
   longMemEvalScopeId,
   longMemEvalSessionId,
   normalizeLongMemEvalTimestamp,
-} from "../src/adapters/longmemeval.js";
-import type { PiMemResult } from "../src/types.js";
+} from "../src/benchmark/longmemeval/dataset-adapter.js";
+import type { PiMemResult } from "../src/evidence-agent/index.js";
 import { sha256 } from "../src/util.js";
 
 function mixedFixture(): unknown {

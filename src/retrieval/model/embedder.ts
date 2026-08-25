@@ -5,6 +5,10 @@ export interface EmbeddingRequestOptions {
 export interface EmbeddingMetrics {
   calls: number;
   latencyMs: number;
+  /** Provider-reported input tokens from embedding attempts. */
+  inputTokens?: number;
+  /** Provider attempts that omitted a usable embedding usage object. */
+  usageMissingCalls?: number;
 }
 
 export interface Embedder {

@@ -107,6 +107,21 @@ class PromptContractTest(unittest.TestCase):
             "44b751660e4e0950ee640b14207a0ab7d519c4558374d429b6bf262d9871d6ff",
         )
 
+    def test_refind_judge_prompt_and_verdict_contract(self) -> None:
+        self.assertIn(
+            "Be generous: if the generated answer contains the gold answer information",
+            EVAL.REFIND_2026_JUDGE_PROMPT,
+        )
+        self.assertEqual(
+            EVAL.parse_refind_label("The content matches. CORRECT"),
+            "CORRECT",
+        )
+        self.assertEqual(
+            EVAL.parse_refind_label("This is WRONG, not CORRECT."),
+            "WRONG",
+        )
+        self.assertEqual(EVAL.parse_refind_label("unclear"), "WRONG")
+
 
 if __name__ == "__main__":
     unittest.main()

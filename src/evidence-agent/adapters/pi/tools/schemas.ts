@@ -6,9 +6,12 @@ export function createSearchParameters(operatorIds: readonly string[]) {
   }
   return Type.Object({
     operator: Type.Optional(Type.String({
-      enum: [...operatorIds],
+      minLength: 1,
+      maxLength: 64,
+      pattern: "^[a-z][a-z0-9._-]{0,63}$",
       description:
-        "Agent-selected operator from the frozen runtime catalog. Defaults to the registry default. The harness never routes from question keywords.",
+        `Agent-selected operator. Initially available: ${operatorIds.join(", ")}. ` +
+        "A successfully defined run-local operator is also valid. Defaults to the registry default.",
     })),
     queries: Type.Array(Type.String({ minLength: 1 }), {
       minItems: 1,
@@ -21,6 +24,38 @@ export function createSearchParameters(operatorIds: readonly string[]) {
 
 export type SearchParametersSchema = ReturnType<typeof createSearchParameters>;
 
+export const DefineOperatorParameters = Type.Object({
+  id: Type.String({
+    minLength: 1,
+    maxLength: 64,
+    pattern: "^[a-z][a-z0-9._-]{0,63}$",
+    description: "Short run-local operator ID used by a later search call.",
+  }),
+  summary: Type.String({ minLength: 1, maxLength: 240 }),
+  sources: Type.Array(
+    Type.Object({
+      operator: Type.String({
+        minLength: 1,
+        maxLength: 64,
+        pattern: "^[a-z][a-z0-9._-]{0,63}$",
+      }),
+      limit: Type.Optional(Type.Integer({ minimum: 1, maximum: 100 })),
+    }),
+    {
+      minItems: 1,
+      maxItems: 4,
+      description: "Existing operators to run with the later search query.",
+    },
+  ),
+  combine: Type.Optional(
+    Type.Union([Type.Literal("union"), Type.Literal("rrf")]),
+  ),
+}, {
+  description:
+    "Define one run-local search operator by composing existing operators. " +
+    "One source is an alias; multiple sources default to RRF fusion.",
+});
+
 export const ReadParameters = Type.Object({
   candidateRefs: Type.Array(Type.Integer({ minimum: 0 }), {
     minItems: 1,
@@ -32,7 +67,7 @@ export const ReadParameters = Type.Object({
   contextAfter: Type.Optional(Type.Integer({ minimum: 0, maximum: 10 })),
 }, {
   description:
-    "Read immutable candidate memories and optional bounded neighboring context.",
+    "Read immutable candidate memories and optional bounded neighboring context. Oversized memories are returned as exact, query-focused excerpts bound to the full source hash.",
 });
 
 export const FinishParameters = Type.Object({
@@ -53,6 +88,7 @@ export const FinishParameters = Type.Object({
       }),
     }),
     {
+      maxItems: 32,
       description:
         "Source citations covering every independent fact in the evidence package.",
     },

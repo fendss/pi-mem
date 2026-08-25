@@ -1,18 +1,24 @@
 import {
-  runQuestionWithRuntime,
-} from "../benchmark/use-cases/run-question.js";
-import type { LongMemEvalDataPaths } from "../benchmark/longmemeval/data-paths.js";
-import type { PiMemResult, PiMemSkill } from "../evidence-agent/index.js";
+  runPiMem,
+  type PiMemResult,
+  type PiMemSkill,
+} from "../evidence-agent/index.js";
 import {
   loadPiModelRuntime,
   type LoadPiModelRuntimeOptions,
 } from "../platform/pi/load-model-runtime.js";
 import { MemoryStore } from "../platform/sqlite/pimem-store.js";
 import type { RetrievalProfile } from "../retrieval/index.js";
+import { createReadOnlyScopeNavigation } from "./create-read-only-navigation.js";
 import { createRetrievalContext } from "./create-retrieval-context.js";
 
+export interface PiMemWorkspacePaths {
+  database: string;
+  sanitized: string;
+}
+
 export async function runQuestion(
-  paths: LongMemEvalDataPaths,
+  paths: PiMemWorkspacePaths,
   retrievalProfile: RetrievalProfile,
   scopeId: string,
   question: string,
@@ -24,16 +30,19 @@ export async function runQuestion(
   try {
     const modelRuntime = await loadPiModelRuntime(modelOptions);
     const retrieval = createRetrievalContext(rawStore, retrievalProfile);
-    return await runQuestionWithRuntime(
-      paths,
-      retrieval.store,
-      retrieval.operatorRegistry,
+    return await runPiMem({
+      store: retrieval.store,
+      operatorRegistry: retrieval.operatorRegistry,
       modelRuntime,
       scopeId,
       question,
-      questionDate,
-      { skill },
-    );
+      ...(questionDate === undefined ? {} : { questionDate }),
+      skill,
+      readOnlyNavigation: createReadOnlyScopeNavigation(
+        paths.sanitized,
+        scopeId,
+      ),
+    });
   } finally {
     rawStore.close();
   }

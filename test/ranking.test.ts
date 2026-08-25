@@ -3,7 +3,7 @@ import {
   bm25Scores,
   reciprocalRankFusion,
   tokenizeForPiMemHybrid,
-} from "../src/ranking.js";
+} from "../src/retrieval/ranking.js";
 
 describe("PiMem hybrid ranking", () => {
   it("normalizes punctuation and case and removes NLTK English stopwords", () => {

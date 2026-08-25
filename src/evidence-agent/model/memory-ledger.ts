@@ -5,6 +5,10 @@ import type {
   PiMemSelection,
 } from "./evidence.js";
 import type { MemoryRecord } from "../../memory/index.js";
+import {
+  MAX_SELECTED_EVIDENCE_CHARS,
+  type MemoryEvidence,
+} from "./memory-evidence.js";
 import { compactPreview } from "../../util.js";
 
 function cloneCandidate(candidate: MemoryCandidate): MemoryCandidate {
@@ -16,10 +20,11 @@ function cloneCandidate(candidate: MemoryCandidate): MemoryCandidate {
   };
 }
 
-function cloneRecord(record: MemoryRecord): MemoryRecord {
+function cloneEvidence(evidence: MemoryEvidence): MemoryEvidence {
   return {
-    ...record,
-    metadata: { ...record.metadata },
+    ...evidence,
+    excerpts: evidence.excerpts.map((excerpt) => ({ ...excerpt })),
+    metadata: { ...evidence.metadata },
   };
 }
 
@@ -53,7 +58,7 @@ export class MemoryLedger {
   readonly scopeId: string;
 
   private readonly candidatesById = new Map<string, MemoryCandidate>();
-  private readonly evidenceById = new Map<string, MemoryRecord>();
+  private readonly evidenceById = new Map<string, MemoryEvidence>();
   private readonly candidateRefById = new Map<string, number>();
   private readonly candidateIdByRef = new Map<number, string>();
   private readonly evidenceRefById = new Map<string, number>();
@@ -78,8 +83,8 @@ export class MemoryLedger {
     return [...this.candidatesById.values()].map(cloneCandidate);
   }
 
-  get evidence(): MemoryRecord[] {
-    return [...this.evidenceById.values()].map(cloneRecord);
+  get evidence(): MemoryEvidence[] {
+    return [...this.evidenceById.values()].map(cloneEvidence);
   }
 
   get citations(): Citation[] {
@@ -164,39 +169,39 @@ export class MemoryLedger {
   }
 
   /**
-   * Records exact source material returned by read.
+   * Records bounded exact source excerpts returned by read.
    *
    * Context neighbors (and direct IDs discovered through bash) may not have
    * appeared in search. They are first promoted to candidates with an explicit
    * read_expansion provenance entry, then marked as read evidence.
    */
   recordRead(
-    records: readonly MemoryRecord[],
+    evidenceRecords: readonly MemoryEvidence[],
     step = this.nextStep(),
-  ): MemoryRecord[] {
-    for (const record of records) {
-      this.assertScope(record);
-      if (!this.candidatesById.has(record.memoryId)) {
-        this.upsertCandidate(record, compactPreview(record.content), {
+  ): MemoryEvidence[] {
+    for (const evidence of evidenceRecords) {
+      this.assertScope(evidence);
+      if (!this.candidatesById.has(evidence.memoryId)) {
+        this.upsertCandidate(evidence, compactPreview(evidence.content), {
           step,
           tool: "read_expansion",
         });
       }
 
-      const candidate = this.candidatesById.get(record.memoryId);
+      const candidate = this.candidatesById.get(evidence.memoryId);
       if (!candidate) {
-        throw new Error(`Internal ledger error: missing ${record.memoryId}`);
+        throw new Error(`Internal ledger error: missing ${evidence.memoryId}`);
       }
       candidate.read = true;
-      if (!this.evidenceById.has(record.memoryId)) {
+      if (!this.evidenceById.has(evidence.memoryId)) {
         const evidenceRef = this.evidenceIdByRef.size + 1;
-        this.evidenceRefById.set(record.memoryId, evidenceRef);
-        this.evidenceIdByRef.set(evidenceRef, record.memoryId);
+        this.evidenceRefById.set(evidence.memoryId, evidenceRef);
+        this.evidenceIdByRef.set(evidenceRef, evidence.memoryId);
       }
-      this.evidenceById.set(record.memoryId, cloneRecord(record));
+      this.evidenceById.set(evidence.memoryId, cloneEvidence(evidence));
     }
     this.assertInvariants();
-    return records.map(cloneRecord);
+    return evidenceRecords.map(cloneEvidence);
   }
 
   recordBashDiscoveries(
@@ -226,6 +231,7 @@ export class MemoryLedger {
       throw new Error("evidenceSummary must not be empty");
     }
 
+    const seenCitationIds = new Set<string>();
     const citations = input.citations.map((citation) => {
       const memoryId = citation.memoryId.trim();
       const supports = citation.supports.trim();
@@ -242,8 +248,22 @@ export class MemoryLedger {
             `before citing it, or remove the citation.`,
         );
       }
+      if (seenCitationIds.has(memoryId)) {
+        throw new Error(`Duplicate citation memory: ${memoryId}`);
+      }
+      seenCitationIds.add(memoryId);
       return { memoryId, supports };
     });
+    const selectedEvidenceChars = [...seenCitationIds].reduce(
+      (sum, memoryId) => sum + this.evidenceById.get(memoryId)!.content.length,
+      0,
+    );
+    if (selectedEvidenceChars > MAX_SELECTED_EVIDENCE_CHARS) {
+      throw new Error(
+        `Selected evidence exceeds the ${String(MAX_SELECTED_EVIDENCE_CHARS)} ` +
+          "character runtime budget; cite a smaller direct evidence set or mark the package insufficient",
+      );
+    }
 
     const inventory = input.inventory?.map((entry) => {
       const item = entry.item.trim();
@@ -324,7 +344,7 @@ export class MemoryLedger {
     }
   }
 
-  private assertScope(record: MemoryRecord): void {
+  private assertScope(record: Pick<MemoryRecord, "scopeId" | "memoryId">): void {
     if (record.scopeId !== this.scopeId) {
       throw new Error(
         `Memory belongs to scope ${record.scopeId}, expected ${this.scopeId}: ${record.memoryId}`,
@@ -333,7 +353,10 @@ export class MemoryLedger {
   }
 
   private upsertCandidate(
-    record: MemoryRecord,
+    record: Pick<
+      MemoryRecord,
+      "memoryId" | "scopeId" | "sessionId" | "turnIndex" | "role" | "timestamp"
+    >,
     preview: string,
     discovery: MemoryCandidate["discoveries"][number],
   ): void {

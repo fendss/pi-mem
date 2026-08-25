@@ -1,6 +1,7 @@
 import { createBashRoTool } from "./bash-tool.js";
 import type { CreatePiMemToolsOptions, PiMemTools } from "./contracts.js";
 import { createFinishTool } from "./finish-tool.js";
+import { createDefineOperatorTool } from "./define-operator-tool.js";
 import { createReadTool } from "./read-tool.js";
 import { createSearchTool } from "./search-tool.js";
 
@@ -13,6 +14,14 @@ export function createPiMemTools(
     );
   }
   const search = createSearchTool(options);
+  const defineOperator =
+    options.operatorDefinitions === undefined ||
+    options.operatorDefinitions.remainingDefinitions() === 0
+    ? undefined
+    : createDefineOperatorTool({
+        ...options,
+        operatorDefinitions: options.operatorDefinitions,
+      });
   const read = createReadTool(options);
   const bashRo =
     options.bashRo === undefined
@@ -22,13 +31,19 @@ export function createPiMemTools(
           bashRo: options.bashRo,
         });
   const finish = createFinishTool(options);
-  return bashRo === undefined
-    ? { search, read, finish, all: [search, read, finish] }
-    : {
-        search,
-        read,
-        bashRo,
-        finish,
-        all: [search, read, bashRo, finish],
-      };
+  const all = [
+    search,
+    ...(defineOperator === undefined ? [] : [defineOperator]),
+    read,
+    ...(bashRo === undefined ? [] : [bashRo]),
+    finish,
+  ];
+  return {
+    search,
+    ...(defineOperator === undefined ? {} : { defineOperator }),
+    read,
+    ...(bashRo === undefined ? {} : { bashRo }),
+    finish,
+    all,
+  };
 }
