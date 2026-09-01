@@ -345,12 +345,17 @@ export function buildTimelineOperatorResult(
   const rows = hits.map((hit, sourceOrder) => {
     const sessionTimestamp = parseSourceTimestamp(hit.record.timestamp);
     const sessionDate = sessionTimestamp === undefined ? undefined : isoDate(sessionTimestamp);
-    const mentions = explicitDates(
-      hit.record.content,
-      sessionTimestamp === undefined
-        ? undefined
-        : new Date(sessionTimestamp).getUTCFullYear(),
-    );
+    const mentions = [
+      ...new Set([
+        ...explicitDates(
+          hit.record.content,
+          sessionTimestamp === undefined
+            ? undefined
+            : new Date(sessionTimestamp).getUTCFullYear(),
+        ),
+        ...(hit.operatorTemporalFacts ?? []).map((fact) => fact.resolvedDate),
+      ]),
+    ].sort();
     return {
       sourceOrder,
       row: {

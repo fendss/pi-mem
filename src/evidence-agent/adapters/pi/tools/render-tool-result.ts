@@ -29,8 +29,8 @@ export function renderEvidenceOperator(
       : ` | mentioned_dates=${row.mentionedDates.join(",")}`;
     const numeric = row.value === undefined
       ? ""
-      : ` | value=${String(row.value)} ${row.unit ?? ""} | value_kind=${row.valueKind ?? "unknown"} | occurrence_ref=candidate:${String(ledger.candidateRef(row.memoryId))}`;
-    const candidateRef = ledger.candidateRef(row.memoryId);
+      : ` | value=${String(row.value)} ${row.unit ?? ""} | value_kind=${row.valueKind ?? "unknown"} | occurrence_ref=candidate:${String(ledger.candidateRefForQuote(row.memoryId, row.quote))}`;
+    const candidateRef = ledger.candidateRefForQuote(row.memoryId, row.quote);
     return `- [candidate:${String(candidateRef ?? "unavailable")}] | slot=${JSON.stringify(row.slot)}${temporal}${mentions}${numeric} | ${row.quote}`;
   });
   const plan = result.temporalPlan === undefined
@@ -78,26 +78,32 @@ export function renderCandidates(
     const matched = discovery?.query === undefined
       ? ""
       : ` | matched_query=${JSON.stringify(discovery.query)} | rank=${String(discovery.rank ?? "unknown")}`;
-    return `- [candidate:${String(ledger.candidateRef(candidate.memoryId))}]${time}${temporalSuffix(candidate.timestamp, questionDate)} | turn=${String(candidate.turnIndex)} | role=${candidate.role}${matched} | ${candidate.preview}`;
+    return `- [candidate:${String(ledger.candidateRef(candidate.candidateId))}]${time}${temporalSuffix(candidate.timestamp, questionDate)} | turn=${String(candidate.turnIndex)} | role=${candidate.role}${matched} | ${candidate.preview}`;
   });
   return [
-    `candidate_refs=${JSON.stringify(candidates.map((candidate) => ledger.candidateRef(candidate.memoryId)))}`,
+    `candidate_refs=${JSON.stringify(candidates.map((candidate) => ledger.candidateRef(candidate.candidateId)))}`,
     ...lines,
   ].join("\n");
 }
 
-export function renderMemories(
+export function renderInspectedEvidence(
   memories: readonly MemoryEvidence[],
   ledger: MemoryLedger,
   questionDate?: string,
+  candidateIds: readonly string[] = [],
 ): string {
   return memories
-    .map((memory) => {
+    .map((memory, index) => {
       const time = memory.timestamp ? ` ${memory.timestamp}` : "";
       const projection = memory.truncated
         ? ` | bounded_exact_excerpts=true | source_chars=${String(memory.sourceContentLength)}`
         : "";
-      return `[candidate:${String(ledger.candidateRef(memory.memoryId))}; read:true]${time}${temporalSuffix(memory.timestamp, questionDate)} ${memory.role}${projection}\n${memory.content}`;
+      const candidateId = candidateIds[index] ?? memory.memoryId;
+      return `[evidence:${String(ledger.evidenceRef(memory.memoryId))}; ` +
+        `candidate:${String(ledger.candidateRef(candidateId))}; ` +
+        `read:true; auto_commit_on_finish:true]${time}` +
+        `${temporalSuffix(memory.timestamp, questionDate)} ${memory.role}` +
+        `${projection}\n${memory.content}`;
     })
     .join("\n\n");
 }

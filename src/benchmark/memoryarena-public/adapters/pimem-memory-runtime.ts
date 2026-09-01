@@ -1,4 +1,5 @@
 import {
+  OperatorEvolutionCatalog,
   runPiMem,
   type PiMemResult,
   type PiMemRuntimeStore,
@@ -16,7 +17,9 @@ import {
 import { sha256 } from "../../../util.js";
 import {
   MemoryArenaPublicError,
+  type MemoryArenaOperatorExperimentInput,
   type MemoryArenaOriginalChunk,
+  type MemoryArenaAppendMessage,
   type MemoryArenaRetrievalResult,
 } from "../model/memory-backend.js";
 import type {
@@ -51,6 +54,7 @@ function appendRequestIdentity(options: {
   generation: number;
   ordinal: number;
   chunk: string;
+  messages?: readonly MemoryArenaAppendMessage[];
 }): { requestId: string; requestHash: string; sourceSessionId: string } {
   const userHash = sha256(options.userId).slice(0, 24);
   const sourceSessionId = `chunk-${options.ordinal}`;
@@ -62,6 +66,7 @@ function appendRequestIdentity(options: {
       generation: options.generation,
       ordinal: options.ordinal,
       chunk: options.chunk,
+      ...(options.messages === undefined ? {} : { messages: options.messages }),
     })),
     sourceSessionId,
   };
@@ -120,8 +125,85 @@ function mapUpstreamError(
       retryable: true,
       cause: error,
     });
+  } else if (!(error instanceof MemoryArenaPublicError)) {
+    const piMemFailure = memoryArenaPiMemRunFailure(error);
+    if (piMemFailure !== undefined) mapped = piMemFailure;
   }
   throw mapped;
+}
+
+function errorRecord(error: unknown): Record<string, unknown> | undefined {
+  return typeof error === "object" && error !== null
+    ? error as Record<string, unknown>
+    : undefined;
+}
+
+/** Converts PiMem method/provider failures into a stable, content-free API policy. */
+export function memoryArenaPiMemRunFailure(
+  error: unknown,
+): MemoryArenaPublicError | undefined {
+  if (!(error instanceof Error) || error.name !== "PiMemRunError") {
+    return undefined;
+  }
+  const rawCode = errorRecord(error)?.code;
+  const code = typeof rawCode === "string" ? rawCode : undefined;
+  if (
+    code === "tool_protocol_exhausted" ||
+    (code === undefined && /^Protocol error:/u.test(error.message))
+  ) {
+    return new MemoryArenaPublicError({
+      code: "retrieval_agent_protocol_error",
+      message: "PiMem retrieval agent stopped without a valid finish result",
+      httpStatus: 422,
+      retryable: false,
+      cause: error,
+    });
+  }
+  if (
+    code === "turn_budget_exhausted" ||
+    code === "tool_budget_exhausted"
+  ) {
+    return new MemoryArenaPublicError({
+      code: "retrieval_agent_budget_exhausted",
+      message: "PiMem retrieval agent exhausted its execution budget",
+      httpStatus: 422,
+      retryable: false,
+      cause: error,
+    });
+  }
+  if (
+    code === "run_timeout" ||
+    (code === undefined && /exceeded the \d+ms run limit/iu.test(error.message))
+  ) {
+    return new MemoryArenaPublicError({
+      code: "retrieval_agent_timeout",
+      message: "PiMem retrieval agent exceeded its run time limit",
+      httpStatus: 504,
+      retryable: false,
+      cause: error,
+    });
+  }
+  if (
+    code === "provider_error" ||
+    (code === undefined && /(?:\bprovider\b|chat completion|finish_reason)/iu.test(
+      error.message,
+    ))
+  ) {
+    return new MemoryArenaPublicError({
+      code: "upstream_failure",
+      message: "PiMem retrieval provider returned a non-transient failure",
+      httpStatus: 502,
+      retryable: false,
+      cause: error,
+    });
+  }
+  return new MemoryArenaPublicError({
+    code: "retrieval_agent_failed",
+    message: "PiMem retrieval agent failed",
+    httpStatus: 500,
+    retryable: false,
+    cause: error,
+  });
 }
 
 /** Maps the official memory backend lifecycle onto immutable PiMem source chunks. */
@@ -138,6 +220,7 @@ export class PiMemMemoryArenaAdapter
     generation: number;
     ordinal: number;
     chunk: string;
+    messages?: readonly MemoryArenaAppendMessage[];
   }): Promise<void> {
     const scopeId = memoryArenaPublicScopeId(options.userId, options.generation);
     const identity = appendRequestIdentity(options);
@@ -148,7 +231,7 @@ export class PiMemMemoryArenaAdapter
         requestHash: identity.requestHash,
         scopeId,
         sourceSessionId: identity.sourceSessionId,
-        messages: [{ role: "other", content: options.chunk }],
+        messages: options.messages ?? [{ role: "other", content: options.chunk }],
       });
     } catch (error) {
       mapUpstreamError(error, "memory append");
@@ -192,10 +275,20 @@ export class PiMemMemoryArenaAdapter
     userId: string;
     generation: number;
     question: string;
+    operatorExperiment?: MemoryArenaOperatorExperimentInput;
   }): Promise<MemoryArenaRetrievalResult> {
     const scopeId = memoryArenaPublicScopeId(options.userId, options.generation);
-    let result: PiMemResult;
     try {
+      const experiment = options.operatorExperiment;
+      const evolution = experiment?.mode === "cumulative"
+        ? experiment.evolutionSnapshot === undefined
+          ? new OperatorEvolutionCatalog({
+              capacity: 4,
+              explorationSlots: 1,
+              promotionQuestions: 2,
+            })
+          : OperatorEvolutionCatalog.restore(experiment.evolutionSnapshot)
+        : undefined;
       const runtimeOptions: RunPiMemOptions = {
         store: this.options.runtimeStore,
         operatorRegistry: this.options.operatorRegistry,
@@ -203,6 +296,13 @@ export class PiMemMemoryArenaAdapter
         scopeId,
         question: options.question,
         skill: this.options.skill ?? "pimem-v0",
+        ...(experiment === undefined
+          ? {}
+          : {
+              maxSearchCalls: experiment.maxSearchCalls,
+              maxOperatorDefinitions: experiment.mode === "static" ? 0 : 4,
+              operatorDefinitions: evolution?.definitionsForNextQuestion() ?? [],
+            }),
         ...(this.options.maxRunMs === undefined
           ? {}
           : { maxRunMs: this.options.maxRunMs }),
@@ -213,35 +313,62 @@ export class PiMemMemoryArenaAdapter
           ? {}
           : { maxToolCalls: this.options.maxToolCalls }),
       };
-      result = await this.run(runtimeOptions);
+      const result: PiMemResult = await this.run(runtimeOptions);
+      const observation = evolution?.observe(experiment!.questionId, result);
+      const evolutionSnapshot = evolution?.snapshot();
+      const operatorExperiment = experiment === undefined
+        ? undefined
+        : {
+            mode: experiment.mode,
+            questionId: experiment.questionId,
+            maxSearchCalls: experiment.maxSearchCalls,
+            retrievalStatus: result.status,
+            searchCalls: result.metrics.searchCalls,
+            operatorDefinitions: result.operatorDefinitions.map((item) =>
+              structuredClone(item)
+            ),
+            ...(observation === undefined ? {} : { observation }),
+            ...(evolutionSnapshot === undefined ? {} : { evolutionSnapshot }),
+          };
+      return {
+        runId: result.runId,
+        status: result.status,
+        citations: result.citations.map((citation) => ({ ...citation })),
+        evidenceSummary: result.evidenceSummary,
+        evidence: result.evidence.map((source) => ({
+          ...source,
+          excerpts: source.excerpts.map((excerpt) => ({ ...excerpt })),
+          metadata: structuredClone(source.metadata),
+        })),
+        ...(result.inventory === undefined
+          ? {}
+          : {
+              inventory: result.inventory.map((item) => ({
+                item: item.item,
+                memoryIds: [...item.memoryIds],
+              })),
+            }),
+        trace: result.trace.map((entry) => ({ ...entry })),
+        usage: {
+          ...result.usage,
+          cost: { ...result.usage.cost },
+        },
+        retrievalModel: {
+          ...result.retrievalModel,
+          responseModels: [...result.retrievalModel.responseModels],
+        },
+        audit: {
+          evidence_summary: result.evidenceSummary,
+          metrics: result.metrics,
+          retrieval: result.retrieval,
+          retrieval_model: result.retrievalModel,
+          candidates: result.candidates,
+          evidence: result.evidence,
+        },
+        ...(operatorExperiment === undefined ? {} : { operatorExperiment }),
+      };
     } catch (error) {
       mapUpstreamError(error, "retrieval");
     }
-    return {
-      runId: result.runId,
-      status: result.status,
-      citations: result.citations.map((citation) => ({ ...citation })),
-      ...(result.inventory === undefined
-        ? {}
-        : {
-            inventory: result.inventory.map((item) => ({
-              item: item.item,
-              memoryIds: [...item.memoryIds],
-            })),
-          }),
-      trace: result.trace.map((entry) => ({ ...entry })),
-      usage: {
-        ...result.usage,
-        cost: { ...result.usage.cost },
-      },
-      audit: {
-        evidence_summary: result.evidenceSummary,
-        metrics: result.metrics,
-        retrieval: result.retrieval,
-        retrieval_model: result.retrievalModel,
-        candidates: result.candidates,
-        evidence: result.evidence,
-      },
-    };
   }
 }

@@ -22,7 +22,9 @@ from runtime.usage import (  # noqa: E402
 from upstream.executor import (  # noqa: E402
     PRODUCTION_SEAM_BUNDLE_SHA256,
     _provider_error,
+    _verify_effective_config_lock,
     _verify_checkout,
+    _worker_provider_error,
     production_seam_identity,
 )
 from upstream.worker import (  # noqa: E402
@@ -68,6 +70,41 @@ class UpstreamWorkerExecutorTests(unittest.TestCase):
                 self.assertIsNotNone(error)
                 self.assertEqual(error.status_code, status)
         self.assertIsNone(_provider_error("JSON decode error at position 401", stage="official"))
+
+    def test_successful_worker_output_is_not_reclassified_from_log_text(self):
+        response = {"status": "ok", "error": "", "swallowed_errors": []}
+        self.assertIsNone(
+            _worker_provider_error(
+                response,
+                0,
+                "answer: the request timeout is 30 seconds; stay within rate limit",
+                "",
+            )
+        )
+        self.assertIsNotNone(
+            _worker_provider_error(
+                {"status": "infra_error", "error": "request timed out"},
+                1,
+                "",
+                "",
+            )
+        )
+
+    def test_effective_config_cannot_be_resigned_after_run_lock(self):
+        config = self.root / "formal_reasoning.json"
+        provenance = self.root / "formal_reasoning.manifest.json"
+        config.write_text(json.dumps({"agent": {"model_name": "official"}}))
+        provenance.write_text(json.dumps({"effective_config_sha256": file_sha256(config)}))
+        locked = {
+            "effective_config_sha256": file_sha256(config),
+            "provenance_sha256": file_sha256(provenance),
+        }
+        _verify_effective_config_lock(config, provenance, locked)
+
+        config.write_text(json.dumps({"agent": {"model_name": "substituted"}}))
+        provenance.write_text(json.dumps({"effective_config_sha256": file_sha256(config)}))
+        with self.assertRaisesRegex(Exception, "differs from locked run manifest"):
+            _verify_effective_config_lock(config, provenance, locked)
 
     def test_nested_dotenv_provider_override_is_rejected(self):
         checkout = self.root / "checkout"

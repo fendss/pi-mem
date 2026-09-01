@@ -1,10 +1,12 @@
 import type {
+  MemoryArenaAppendMessage,
   MemoryArenaGenerationState,
   MemoryArenaOperationEmbeddingAudit,
   MemoryArenaOperationAuditFailure,
   MemoryArenaOperationAuditStart,
   MemoryArenaOperationAuditSuccess,
   MemoryArenaOriginalChunk,
+  MemoryArenaOperatorExperimentInput,
   MemoryArenaRetrievalResult,
   MemoryArenaWrapAuditRecord,
 } from "../model/memory-backend.js";
@@ -34,6 +36,7 @@ export interface MemoryArenaChunkMemory {
     generation: number;
     ordinal: number;
     chunk: string;
+    messages?: readonly MemoryArenaAppendMessage[];
   }): Promise<void>;
   readOriginalChunks(options: {
     userId: string;
@@ -54,6 +57,7 @@ export interface MemoryArenaEvidenceRetriever {
     userId: string;
     generation: number;
     question: string;
+    operatorExperiment?: MemoryArenaOperatorExperimentInput;
   }): Promise<MemoryArenaRetrievalResult>;
 }
 

@@ -16,21 +16,31 @@ export type {
 export {
   MAX_EVIDENCE_CHARS_PER_MEMORY,
   MAX_READ_RESULT_CHARS,
+  MAX_INSPECTED_EVIDENCE_CHARS,
+  MAX_INSPECTED_EVIDENCE_COUNT,
+  MAX_SELECTED_EVIDENCE_COUNT,
   MAX_SELECTED_EVIDENCE_CHARS,
   projectMemoryEvidence,
   projectMemoryEvidenceBatch,
+  projectPassageEvidence,
   renderEvidenceExcerpts,
 } from "./model/memory-evidence.js";
 export {
   PIMEM_HARNESS_VERSION,
   PiMemRunError,
   runPiMem,
+  type PiMemFailureCode,
   type PiMemFailureDiagnostics,
+  type PiMemProviderFailureKind,
   type PiMemRuntimeStore,
   type RunPiMemOptions,
 } from "./run-pimem.js";
 export {
   PI_MEM_BASE_SYSTEM_PROMPT,
+  PI_MEM_TOOL_SYSTEM_PROMPT,
+  PIMEM_MINIMAL_SKILL_HASH,
+  PIMEM_MINIMAL_SKILL_TEXT,
+  PIMEM_MINIMAL_SKILL_VERSION,
   PIMEM_SKILL_HASH,
   PIMEM_SKILL_TEXT,
   PIMEM_SKILL_VERSION,
@@ -51,3 +61,12 @@ export type {
 export { createEphemeralMemoryContext } from "./adapters/pi/ephemeral-context.js";
 export { createPiMemTools } from "./adapters/pi/tools.js";
 export { MemoryLedger } from "./model/memory-ledger.js";
+export {
+  OperatorEvolutionCatalog,
+  type OperatorEvolutionDecision,
+  type OperatorEvolutionEntrySnapshot,
+  type OperatorEvolutionObservation,
+  type OperatorEvolutionOptions,
+  type OperatorEvolutionPhase,
+  type OperatorEvolutionSnapshot,
+} from "./model/operator-evolution.js";

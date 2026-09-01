@@ -263,6 +263,7 @@ python3 -B -m upstream.prepare \
   --retrieval-model "$MA_RETRIEVAL_MODEL" \
   --embedding-model "$MA_EMBEDDING_MODEL" \
   --pimem-root "$MA_PIMEM_ROOT" \
+  --config-dir "$MA_SETUP/bootstrap/effective-configs" \
   --output "$MA_SETUP/source-run.lock.json"
 ```
 
@@ -314,6 +315,11 @@ export PIMEM_DATA_DIR="$MA_WORK/pimem-data"
 export HOST="127.0.0.1"
 export PORT="3111"
 export PIMEM_MODEL="$MA_RETRIEVAL_MODEL"
+export PIMEM_LOGICAL_MODEL_ID="$MA_RETRIEVAL_MODEL"
+export PIMEM_RETRIEVAL_PROTOCOL="openai-completions"
+export PIMEM_SOURCE_IDENTITY="$(git rev-parse HEAD)"
+export PIMEM_BUILD_IDENTITY="$(git rev-parse HEAD)-production-build"
+export PIMEM_MAX_SEARCH_CALLS="4"
 export PIMEM_EMBEDDING_MODEL="$MA_EMBEDDING_MODEL"
 export PIMEM_AGENT_BASE_URL="$MA_PROVIDER_PROXY"
 export OPENAI_API_BASE="$MA_PROVIDER_PROXY"
@@ -322,6 +328,12 @@ export OPENAI_BASE_URL="$MA_PROVIDER_PROXY"
 # PIMEM_EMBEDDING_API_KEY in this shell.
 npm run serve:memoryarena-public
 ```
+
+The source/build values and retrieval contract are exposed by `GET /runtime`
+under a stable hash. The response also carries a separate persistent-store
+identity created in `PIMEM_DATA_DIR`; clients use that store identity for safe
+ingestion reuse and the retrieval-contract hash for query resume. Formal
+runners fail closed when either identity is missing or changes.
 
 Each accepted attempt contains both the privacy-safe operation lifecycle and
 `upstream/pimem-wrap-audits.jsonl`, which preserves the full PiMem retrieval

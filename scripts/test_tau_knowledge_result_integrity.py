@@ -17,6 +17,27 @@ SPEC.loader.exec_module(integrity)
 
 
 class TauKnowledgeResultIntegrityTests(unittest.TestCase):
+    def test_method_execution_contract_excludes_only_infrastructure_controls(self):
+        baseline = {
+            "pimem_max_input_ms": 900_000,
+            "pimem_max_turns_per_input": 64,
+            "pimem_max_tool_calls_per_input": 128,
+            "bridge_response_timeout_seconds": 930.0,
+            "slots": 4,
+            "infra_resume_rounds": 2,
+        }
+        infrastructure_change = {**baseline, "slots": 16, "infra_resume_rounds": 8}
+        method_change = {**baseline, "pimem_max_turns_per_input": 1}
+
+        self.assertEqual(
+            integrity.method_execution_contract(baseline),
+            integrity.method_execution_contract(infrastructure_change),
+        )
+        self.assertNotEqual(
+            integrity.method_execution_contract(baseline),
+            integrity.method_execution_contract(method_change),
+        )
+
     def simulations(self, reason="user_stop", with_reward=True):
         seeds = integrity.trial_seeds(300, 2)
         rows = []

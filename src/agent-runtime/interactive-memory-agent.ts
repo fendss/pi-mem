@@ -12,6 +12,7 @@ import type {
 } from "@earendil-works/pi-ai";
 import { Unsafe, type TSchema } from "typebox";
 import {
+  aggregateAssistantUsage,
   assistantMessageText,
   createEphemeralMemoryContext,
   createPiMemTools,
@@ -39,9 +40,9 @@ const ACTION_SKILL_PATH = fileURLToPath(
 );
 
 export const PIMEM_ACTION_SKILL_TEXT = readFileSync(ACTION_SKILL_PATH, "utf8");
-export const PIMEM_ACTION_SKILL_VERSION = "pimem-knowledge-action-v3";
+export const PIMEM_ACTION_SKILL_VERSION = "pimem-knowledge-action-evidence-transaction-v5";
 export const PIMEM_ACTION_SKILL_HASH = sha256(PIMEM_ACTION_SKILL_TEXT);
-export const PIMEM_INTERACTIVE_HARNESS_VERSION = "pimem-interactive-agent-v4";
+export const PIMEM_INTERACTIVE_HARNESS_VERSION = "pimem-interactive-agent-v6";
 export const DEFAULT_INTERACTIVE_MEMORY_MAX_TURNS_PER_INPUT = 64;
 export const DEFAULT_INTERACTIVE_MEMORY_MAX_TOOL_CALLS_PER_INPUT = 128;
 
@@ -101,7 +102,7 @@ export interface InteractiveAgentOutput {
     operatorDefinitions: SearchOperatorDefinitionSnapshot[];
     trace: InteractiveMemoryTraceEntry[];
     candidateCount: number;
-    evidenceCount: number;
+    inspectedEvidenceCount: number;
   };
 }
 
@@ -144,8 +145,8 @@ export function interactiveMemorySystemPrompt(options: {
   const catalog = renderSearchOperatorCatalog(options.operatorRegistry.list());
   return [
     "You are a knowledge-grounded interactive agent. Help the user complete the domain task while obeying the supplied domain policy.",
-    "Memory operations are part of your reasoning loop: search locates candidate source documents, read verifies exact candidates, and optional bash_ro performs read-only navigation. Domain tools affect the external environment.",
-    "Never issue memory operations and domain action tools in the same assistant tool-call batch. Search and read first, then issue domain tools in a later turn. Do not mention internal candidate numbers or memory IDs to the user.",
+    "Memory operations are part of your reasoning loop: search locates candidate source documents, read verifies exact candidates without committing them, and optional bash_ro performs read-only navigation. Domain tools affect the external environment.",
+    "Never issue memory operations and domain action tools in the same assistant tool-call batch. Search and read first, then issue domain tools in a later turn. Do not mention internal candidate handles, evidence handles, or memory IDs to the user.",
     `<domain_policy>\n${options.domainPolicy}\n</domain_policy>`,
     `<search_operator_catalog>\n${catalog}\n</search_operator_catalog>`,
     activeSkillPrompt(options.skill),
@@ -257,7 +258,7 @@ export class InteractiveMemoryAgentSession {
     this.ledger = new MemoryLedger(options.scopeId);
     this.externalToolNames = new Set(options.externalTools.map((tool) => tool.name));
     this.operatorCatalog = options.operatorRegistry.forkForRun(
-      options.maxOperatorDefinitions ?? 2,
+      options.maxOperatorDefinitions ?? 8,
     );
     for (const definition of options.operatorDefinitions ?? []) {
       this.operatorCatalog.define(structuredClone(definition));
@@ -288,6 +289,7 @@ export class InteractiveMemoryAgentSession {
     });
     const internalTools = [
       memoryTools.search,
+      memoryTools.searchMore,
       ...(memoryTools.defineOperator === undefined
         ? []
         : [memoryTools.defineOperator]),
@@ -444,6 +446,7 @@ export class InteractiveMemoryAgentSession {
     this.inputToolCalls = 0;
     this.inputLimitError = undefined;
     const traceStart = this.trace.length;
+    const messageStart = this.agent.state.messages.length;
     const captured: ExternalToolCall[] = [];
     this.activeCapture = captured;
     let timedOut = false;
@@ -488,7 +491,9 @@ export class InteractiveMemoryAgentSession {
         ? assistantMessageText(assistant).trim() || null
         : null,
       toolCalls: captured,
-      usage: assistant.usage,
+      usage: aggregateAssistantUsage(
+        this.agent.state.messages.slice(messageStart),
+      ),
       model: {
         providerId: this.options.modelRuntime.providerId,
         modelId: this.options.modelRuntime.modelId,
@@ -509,7 +514,7 @@ export class InteractiveMemoryAgentSession {
         operatorDefinitions: this.operatorCatalog.snapshots(),
         trace: this.trace.slice(traceStart),
         candidateCount: this.ledger.candidates.length,
-        evidenceCount: this.ledger.evidence.length,
+        inspectedEvidenceCount: this.ledger.inspectedEvidence.length,
       },
     };
   }

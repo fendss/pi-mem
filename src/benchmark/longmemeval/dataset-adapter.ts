@@ -28,7 +28,7 @@ export interface LongMemEvalAdapterResult {
 }
 
 export const LONGMEMEVAL_ANSWER_PROMPT_VERSION =
-  "ldbd-longmemeval-answer-48dbfff3-retrieval-package-v1";
+  "ldbd-longmemeval-answer-read-evidence-v6";
 
 export const LONGMEMEVAL_ANSWER_PROMPT_TEMPLATE = `You are asked to answer a question based on your memories of a conversation.
 
@@ -66,9 +66,16 @@ export function buildLongMemEvalAnswerPrompt(
   const citedIds = new Set(
     retrieval.citations.map((citation) => citation.memoryId),
   );
-  const selected = retrieval.evidence.filter((memory) =>
-    citedIds.has(memory.memoryId),
-  );
+  const evidenceIds = new Set(retrieval.evidence.map((memory) => memory.memoryId));
+  if (
+    citedIds.size !== retrieval.citations.length ||
+    evidenceIds.size !== retrieval.evidence.length ||
+    citedIds.size !== evidenceIds.size ||
+    [...evidenceIds].some((memoryId) => !citedIds.has(memoryId))
+  ) {
+    throw new Error("LongMemEval exact read package and citations do not match");
+  }
+  const selected = retrieval.evidence;
   const userMemories = selected
     .filter((memory) => memory.role === "user")
     .map(renderAnswerMemory)
@@ -77,24 +84,7 @@ export function buildLongMemEvalAnswerPrompt(
     .filter((memory) => memory.role !== "user")
     .map(renderAnswerMemory)
     .join("\n\n");
-  const packageLines = [
-    `status=${retrieval.status}`,
-    `evidence_summary=${retrieval.evidenceSummary}`,
-    ...(retrieval.count === undefined ? [] : [`count=${retrieval.count}`]),
-    ...(retrieval.inventory ?? []).map(
-      (item) =>
-        `inventory=${item.item} [${item.memoryIds.join(", ")}]`,
-    ),
-    ...retrieval.citations.map(
-      (citation) =>
-        `reference memoryId=${citation.memoryId}: ${citation.supports}`,
-    ),
-  ];
   const memories = [
-    "<retrieval_package>",
-    packageLines.join("\n"),
-    "</retrieval_package>",
-    "",
     '<source_memories role="user">',
     userMemories || "(none selected)",
     "</source_memories>",

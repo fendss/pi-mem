@@ -24,6 +24,100 @@ async function close(server: Server): Promise<void> {
 }
 
 describe("OpenAI non-stream transport", () => {
+  it("bounds a hung attempt and retries it only within the configured budget", async () => {
+    let attempts = 0;
+    const server = createServer((_request, response) => {
+      attempts += 1;
+      if (attempts === 1) return;
+      response.writeHead(200, { "content-type": "application/json" });
+      response.end(JSON.stringify({
+        id: "chatcmpl-after-timeout",
+        model: "gpt-4o-mini",
+        choices: [{ finish_reason: "stop", message: { content: "Recovered." } }],
+      }));
+    });
+    const baseUrl = await listen(server);
+    try {
+      const model: Model<"openai-completions"> = {
+        id: "gpt-4o-mini",
+        name: "GPT-4o mini",
+        api: "openai-completions",
+        provider: "test-provider",
+        baseUrl,
+        reasoning: false,
+        input: ["text"],
+        cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+        contextWindow: 128_000,
+        maxTokens: 16_384,
+      };
+      const stream = await openAINonStreamingStreamFn(model, {
+        messages: [{ role: "user", content: "Question", timestamp: 1 }],
+      }, {
+        apiKey: "unit-test-key",
+        // This tests retry semantics, not sub-20ms socket scheduling under load.
+        timeoutMs: 500,
+        maxRetries: 1,
+        maxRetryDelayMs: 1,
+      });
+      for await (const _event of stream) {
+        // Drain both attempts.
+      }
+      const result = await stream.result();
+
+      expect(attempts).toBe(2);
+      expect(result).toMatchObject({
+        stopReason: "stop",
+        content: [{ type: "text", text: "Recovered." }],
+      });
+    } finally {
+      await close(server);
+    }
+  });
+
+  it("does not turn a long provider Retry-After into an early retry", async () => {
+    let attempts = 0;
+    const server = createServer((_request, response) => {
+      attempts += 1;
+      response.writeHead(503, {
+        "content-type": "application/json",
+        "retry-after": "60",
+      });
+      response.end(JSON.stringify({ error: { message: "try later" } }));
+    });
+    const baseUrl = await listen(server);
+    try {
+      const model: Model<"openai-completions"> = {
+        id: "gpt-4o-mini",
+        name: "GPT-4o mini",
+        api: "openai-completions",
+        provider: "test-provider",
+        baseUrl,
+        reasoning: false,
+        input: ["text"],
+        cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+        contextWindow: 128_000,
+        maxTokens: 16_384,
+      };
+      const stream = await openAINonStreamingStreamFn(model, {
+        messages: [{ role: "user", content: "Question", timestamp: 1 }],
+      }, {
+        apiKey: "unit-test-key",
+        maxRetries: 1,
+        maxRetryDelayMs: 5,
+      });
+      for await (const _event of stream) {
+        // Drain the terminal error.
+      }
+      const result = await stream.result();
+
+      expect(attempts).toBe(1);
+      expect(result.stopReason).toBe("error");
+      expect(result.errorMessage).toContain("exceeding the 5ms retry delay limit");
+    } finally {
+      await close(server);
+    }
+  });
+
   it("retries a transient provider response without changing Qwen thinking", async () => {
     const payloads: Array<Record<string, unknown>> = [];
     const server = createServer(async (request, response) => {
@@ -353,7 +447,7 @@ describe("OpenAI non-stream transport", () => {
       response.writeHead(200, { "content-type": "application/json" });
       response.end(JSON.stringify({
         id: "chatcmpl-substituted",
-        model: "gpt-4.1-mini-2025-04-14",
+        model: "gpt-4o-mini-fast",
         choices: [{ finish_reason: "stop", message: { content: "No." } }],
       }));
     });
@@ -383,7 +477,7 @@ describe("OpenAI non-stream transport", () => {
       expect(events.at(-1)?.type).toBe("error");
       expect(result.stopReason).toBe("error");
       expect(result.errorMessage).toBe(
-        "Provider substituted model gpt-4.1-mini-2025-04-14; expected gpt-4o-mini",
+        "Provider substituted model gpt-4o-mini-fast; expected gpt-4o-mini",
       );
     } finally {
       await close(server);

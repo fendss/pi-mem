@@ -25,6 +25,7 @@ const ZERO_USAGE: AssistantMessage["usage"] = {
 function message(
   content: AssistantMessage["content"],
   stopReason: AssistantMessage["stopReason"],
+  usage: AssistantMessage["usage"] = ZERO_USAGE,
 ): AssistantMessage {
   return {
     role: "assistant",
@@ -33,7 +34,7 @@ function message(
     provider: "mock-provider",
     model: "mock-model",
     responseModel: "mock-model-2026-08-20",
-    usage: ZERO_USAGE,
+    usage,
     stopReason,
     timestamp: Date.now(),
   };
@@ -84,6 +85,59 @@ function scriptedRuntime(
 }
 
 describe("interactive PiMem agent runtime", () => {
+  it("aggregates usage across all model calls in one input turn", async () => {
+    const store: PiMemRuntimeStore = {
+      search: () => [],
+      read: () => [],
+      findMentionedMemoryIds: () => [],
+      getRecords: () => [],
+    };
+    const firstUsage: AssistantMessage["usage"] = {
+      input: 1,
+      output: 1,
+      cacheRead: 0,
+      cacheWrite: 0,
+      totalTokens: 2,
+      cost: { input: 0.1, output: 0.1, cacheRead: 0, cacheWrite: 0, total: 0.2 },
+    };
+    const secondUsage: AssistantMessage["usage"] = {
+      input: 4,
+      output: 4,
+      cacheRead: 0,
+      cacheWrite: 0,
+      totalTokens: 8,
+      cost: { input: 0.4, output: 0.4, cacheRead: 0, cacheWrite: 0, total: 0.8 },
+    };
+    const runtime = scriptedRuntime([
+      message([{
+        type: "toolCall",
+        id: "search-usage",
+        name: "search",
+        arguments: { operator: "lexical", queries: ["policy"] },
+      }], "toolUse", firstUsage),
+      message([{ type: "text", text: "No matching policy." }], "stop", secondUsage),
+    ], []);
+    const session = new InteractiveMemoryAgentSession({
+      store,
+      operatorRegistry: createSelectedSearchOperatorRegistry(store, ["lexical"]),
+      modelRuntime: runtime,
+      scopeId: "tau-scope",
+      domainPolicy: "Policy",
+      externalTools: [],
+    });
+
+    const result = await session.turn({ type: "user", content: "Find policy." });
+
+    expect(result.usage).toEqual({
+      input: 5,
+      output: 5,
+      cacheRead: 0,
+      cacheWrite: 0,
+      totalTokens: 10,
+      cost: { input: 0.5, output: 0.5, cacheRead: 0, cacheWrite: 0, total: 1 },
+    });
+  });
+
   it("reports the PiMem turn budget instead of a generic benchmark abort", async () => {
     const store: PiMemRuntimeStore = {
       search: () => [],
@@ -160,8 +214,16 @@ describe("interactive PiMem agent runtime", () => {
         arguments: {
           id: "policy-recall",
           summary: "Fuse exact and semantic policy recall.",
-          sources: [{ operator: "lexical" }, { operator: "hybrid" }],
-          combine: "rrf",
+          steps: [
+            { id: "exact", kind: "search", operator: "lexical" },
+            { id: "semantic", kind: "search", operator: "hybrid" },
+            {
+              id: "fused",
+              kind: "combine",
+              inputs: ["exact", "semantic"],
+              method: "rrf",
+            },
+          ],
         },
       }], "toolUse"),
       message([{
@@ -179,7 +241,7 @@ describe("interactive PiMem agent runtime", () => {
         id: "read-1",
         name: "read",
         arguments: {
-          candidateRefs: [1],
+          candidateRefs: ["C1"],
           contextBefore: 0,
           contextAfter: 0,
         },
@@ -194,7 +256,7 @@ describe("interactive PiMem agent runtime", () => {
     ], prompts);
     const registry = createSelectedSearchOperatorRegistry(
       store,
-      ["hybrid", "lexical", "coverage"],
+      ["hybrid", "lexical", "chronological"],
     );
     const session = new InteractiveMemoryAgentSession({
       store,
@@ -233,12 +295,13 @@ describe("interactive PiMem agent runtime", () => {
     ]);
     expect(action.audit).toMatchObject({
       candidateCount: 1,
-      evidenceCount: 1,
+      inspectedEvidenceCount: 1,
       skill: { mode: "pimem-v0" },
       operatorCatalog: { revision: 1 },
     });
     expect(prompts[0]).toContain(PIMEM_ACTION_SKILL_TEXT);
-    expect(prompts[0]).toContain("lexical@1");
+    expect(prompts[0]).toContain("id=lexical | version=3");
+    expect(prompts[0]).not.toContain("lexical@1");
     expect(() => registry.get("policy-recall")).toThrow(/unknown/iu);
 
     const final = await session.turn({
@@ -276,7 +339,7 @@ describe("interactive PiMem agent runtime", () => {
     });
 
     expect(baseline).not.toContain("<active_skill");
-    expect(treatment).toBe(`${baseline}\n\n<active_skill name="pimem-knowledge-action" version="pimem-knowledge-action-v3">\n${PIMEM_ACTION_SKILL_TEXT}\n</active_skill>`);
+    expect(treatment).toBe(`${baseline}\n\n<active_skill name="pimem-knowledge-action" version="pimem-knowledge-action-evidence-transaction-v5">\n${PIMEM_ACTION_SKILL_TEXT}\n</active_skill>`);
   });
 
   it("preserves the official initial assistant greeting before the first user turn", async () => {

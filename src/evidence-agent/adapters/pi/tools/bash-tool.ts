@@ -14,7 +14,7 @@ export function createBashRoTool(
     name: "bash_ro",
     label: "Explore raw memory",
     description:
-      "Run grep/sed/awk/find or small Python scripts over this scope's sanitized raw-memory files. memory.jsonl fields include memoryId, timestamp, sessionId, turnIndex, role, and content; print memoryId for every relevant row. The container is read-only and has no network. Output is navigation only; call read before citing.",
+      "Run grep/sed/awk/find or small Python scripts over this scope's sanitized raw-memory files. memory.jsonl fields include memoryId, timestamp, sessionId, turnIndex, role, and content; print memoryId for every relevant row. The container is read-only and has no network. Output is navigation only; call read for any source that should enter the final package.",
     parameters: BashRoParameters,
     async execute(_toolCallId, params, signal) {
       const command = params.command.trim();

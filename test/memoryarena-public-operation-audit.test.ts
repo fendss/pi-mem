@@ -16,6 +16,7 @@ import {
   MemoryArenaPublicError,
   MemoryArenaPublicMemoryBackend,
   type MemoryArenaChunkMemory,
+  type MemoryArenaCommittedEvidence,
   type MemoryArenaEmbeddingOperationMeter,
   type MemoryArenaEmbeddingMetrics,
   type MemoryArenaEvidenceRetriever,
@@ -62,6 +63,27 @@ async function temporaryPath(): Promise<{
 
 function sha256(value: string): string {
   return createHash("sha256").update(value, "utf8").digest("hex");
+}
+
+function exactEvidence(
+  memoryId: string,
+  content: string,
+): MemoryArenaCommittedEvidence {
+  const contentHash = sha256(content);
+  return {
+    memoryId,
+    scopeId: "test-scope",
+    sessionId: memoryId,
+    turnIndex: 0,
+    role: "other",
+    content,
+    contentHash,
+    sourceContentHash: contentHash,
+    sourceContentLength: content.length,
+    truncated: false,
+    excerpts: [{ start: 0, end: content.length, content }],
+    metadata: {},
+  };
 }
 
 function parseJsonLines(value: string): Array<Record<string, unknown>> {
@@ -438,6 +460,13 @@ describe("MemoryArena Public durable operation audit", () => {
             memoryId: `m-1-${retrievals - 1}`,
             supports: "selected",
           }],
+          evidenceSummary: "The committed passage is relevant.",
+          evidence: [exactEvidence(
+            `m-1-${retrievals - 1}`,
+            retrievals === 1
+              ? "SECRET first raw memory"
+              : "SECRET second raw memory",
+          )],
           trace: [],
           usage: retrievalUsage,
         };

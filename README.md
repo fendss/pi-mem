@@ -9,14 +9,15 @@ immutable raw memory
         ↓
 search / read / bash_ro
         ↓
-Pi Agent retrieves and organizes evidence
+Pi Agent searches and reads exact evidence
         ↓
-finish(sufficient | insufficient, citations)
+finish({})
         ↓
-caller-owned benchmark answer adapter
+harness-owned evidence package → caller-owned answer adapter
 ```
 
-For offline QA, PiMem stops at the cited evidence package. It does not own
+For offline QA, every exact source read by the retrieval agent is retained and
+deduplicated by the harness. PiMem stops at that cited evidence package. It does not own
 answer formatting or a universal answer prompt; each benchmark adapter supplies
 its own answer protocol. For an interactive environment, the same Agent keeps
 the search/read loop and delegates environment actions back to the official
@@ -38,8 +39,10 @@ runner. Ingest never invokes a generative model.
 - resumable Float32 derived embeddings that never modify raw memory;
 - exact `read` with neighboring source turns;
 - networkless, read-only Docker shell over one sanitized scope;
-- Pi Core retrieval-agent loop with internally consistent evidence summaries, citation supports, counts, and inventories;
-- structured `sufficient` / `insufficient` evidence selection;
+- Pi Core retrieval-agent loop where `read` retains exact evidence and the
+  harness owns citation, provenance, deduplication, and package formatting;
+- zero-argument `finish` with an optional `sufficient` / `insufficient`
+  coverage signal;
 - benchmark integrations for LongMemEval-S, AMA-Bench v4, and the official
   τ-Knowledge interactive environment;
 - automatic candidate, evidence, citation and tool-trace export;
@@ -254,6 +257,30 @@ adapter; changing from one model ID to another does not. Model calls default to
 Completions services. Provider credentials remain process-only environment
 variables or trusted `!command` entries; CLI flags never accept or print keys.
 
+### MemoryAgentBench
+
+The pinned black-box adapter is in
+[`integrations/memoryagentbench`](integrations/memoryagentbench/README.md). It
+preserves the upstream task templates and answer-model boundary for the ten
+selected MemoryAgentBench targets, while PiMem remains a separately started
+HTTP memory service. The adapter was integrated from
+`benchmark/memoryagentbench-adapters` at
+`c38de25c8779c770be3f0eb8f842119406ad4875` and extended with a fixed search
+budget plus three operator experiments:
+
+- `static`: only the registered operator catalog is available;
+- `ephemeral`: a question may define operators, but they are discarded before
+  the next question;
+- `cumulative`: evidence-contributing, query-agnostic definitions carry to the
+  next question within the same benchmark context.
+
+Each retrieval is checkpointed before the answer call, so a process interruption
+resumes from the exact wrapped prompt and evolution state. Retrieval or answer
+method failures are recorded once as empty, zero-score outcomes; resume cannot
+resample them. Answer-provider 408/429/5xx and transport outages instead resume
+from that exact pending prompt without rerunning retrieval. See the integration README for pinned data
+setup, commands, scoring, and audit fields.
+
 ### AMA-Bench v4
 
 The adapter accepts only the pinned official open-ended file: dataset revision
@@ -340,7 +367,8 @@ uv run --frozen --project ./vendor/tau2-bench --extra knowledge -- \
   --run-kind canary \
   --task-id task_001 \
   --skill pimem-v0 \
-  --operator hybrid --operator lexical --operator coverage \
+  --operator hybrid --operator lexical --operator chronological \
+  --operator temporal-index --operator numeric-index \
   --agent-dir "$HOME/.pi/agent" \
   --provider pimem-openai-responses \
   --model gpt-5.4 \
@@ -392,7 +420,8 @@ for skill in none pimem-v0; do
     --condition pimem \
     --run-kind formal \
     --skill "$skill" \
-    --operator hybrid --operator lexical --operator coverage \
+    --operator hybrid --operator lexical --operator chronological \
+    --operator temporal-index --operator numeric-index \
     --agent-dir "$HOME/.pi/agent" \
     --provider pimem-openai-responses \
     --model gpt-5.4 \

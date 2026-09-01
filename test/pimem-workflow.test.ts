@@ -64,7 +64,12 @@ function scriptedRuntime(
       contextWindow: 16_384,
       maxTokens: 1_024,
     },
-    streamFn: (_model, context) => {
+    streamFn: (_model, context, options) => {
+      if (options?.signal?.aborted) {
+        throw new Error(
+          "Mock provider must not start work with an aborted signal",
+        );
+      }
       observedSystemPrompts.push(context.systemPrompt ?? "");
       const message = messages[next++];
       if (message === undefined) {
@@ -86,7 +91,318 @@ function scriptedRuntime(
 }
 
 describe("PiMem offline workflow", () => {
-  it("executes search -> read -> finish -> answer with one injected Skill", async () => {
+  it("classifies provider failures without exposing the provider message", async () => {
+    const store: PiMemRuntimeStore = {
+      search: () => [],
+      read: () => [],
+      findMentionedMemoryIds: () => [],
+      getRecords: () => [],
+    };
+    const providerFailure = assistantMessage([], "error");
+    providerFailure.errorMessage = "Provider returned invalid JSON";
+
+    await expect(runPiMem({
+      store,
+      operatorRegistry: createSearchOperatorRegistry(store),
+      modelRuntime: scriptedRuntime([providerFailure], []),
+      scopeId: "scope-1",
+      question: "Will the provider return a valid response?",
+    })).rejects.toMatchObject({
+      name: "PiMemRunError",
+      code: "provider_error",
+      diagnostics: { providerFailureKind: "invalid_json" },
+    });
+  });
+
+  it("records only the provider model id for a model substitution", async () => {
+    const store: PiMemRuntimeStore = {
+      search: () => [],
+      read: () => [],
+      findMentionedMemoryIds: () => [],
+      getRecords: () => [],
+    };
+    const providerFailure = assistantMessage([], "error");
+    providerFailure.errorMessage =
+      "Provider substituted model gpt-4o-mini-alt; expected gpt-4o-mini";
+
+    await expect(runPiMem({
+      store,
+      operatorRegistry: createSearchOperatorRegistry(store),
+      modelRuntime: scriptedRuntime([providerFailure], []),
+      scopeId: "scope-1",
+      question: "Did the provider use the requested model?",
+    })).rejects.toMatchObject({
+      code: "provider_error",
+      diagnostics: {
+        providerFailureKind: "model_substitution",
+        providerResponseModel: "gpt-4o-mini-alt",
+      },
+    });
+  });
+
+  it("finishes insufficient without asking the agent to build an evidence package", async () => {
+    const memory: MemoryRecord = {
+      memoryId: "memory-finish-guard",
+      scopeId: "scope-1",
+      sessionId: "session-1",
+      turnIndex: 0,
+      role: "user",
+      content: "The guarded fact is blue.",
+      contentHash: "hash-finish-guard",
+      metadata: {},
+    };
+    const store: PiMemRuntimeStore = {
+      search: () => [{
+        record: memory,
+        query: "guarded fact",
+        retriever: "fts5",
+        rank: 1,
+        score: 1,
+        preview: memory.content,
+      }],
+      read: () => [memory],
+      findMentionedMemoryIds: () => [],
+      getRecords: () => [memory],
+    };
+    const observedPrompts: string[] = [];
+    const runtime = scriptedRuntime([
+      assistantMessage([{
+        type: "toolCall",
+        id: "search-finish-guard",
+        name: "search",
+        arguments: { operator: "lexical", queries: ["guarded fact"] },
+      }], "toolUse"),
+      assistantMessage([{
+        type: "toolCall",
+        id: "finish-without-evidence",
+        name: "finish",
+        arguments: {
+          status: "insufficient",
+          evidenceSummary: "No exact source was inspected, so the requested color remains unsupported.",
+        },
+      }], "toolUse"),
+    ], observedPrompts);
+
+    const result = await runPiMem({
+      store,
+      operatorRegistry: createSearchOperatorRegistry(store),
+      modelRuntime: runtime,
+      scopeId: "scope-1",
+      question: "What color is the guarded fact?",
+      maxTurns: 64,
+      maxToolCalls: 70,
+    });
+    expect(result.status).toBe("insufficient");
+    expect(result.citations).toEqual([]);
+    expect(result.trace.map((entry) => [entry.toolName, entry.isError])).toEqual([
+      ["search", false],
+      ["finish", false],
+    ]);
+    expect(observedPrompts).toHaveLength(2);
+  });
+
+  it("requires the model to observe inspect before semantic finish", async () => {
+    const memory: MemoryRecord = {
+      memoryId: "memory-finish-correction",
+      scopeId: "scope-1",
+      sessionId: "session-1",
+      turnIndex: 0,
+      role: "user",
+      content: "The corrected fact is green.",
+      contentHash: "hash-finish-correction",
+      metadata: {},
+    };
+    const store: PiMemRuntimeStore = {
+      search: () => [{
+        record: memory,
+        query: "corrected fact",
+        retriever: "fts5",
+        rank: 1,
+        score: 1,
+        preview: memory.content,
+      }],
+      read: () => [memory],
+      findMentionedMemoryIds: () => [],
+      getRecords: () => [memory],
+    };
+    const result = await runPiMem({
+      store,
+      operatorRegistry: createSearchOperatorRegistry(store),
+      modelRuntime: scriptedRuntime([
+        assistantMessage([{
+          type: "toolCall",
+          id: "search-finish-correction",
+          name: "search",
+          arguments: { operator: "lexical", queries: ["corrected fact"] },
+        }], "toolUse"),
+        assistantMessage([
+          {
+            type: "toolCall",
+            id: "inspect-finish-correction",
+            name: "read",
+            arguments: { candidateRefs: ["C1"] },
+          },
+          {
+            type: "toolCall",
+            id: "finish-corrected",
+            name: "finish",
+            arguments: {
+              status: "sufficient",
+              evidenceSummary: "This premature summary has not observed the exact inspect result.",
+            },
+          },
+        ], "toolUse"),
+        assistantMessage([{
+          type: "toolCall",
+          id: "finish-after-observation",
+          name: "finish",
+          arguments: {
+            status: "sufficient",
+            evidenceSummary: "The exact source states that the corrected fact is green.",
+          },
+        }], "toolUse"),
+      ], []),
+      scopeId: "scope-1",
+      question: "What color is the corrected fact?",
+    });
+
+    expect(result.status).toBe("sufficient");
+    expect(result.trace.map((entry) => [entry.toolName, entry.isError])).toEqual([
+      ["search", false],
+      ["read", false],
+      ["finish", true],
+      ["finish", false],
+    ]);
+    expect(result.evidenceSummary).toBe(
+      "The exact source states that the corrected fact is green.",
+    );
+    expect(result.citations).toEqual([{
+      memoryId: memory.memoryId,
+      supports: "The corrected fact is green.",
+    }]);
+  });
+
+  it("also bounds finish argument-schema correction loops", async () => {
+    const store: PiMemRuntimeStore = {
+      search: () => [],
+      read: () => [],
+      findMentionedMemoryIds: () => [],
+      getRecords: () => [],
+    };
+    const observedPrompts: string[] = [];
+    const malformedFinish = (id: string): AssistantMessage => assistantMessage([{
+      type: "toolCall",
+      id,
+      name: "finish",
+      arguments: { status: "not-a-valid-status" },
+    }], "toolUse");
+
+    await expect(runPiMem({
+      store,
+      operatorRegistry: createSearchOperatorRegistry(store),
+      modelRuntime: scriptedRuntime([
+        malformedFinish("finish-malformed-1"),
+        malformedFinish("finish-malformed-2"),
+      ], observedPrompts),
+      scopeId: "scope-1",
+      question: "Is there enough evidence?",
+      maxTurns: 64,
+      maxToolCalls: 70,
+    })).rejects.toMatchObject({
+      name: "PiMemRunError",
+      code: "tool_protocol_exhausted",
+      message: expect.stringMatching(/finish failed 2 times/iu),
+      diagnostics: {
+        toolCalls: 2,
+        trace: [
+          expect.objectContaining({ toolName: "finish", isError: true }),
+          expect.objectContaining({ toolName: "finish", isError: true }),
+        ],
+      },
+    });
+    expect(observedPrompts).toHaveLength(2);
+  });
+
+  it("does not count a budget-rejected search as an executed search", async () => {
+    const memory: MemoryRecord = {
+      memoryId: "memory-budget",
+      scopeId: "scope-1",
+      sessionId: "session-1",
+      turnIndex: 0,
+      role: "user",
+      content: "The budget test fact is blue.",
+      contentHash: "hash-budget",
+      metadata: {},
+    };
+    const store: PiMemRuntimeStore = {
+      search: () => [{
+        record: memory,
+        query: "budget blue",
+        retriever: "fts5",
+        rank: 1,
+        score: 1,
+        preview: memory.content,
+      }],
+      read: () => [memory],
+      findMentionedMemoryIds: () => [],
+      getRecords: () => [memory],
+    };
+    const runtime = scriptedRuntime([
+      assistantMessage([{
+        type: "toolCall",
+        id: "search-allowed",
+        name: "search",
+        arguments: {
+          operator: "lexical",
+          queries: ["budget blue"],
+          limit: 5,
+        },
+      }], "toolUse"),
+      assistantMessage([{
+        type: "toolCall",
+        id: "search-rejected",
+        name: "search",
+        arguments: {
+          operator: "lexical",
+          queries: ["budget fact"],
+          limit: 5,
+        },
+      }], "toolUse"),
+      assistantMessage([{
+        type: "toolCall",
+        id: "inspect-budget",
+        name: "read",
+        arguments: { candidateRefs: ["C1"], contextBefore: 0, contextAfter: 0 },
+      }], "toolUse"),
+      assistantMessage([{
+        type: "toolCall",
+        id: "finish-budget",
+        name: "finish",
+        arguments: {
+          status: "sufficient",
+          evidenceSummary: "The exact source states that the budget test fact is blue.",
+        },
+      }], "toolUse"),
+    ], []);
+
+    const result = await runPiMem({
+      store,
+      operatorRegistry: createSearchOperatorRegistry(store),
+      modelRuntime: runtime,
+      scopeId: "scope-1",
+      question: "What color is the budget test fact?",
+      maxSearchCalls: 1,
+    });
+
+    expect(result.trace.filter((item) => item.toolName === "search")).toHaveLength(2);
+    expect(result.trace[1]).toMatchObject({
+      toolName: "search",
+      isError: true,
+    });
+    expect(result.metrics.searchCalls).toBe(1);
+  });
+
+  it("executes search -> inspect -> finish -> answer with one injected Skill", async () => {
     const memory: MemoryRecord = {
       memoryId: "memory-blue",
       scopeId: "scope-1",
@@ -95,6 +411,16 @@ describe("PiMem offline workflow", () => {
       role: "user",
       content: "My bicycle is blue.",
       contentHash: "hash-blue",
+      metadata: {},
+    };
+    const unselectedNeighbor: MemoryRecord = {
+      memoryId: "memory-unselected-neighbor",
+      scopeId: "scope-1",
+      sessionId: "session-1",
+      turnIndex: 1,
+      role: "assistant",
+      content: "An unrelated neighboring turn.",
+      contentHash: "hash-unselected-neighbor",
       metadata: {},
     };
     const store: PiMemRuntimeStore = {
@@ -109,7 +435,9 @@ describe("PiMem offline workflow", () => {
         }];
       },
       read(_scopeId, memoryIds) {
-        return memoryIds.includes(memory.memoryId) ? [memory] : [];
+        return memoryIds.includes(memory.memoryId)
+          ? [memory, unselectedNeighbor]
+          : [];
       },
       findMentionedMemoryIds() {
         return [];
@@ -139,9 +467,9 @@ describe("PiMem offline workflow", () => {
       }),
       assistantMessage([{
         type: "toolCall",
-        id: "read-1",
+        id: "inspect-1",
         name: "read",
-        arguments: { candidateRefs: [1], contextBefore: 0, contextAfter: 0 },
+        arguments: { candidateRefs: ["C1"] },
       }], "toolUse", {
         input: 20,
         output: 3,
@@ -157,8 +485,7 @@ describe("PiMem offline workflow", () => {
         name: "finish",
         arguments: {
           status: "sufficient",
-          citations: [{ candidateRef: 1, supports: "The bicycle is blue." }],
-          evidenceSummary: "The user's bicycle is blue.",
+          evidenceSummary: "The exact source states that the user's bicycle is blue.",
         },
       }], "toolUse", {
         input: 30,
@@ -204,16 +531,24 @@ describe("PiMem offline workflow", () => {
     expect(retrieval.metrics).toMatchObject({
       searchCalls: 1,
       readCalls: 1,
-      candidateCount: 1,
-      evidenceCount: 1,
-      citedCount: 1,
+      candidateCount: 2,
+      inspectedEvidenceCount: 2,
+      evidenceCount: 2,
+      citedCount: 2,
     });
     expect(retrieval.citations.map((item) => item.memoryId)).toEqual([
       memory.memoryId,
+      unselectedNeighbor.memoryId,
     ]);
     expect(retrieval.evidence.map((item) => item.memoryId)).toContain(
       memory.memoryId,
     );
+    expect(retrieval.evidence.map((item) => item.memoryId)).toContain(
+      unselectedNeighbor.memoryId,
+    );
+    expect(retrieval.candidates.find((item) =>
+      item.memoryId === unselectedNeighbor.memoryId
+    )).toMatchObject({ inspected: true, committed: true });
     expect(retrieval.usage).toEqual({
       input: 60,
       output: 9,
@@ -269,11 +604,16 @@ describe("PiMem offline workflow", () => {
         arguments: {
           id: "dual-recall",
           summary: "Fuse exact and semantic recall.",
-          sources: [
-            { operator: "lexical", limit: 5 },
-            { operator: "hybrid", limit: 5 },
+          steps: [
+            { id: "exact", kind: "search", operator: "lexical", limit: 5 },
+            { id: "semantic", kind: "search", operator: "hybrid", limit: 5 },
+            {
+              id: "fused",
+              kind: "combine",
+              inputs: ["exact", "semantic"],
+              method: "rrf",
+            },
           ],
-          combine: "rrf",
         },
       }], "toolUse"),
       assistantMessage([{
@@ -288,9 +628,9 @@ describe("PiMem offline workflow", () => {
       }], "toolUse"),
       assistantMessage([{
         type: "toolCall",
-        id: "read-1",
+        id: "inspect-1",
         name: "read",
-        arguments: { candidateRefs: [1] },
+        arguments: { candidateRefs: ["C1"] },
       }], "toolUse"),
       assistantMessage([{
         type: "toolCall",
@@ -298,8 +638,7 @@ describe("PiMem offline workflow", () => {
         name: "finish",
         arguments: {
           status: "sufficient",
-          citations: [{ candidateRef: 1, supports: "The codename is Cedar." }],
-          evidenceSummary: "The migration codename is Cedar.",
+          evidenceSummary: "The exact source states that the migration codename is Cedar.",
         },
       }], "toolUse"),
     ], []);
@@ -352,9 +691,9 @@ describe("PiMem offline workflow", () => {
         }], "toolUse"),
         assistantMessage([{
           type: "toolCall",
-          id: "read-2",
+          id: "inspect-2",
           name: "read",
-          arguments: { candidateRefs: [1] },
+          arguments: { candidateRefs: ["C1"] },
         }], "toolUse"),
         assistantMessage([{
           type: "toolCall",
@@ -362,8 +701,7 @@ describe("PiMem offline workflow", () => {
           name: "finish",
           arguments: {
             status: "sufficient",
-            citations: [{ candidateRef: 1, supports: "The codename is Cedar." }],
-            evidenceSummary: "The migration codename is Cedar.",
+            evidenceSummary: "The exact source states that the migration codename is Cedar.",
           },
         }], "toolUse"),
       ], replayPrompts),
@@ -371,7 +709,8 @@ describe("PiMem offline workflow", () => {
       question: "What is the migration codename?",
     });
 
-    expect(replayPrompts[0]).toContain("dual-recall@run-1");
+    expect(replayPrompts[0]).toContain("id=dual-recall | version=run-1");
+    expect(replayPrompts[0]).not.toContain("dual-recall@run-1");
     expect(replay.trace.map((item) => item.toolName)).toEqual([
       "search",
       "read",

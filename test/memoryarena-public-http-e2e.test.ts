@@ -1,4 +1,5 @@
 import { execFile } from "node:child_process";
+import { createHash } from "node:crypto";
 import { createServer, type Server } from "node:http";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -9,6 +10,7 @@ import { FileMemoryArenaGenerationStore } from "../src/benchmark/memoryarena-pub
 import {
   MemoryArenaPublicMemoryBackend,
   type MemoryArenaChunkMemory,
+  type MemoryArenaCommittedEvidence,
   type MemoryArenaEmbeddingOperationMeter,
   type MemoryArenaEvidenceRetriever,
   type MemoryArenaOriginalChunk,
@@ -45,6 +47,27 @@ const NOOP_EMBEDDING_METER: MemoryArenaEmbeddingOperationMeter = {
     },
   }),
 };
+
+function exactEvidence(
+  memoryId: string,
+  content: string,
+): MemoryArenaCommittedEvidence {
+  const contentHash = createHash("sha256").update(content, "utf8").digest("hex");
+  return {
+    memoryId,
+    scopeId: "test-scope",
+    sessionId: memoryId,
+    turnIndex: 0,
+    role: "other",
+    content,
+    contentHash,
+    sourceContentHash: contentHash,
+    sourceContentLength: content.length,
+    truncated: false,
+    excerpts: [{ start: 0, end: content.length, content }],
+    metadata: {},
+  };
+}
 
 class InMemoryChunks implements MemoryArenaChunkMemory {
   readonly appends: Array<{
@@ -137,14 +160,24 @@ describe("MemoryArena Public official-client HTTP seam", () => {
             runId: "run-1",
             status: "sufficient" as const,
             citations: [{ memoryId: "m-1-0", supports: "first" }],
+            evidenceSummary: "The first exact passage answers the question.",
+            evidence: [exactEvidence("m-1-0", "first raw chunk")],
             trace: [],
             usage: ZERO_USAGE,
           }
         : {
             runId: "run-2",
             status: "sufficient" as const,
-            citations: [{ memoryId: "m-1-1", supports: "latest" }],
+            citations: [
+              { memoryId: "m-1-1", supports: "latest" },
+              { memoryId: "m-1-0", supports: "prior" },
+            ],
             inventory: [{ item: "history", memoryIds: ["m-1-0"] }],
+            evidenceSummary: "The second passage changed after the first.",
+            evidence: [
+              exactEvidence("m-1-1", "second <raw> chunk"),
+              exactEvidence("m-1-0", "first raw chunk"),
+            ],
             trace: [],
             usage: ZERO_USAGE,
           }),

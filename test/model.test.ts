@@ -111,6 +111,11 @@ describe("loadPiModelRuntime", () => {
       });
       expect(runtime.modelAdapterId).toBe("openai-reasoning-completions");
       expect(runtime.transport).toBe("non-stream");
+      expect(runtime.requestPolicy).toEqual({
+        timeoutMs: 120_000,
+        maxRetries: 1,
+        maxRetryDelayMs: 5_000,
+      });
       expect(runtime.model).toMatchObject({
         api: "openai-completions",
         reasoning: true,

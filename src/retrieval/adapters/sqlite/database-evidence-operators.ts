@@ -9,14 +9,18 @@ import type {
   SearchRequest,
 } from "../../model/retrieval.js";
 import type { MemoryRecord } from "../../../memory/index.js";
-import { episodicPreview } from "../../../util.js";
+import { queryCenteredEpisodicPreview } from "../../../util.js";
 import {
   type MemoryRow,
   memoryRowToRecord,
 } from "../../../platform/sqlite/memory-row.js";
 
 interface TemporalFactRow extends MemoryRow {
+  span_start: number;
+  span_end: number;
+  expression: string;
   resolved_date: string;
+  basis: string;
 }
 
 interface NumericFactRow extends MemoryRow {
@@ -32,11 +36,18 @@ export interface DatabaseOperatorSeed {
 export interface DatabaseOperatorHit {
   record: MemoryRecord;
   query: string;
+  matchedQueries: string[];
   retriever: "pimem-timeline-db" | "pimem-aggregate-db";
   rank: number;
   score: number;
   preview: string;
+  operatorSourceSpans?: Array<{ start: number; end: number }>;
   operatorNumericFactIndexes?: number[];
+  operatorTemporalFacts?: Array<{
+    expression: string;
+    resolvedDate: string;
+    basis: string;
+  }>;
 }
 
 function compareRecords(left: MemoryRecord, right: MemoryRecord): number {
@@ -117,16 +128,18 @@ export class DatabaseEvidenceOperators {
   private hit(
     record: MemoryRecord,
     query: string,
+    matchedQueries: readonly string[],
     retriever: DatabaseOperatorHit["retriever"],
     rank: number,
   ): DatabaseOperatorHit {
     return {
       record,
       query,
+      matchedQueries: [...matchedQueries],
       retriever,
       rank,
       score: 1 / (60 + rank),
-      preview: episodicPreview(record.content),
+      preview: queryCenteredEpisodicPreview(record.content, query),
     };
   }
 
@@ -139,21 +152,31 @@ export class DatabaseEvidenceOperators {
     const rows = this.db.prepare(`
       SELECT m.memory_id, m.scope_id, m.session_id, m.turn_index, m.role,
              m.content, m.timestamp, m.content_hash, m.metadata_json,
-             t.resolved_date
+             t.span_start, t.span_end, t.expression, t.resolved_date, t.basis
       FROM memory_temporal_facts AS t
       JOIN memories AS m ON m.memory_id = t.memory_id
       WHERE t.scope_id = ? AND t.extractor_version = ?
       ORDER BY t.resolved_date ASC, m.session_id ASC, m.turn_index ASC
     `).all(scopeId, EVIDENCE_FACT_EXTRACTOR_VERSION) as unknown as TemporalFactRow[];
-    const targetDates = new Set(
-      request.queries.flatMap((query) =>
+    const targetDates = new Set([
+      ...(context.targetDates ?? []),
+      ...request.queries.flatMap((query) =>
         query.match(/\b\d{4}-\d{2}-\d{2}\b/gu) ?? []
       ),
-    );
+    ]);
     const seedSessions = new Set(seedHits.map((hit) => hit.record.sessionId));
     const seedMemories = new Set(seedHits.map((hit) => hit.record.memoryId));
     const seedOrder = new Map(seedHits.map((hit, index) => [hit.record.memoryId, index]));
-    const grouped = new Map<string, { record: MemoryRecord; dates: Set<string> }>();
+    const grouped = new Map<string, {
+      record: MemoryRecord;
+      dates: Set<string>;
+      facts: Map<string, {
+        expression: string;
+        resolvedDate: string;
+        basis: string;
+      }>;
+      sourceSpans: Map<string, { start: number; end: number }>;
+    }>();
     const {
       after: _ignoredAfter,
       before: _ignoredBefore,
@@ -167,8 +190,24 @@ export class DatabaseEvidenceOperators {
       const entry = grouped.get(record.memoryId) ?? {
         record,
         dates: new Set<string>(),
+        facts: new Map(),
+        sourceSpans: new Map(),
       };
       entry.dates.add(row.resolved_date);
+      entry.facts.set(
+        `${row.expression}\0${row.resolved_date}\0${row.basis}`,
+        {
+          expression: row.expression,
+          resolvedDate: row.resolved_date,
+          basis: row.basis,
+        },
+      );
+      if (row.span_start >= 0 && row.span_end > row.span_start) {
+        entry.sourceSpans.set(`${String(row.span_start)}:${String(row.span_end)}`, {
+          start: row.span_start,
+          end: row.span_end,
+        });
+      }
       grouped.set(record.memoryId, entry);
     }
 
@@ -206,9 +245,19 @@ export class DatabaseEvidenceOperators {
     const query = targetDates.size === 0
       ? "database timeline expansion"
       : `database timeline dates ${[...targetDates].join(",")}`;
-    return ranked.map((entry, index) =>
-      this.hit(entry.record, query, "pimem-timeline-db", index + 1)
-    );
+    return ranked.map((entry, index) => ({
+      ...this.hit(
+        entry.record,
+        query,
+        request.queries,
+        "pimem-timeline-db",
+        index + 1,
+      ),
+      operatorTemporalFacts: [...entry.facts.values()],
+      ...(entry.sourceSpans.size === 0
+        ? {}
+        : { operatorSourceSpans: [...entry.sourceSpans.values()] }),
+    }));
   }
 
   private expandAggregate(
@@ -234,6 +283,7 @@ export class DatabaseEvidenceOperators {
     const grouped = new Map<string, {
       record: MemoryRecord;
       factIndexes: number[];
+      sourceSpans: Map<string, { start: number; end: number }>;
       overlap: number;
       seedMemory: boolean;
       seedSession: boolean;
@@ -255,12 +305,17 @@ export class DatabaseEvidenceOperators {
       if (!seedMemory && !seedSession && overlap === 0) continue;
       const entry = grouped.get(record.memoryId) ?? {
         record,
-        factIndexes: [],
+        factIndexes: [] as number[],
+        sourceSpans: new Map<string, { start: number; end: number }>(),
         overlap: 0,
         seedMemory,
         seedSession,
       };
       entry.factIndexes.push(row.fact_index);
+      entry.sourceSpans.set(`${String(row.span_start)}:${String(row.span_end)}`, {
+        start: row.span_start,
+        end: row.span_end,
+      });
       entry.overlap = Math.max(entry.overlap, overlap);
       grouped.set(record.memoryId, entry);
     }
@@ -291,10 +346,12 @@ export class DatabaseEvidenceOperators {
       ...this.hit(
         entry.record,
         `database numeric facts for ${request.queries.join(" | ")}`,
+        request.queries,
         "pimem-aggregate-db",
         index + 1,
       ),
       operatorNumericFactIndexes: entry.factIndexes,
+      operatorSourceSpans: [...entry.sourceSpans.values()],
     }));
   }
 }

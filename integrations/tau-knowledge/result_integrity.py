@@ -17,6 +17,17 @@ from typing import Any, Iterable, Mapping, Sequence
 
 
 INFRASTRUCTURE_ERROR = "infrastructure_error"
+METHOD_EXECUTION_CONTRACT_FIELDS = (
+    "pimem_max_input_ms",
+    "pimem_max_turns_per_input",
+    "pimem_max_tool_calls_per_input",
+    "bridge_response_timeout_seconds",
+)
+
+
+def method_execution_contract(value: Any) -> dict[str, Any]:
+    contract = value if isinstance(value, Mapping) else {}
+    return {field: contract.get(field) for field in METHOD_EXECUTION_CONTRACT_FIELDS}
 
 
 def _value(item: Any, name: str, default: Any = None) -> Any:

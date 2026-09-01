@@ -9,10 +9,10 @@ export function validateFinishToolBatch(
   finishToolName = "finish",
 ): string | undefined {
   if (!toolNames.includes(finishToolName)) return undefined;
-  if (toolNames.length === 1 && toolNames[0] === finishToolName) {
-    return undefined;
-  }
-  return `${finishToolName} must be the only tool call in its turn`;
+  return toolNames.length === 1 && toolNames[0] === finishToolName
+    ? undefined
+    : `${finishToolName} must be the only tool call in its assistant turn; ` +
+      "observe this turn's tool results before finishing in a later turn";
 }
 
 export function createFinishOnlyBeforeToolCall(
@@ -32,48 +32,22 @@ export function createFinishOnlyBeforeToolCall(
         > => block.type === "toolCall",
       )
       .map((call) => call.name);
-    const finishIndexes = toolNames
-      .map((name, index) => name === finishToolName ? index : -1)
-      .filter((index) => index >= 0);
-    if (finishIndexes.length === 0) return undefined;
-    if (
-      finishIndexes.length === 1 &&
-      finishIndexes[0] === toolNames.length - 1
-    ) {
-      return undefined;
-    }
+    const reason = validateFinishToolBatch(toolNames, finishToolName);
+    if (reason === undefined) return undefined;
     if (context.toolCall.name !== finishToolName) return undefined;
     return {
       block: true,
-      reason: `${finishToolName} must be the final tool call in its turn`,
+      reason,
     };
   };
 }
 
-export function createToolProtocolBeforeToolCall(options: {
-  maxSearchCalls?: number;
-} = {}): (
+export function createToolProtocolBeforeToolCall(): (
   context: BeforeToolCallContext,
   signal?: AbortSignal,
 ) => Promise<BeforeToolCallResult | undefined> {
   const enforceFinishOnly = createFinishOnlyBeforeToolCall();
-  let admittedSearchCalls = 0;
   return async (context, signal) => {
-    const finishResult = await enforceFinishOnly(context, signal);
-    if (finishResult !== undefined) return finishResult;
-    if (
-      context.toolCall.name !== "search" ||
-      options.maxSearchCalls === undefined
-    ) {
-      return undefined;
-    }
-    if (admittedSearchCalls >= options.maxSearchCalls) {
-      return {
-        block: true,
-        reason: `Search budget exhausted after ${options.maxSearchCalls} calls. Use existing candidates, read the needed sources, and call finish.`,
-      };
-    }
-    admittedSearchCalls += 1;
-    return undefined;
+    return enforceFinishOnly(context, signal);
   };
 }

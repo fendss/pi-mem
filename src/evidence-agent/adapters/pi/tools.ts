@@ -19,9 +19,10 @@ export {
   DefineOperatorParameters,
   FinishParameters,
   ReadParameters,
+  SearchMoreParameters,
   type SearchParametersSchema,
 } from "./tools/schemas.js";
-export { createSearchTool } from "./tools/search-tool.js";
+export { createSearchTool, createSearchTools } from "./tools/search-tool.js";
 export {
   createFinishOnlyBeforeToolCall,
   createToolProtocolBeforeToolCall,

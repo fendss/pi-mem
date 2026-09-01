@@ -170,11 +170,6 @@ export function buildAggregateOperatorResult(
       unique.set(row.dedupeKey, row);
     }
   }
-  const additive = [...unique.values()].filter((row) => row.valueKind === "increment");
-  const units = new Set(additive.map((row) => row.unit).filter(Boolean));
-  const proposedTotal = additive.length > 1 && units.size === 1
-    ? additive.reduce((total, row) => total + (row.value ?? 0), 0)
-    : undefined;
   const cumulative = [...unique.values()]
     .filter((row) => row.valueKind === "cumulative" || row.valueKind === "snapshot")
     .sort((left, right) => (left.eventTime ?? "").localeCompare(right.eventTime ?? ""));
@@ -190,13 +185,6 @@ export function buildAggregateOperatorResult(
       truncated: rows.length > 40,
     },
     derived: {
-      ...(proposedTotal === undefined
-        ? {}
-        : {
-            proposedTotal,
-            unit: additive[0]?.unit,
-            includedDedupeKeys: additive.map((row) => row.dedupeKey),
-          }),
       ...(latest === undefined
         ? {}
         : {

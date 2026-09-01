@@ -41,7 +41,11 @@ interface RetrievalTraceArtifact {
   retrieval: {
     citations: Array<{ memoryId: string }>;
     evidence: Array<{ memoryId: string }>;
-    candidates: Array<{ memoryId: string; read: boolean; cited: boolean }>;
+    candidates: Array<{
+      memoryId: string;
+      inspected: boolean;
+      committed: boolean;
+    }>;
     trace: Array<{
       toolName: string;
       isError: boolean;
@@ -52,6 +56,7 @@ interface RetrievalTraceArtifact {
     metrics: {
       searchCalls: number;
       readCalls: number;
+      inspectedEvidenceCount: number;
       evidenceCount: number;
       citedCount: number;
     };
@@ -176,7 +181,7 @@ function scriptedChoice(payload: JsonObject): {
       return {
         stage: "read",
         choice: toolResponse("call-read", "read", {
-          candidateRefs: [1],
+          candidateRefs: ["C1"],
           contextBefore: 0,
           contextAfter: 0,
         }),
@@ -186,11 +191,7 @@ function scriptedChoice(payload: JsonObject): {
       stage: "finish",
       choice: toolResponse("call-finish", "finish", {
         status: "sufficient",
-        citations: [{
-          candidateRef: 1,
-          supports: "The agent found a blue key inside the chest.",
-        }],
-        evidenceSummary: "The agent found a blue key inside the chest.",
+        evidenceSummary: "The exact source states that the chest contains a blue key.",
       }),
     };
   }
@@ -455,6 +456,7 @@ describe("evidence benchmark command offline workflow", () => {
       expect(trace.retrieval.metrics).toMatchObject({
         searchCalls: 1,
         readCalls: 1,
+        inspectedEvidenceCount: 1,
         evidenceCount: 1,
         citedCount: 1,
       });
@@ -462,17 +464,17 @@ describe("evidence benchmark command offline workflow", () => {
       const evidenceIds = new Set(
         trace.retrieval.evidence.map((item) => item.memoryId),
       );
-      const readIds = new Set(
+      const inspectedIds = new Set(
         trace.retrieval.trace
           .filter((item) => item.toolName === "read")
           .flatMap((item) => item.details?.evidence ?? [])
           .map((item) => item.memoryId),
       );
       expect(citedIds).toEqual([memoryId]);
-      expect(citedIds.every((id) => evidenceIds.has(id) && readIds.has(id)))
+      expect(citedIds.every((id) => evidenceIds.has(id) && inspectedIds.has(id)))
         .toBe(true);
       expect(trace.retrieval.candidates).toEqual([
-        expect.objectContaining({ memoryId, read: true, cited: true }),
+        expect.objectContaining({ memoryId, inspected: true, committed: true }),
       ]);
 
       const manifest = JSON.parse(

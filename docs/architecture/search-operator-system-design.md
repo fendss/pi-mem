@@ -173,8 +173,9 @@ source hits. Declarative nodes only transform CandidateSets. They never receive
 an Evidence ledger capability.
 
 Every composed search still enters the existing ledger as Candidates. Exact
-source-bound `read` calls are the only way to promote them to Evidence, and
-`finish` rejects every citation that was not explicitly read.
+source-bound `read` calls are the only way to promote them to Evidence. Each
+read source is retained automatically; `finish` only closes retrieval while
+the harness deduplicates sources and constructs citations.
 
 ```mermaid
 flowchart LR
@@ -185,7 +186,7 @@ flowchart LR
   Search --> Candidates["Candidates"]
   Candidates --> Read["read exact source"]
   Read --> Evidence["Evidence"]
-  Evidence --> Finish["finish"]
+  Evidence --> Finish["finish {}"]
 ```
 
 ## 7. Reproducibility and safety

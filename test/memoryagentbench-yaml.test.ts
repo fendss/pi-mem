@@ -1,0 +1,257 @@
+import { chmod, mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { afterEach, describe, expect, it } from "vitest";
+import { MEMORYARENA_ANSWER_PROMPT_VERSION } from
+  "../src/benchmark/memoryarena-public/index.js";
+import {
+  loadMemoryAgentBenchYaml,
+  artifactStatus,
+  runConfigIdentity,
+  runnerInvocation,
+  runtimeIdentityForConfig,
+  serviceEnvironment,
+} from "../integrations/memoryagentbench/run_from_yaml.mjs";
+
+const temporaryDirectories: string[] = [];
+
+afterEach(async () => {
+  await Promise.all(temporaryDirectories.splice(0).map((directory) =>
+    rm(directory, { recursive: true, force: true })
+  ));
+});
+
+async function configFile(mode = 0o600): Promise<string> {
+  const directory = await mkdtemp(join(tmpdir(), "pimem-mab-yaml-"));
+  temporaryDirectories.push(directory);
+  const path = join(directory, "run.yaml");
+  await mkdir(
+    join(directory, "source", ".agents", "skills", "pimem-retrieval-minimal"),
+    { recursive: true },
+  );
+  await writeFile(
+    join(
+      directory,
+      "source",
+      ".agents",
+      "skills",
+      "pimem-retrieval-minimal",
+      "SKILL.md",
+    ),
+    "test skill\n",
+  );
+  await writeFile(join(directory, "embedding.env"), "PIMEM_EMBEDDING_MODEL=test\n");
+  await writeFile(path, `
+schema_version: 1
+paths:
+  root: ./root
+  source: ./source
+  data_dir: ./data
+  output_dir: ./output
+  runtime_dir: ./runtime
+  nltk_data: ./nltk
+  embedding_env: ./embedding.env
+  node: /tools/node
+  uv: /tools/uv
+credentials:
+  generation:
+    api_key: test-key
+    base_url: https://generation.example/v1/
+models:
+  retrieval:
+    id: gpt-5-mini
+    route_id: gpt-5-mini-medium
+    protocol: openai-reasoning-completions
+    thinking_level: medium
+    context_window: 128000
+    max_tokens: 4096
+  answer:
+    id: gpt-4.1-mini
+    protocol: openai-completions
+service:
+  host: 127.0.0.1
+  port: 3113
+  source_identity: source-test-v1
+  build_identity: build-test-v1
+  skill: pimem-minimal
+  max_run_ms: 240000
+  max_turns: 64
+  max_tool_calls: 80
+run:
+  task: trec-fine
+  label: smoke
+  modes: [static, cumulative]
+  max_search_calls: 4
+  reuse_ingestion_from:
+    trec-fine: ./baseline/trec-fine-static.json
+  max_contexts: 1
+  max_queries: 1
+  slots: 1
+  context_slots: 5
+  query_slots: 16
+  adaptive_query_slots:
+    minimum: 1
+    initial: 4
+    successes_per_increase: 8
+`, "utf8");
+  await chmod(path, mode);
+  return path;
+}
+
+describe("MemoryAgentBench YAML configuration", () => {
+  it("drives both model identities and runner arguments from one protected file", async () => {
+    const config = loadMemoryAgentBenchYaml(await configFile());
+    const invocation = runnerInvocation(config, "static");
+
+    expect(config.credentials.generation.apiKey).toBe("test-key");
+    expect(config.models.retrieval).toMatchObject({
+      id: "gpt-5-mini",
+      routeId: "gpt-5-mini-medium",
+      thinkingLevel: "medium",
+    });
+    expect(invocation.command).toBe("/tools/uv");
+    expect(invocation.args).toContain("gpt-4.1-mini");
+    expect(invocation.args).toContain("http://127.0.0.1:3113");
+    expect(invocation.env.OPENAI_API_KEY).toBe("test-key");
+    expect(config.run.contextSlots).toBe(5);
+    expect(config.run.querySlots).toBe(16);
+    expect(config.run.adaptiveQuerySlots).toEqual({
+      minimum: 1,
+      initial: 4,
+      maximum: 16,
+      successesPerIncrease: 8,
+    });
+    expect(config.service.maxConcurrentWraps).toBe(16);
+    expect(config.service.skill).toBe("pimem-minimal");
+    expect(serviceEnvironment(config, {}).PIMEM_MAX_CONCURRENT_WRAPS).toBe("16");
+    expect(serviceEnvironment(config, {}).PIMEM_SKILL).toBe("pimem-minimal");
+    expect(invocation.args).toContain("--context-slots");
+    expect(invocation.args).toContain("5");
+    expect(invocation.args).toContain("--adaptive-query-slots");
+    expect(invocation.args).toContain("--adaptive-query-slots-initial");
+    expect(invocation.args).toContain("4");
+    expect(config.service.sourceIdentity).toBe("source-test-v1");
+    expect(serviceEnvironment(config, {}).PIMEM_BUILD_IDENTITY).toBe(
+      "build-test-v1",
+    );
+    expect(invocation.args).toContain("--run-config-sha256");
+    expect(
+      runtimeIdentityForConfig(config).contract.answer_handoff,
+    ).toMatchObject({ prompt_version: MEMORYARENA_ANSWER_PROMPT_VERSION });
+    expect(config.run.reuseIngestionFrom["trec-fine"]).toContain(
+      "/baseline/trec-fine-static.json",
+    );
+    expect(invocation.args).toContain("--reuse-ingestion-from");
+  });
+
+  it("rejects a config readable by other users", async () => {
+    const path = await configFile(0o644);
+    expect(() => loadMemoryAgentBenchYaml(path)).toThrow(
+      /mode 0600/iu,
+    );
+  });
+
+  it("rejects adaptive concurrency outside the query-slot ceiling", async () => {
+    const path = await configFile();
+    const source = await import("node:fs/promises");
+    const current = await source.readFile(path, "utf8");
+    await source.writeFile(path, current.replace("    initial: 4", "    initial: 32"));
+    await chmod(path, 0o600);
+
+    expect(() => loadMemoryAgentBenchYaml(path)).toThrow(
+      /adaptive_query_slots\.initial/iu,
+    );
+  });
+
+  it("rejects multiple suite workers with independent adaptive controllers", async () => {
+    const path = await configFile();
+    const source = await import("node:fs/promises");
+    const current = await source.readFile(path, "utf8");
+    await source.writeFile(path, current.replace("  slots: 1", "  slots: 2"));
+    await chmod(path, 0o600);
+
+    expect(() => loadMemoryAgentBenchYaml(path)).toThrow(
+      /slots must be 1/iu,
+    );
+  });
+
+  it("supports a full task suite without smoke limits", async () => {
+    const path = await configFile();
+    const source = await import("node:fs/promises");
+    const current = await source.readFile(path, "utf8");
+    await source.writeFile(
+      path,
+      current
+        .replace("task: trec-fine", "tasks: [trec-fine, banking77]")
+        .replace("  max_contexts: 1\n  max_queries: 1\n", ""),
+    );
+    await chmod(path, 0o600);
+    const config = loadMemoryAgentBenchYaml(path);
+    const invocation = runnerInvocation(config, "cumulative", undefined, "banking77", true);
+
+    expect(config.run.tasks).toEqual(["trec-fine", "banking77"]);
+    expect(config.run.maxContexts).toBeNull();
+    expect(invocation.args).not.toContain("--max-contexts");
+    expect(invocation.args).not.toContain("--max-queries");
+    expect(invocation.args).toContain("--resume");
+    expect(invocation.output).toMatch(/banking77-cumulative\.json$/u);
+  });
+
+  it("rejects configured retries for method failures", async () => {
+    const path = await configFile();
+    const source = await import("node:fs/promises");
+    const current = await source.readFile(path, "utf8");
+    await source.writeFile(
+      path,
+      current.replace(
+        "  max_search_calls: 4",
+        "  max_search_calls: 4\n  retry_error_codes: [retrieval_agent_timeout]",
+      ),
+    );
+    await chmod(path, 0o600);
+
+    expect(() => loadMemoryAgentBenchYaml(path)).toThrow(
+      /method failures are final/iu,
+    );
+  });
+
+  it("does not accept a completed counter without exact query rows", async () => {
+    const config = loadMemoryAgentBenchYaml(await configFile());
+    const output = join(
+      config.paths.outputDir,
+      config.run.label,
+      "trec-fine-static.json",
+    );
+    await mkdir(join(config.paths.outputDir, config.run.label), {
+      recursive: true,
+    });
+    const runtimeIdentity = runtimeIdentityForConfig(config);
+    const artifact = {
+      task: "trec-fine",
+      operator_experiment: { mode: "static" },
+      answer_model: config.models.answer.id,
+      memory_base_url: "http://127.0.0.1:3113",
+      run_config_sha256: runConfigIdentity(config, "trec-fine", "static"),
+      retrieval_runtime_contract: runtimeIdentity.contract,
+      retrieval_runtime_identity_sha256: runtimeIdentity.sha256,
+      memory_persistence_identity: "store-1",
+      expected_query_ids: ["context-0/q-1"],
+      completed_queries: 1,
+      data: [],
+    };
+    await writeFile(output, `${JSON.stringify(artifact)}\n`);
+
+    expect(artifactStatus(config, "trec-fine", "static")).toMatchObject({
+      status: "invalid",
+    });
+
+    await writeFile(output, `${JSON.stringify({
+      ...artifact,
+      data: [{ benchmark_query_id: "context-0/q-1" }],
+    })}\n`);
+    expect(artifactStatus(config, "trec-fine", "static")).toMatchObject({
+      status: "completed",
+      completed_queries: 1,
+    });
+  });
+});

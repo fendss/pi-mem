@@ -11,12 +11,14 @@ import {
   type Usage,
 } from "@earendil-works/pi-ai";
 import { convertMessages } from "@earendil-works/pi-ai/api/openai-completions";
+import { responseModelMatchesRequested } from "../../util.js";
 
 type JsonObject = Record<string, unknown>;
 type MessageCompat = Parameters<typeof convertMessages>[2];
 
-const MAX_TRANSIENT_ATTEMPTS = 4;
 const RETRY_DELAYS_MS = [1_000, 3_000, 7_000] as const;
+const DEFAULT_MAX_RETRIES = 3;
+const DEFAULT_MAX_RETRY_DELAY_MS = 60_000;
 
 interface ChatCompletionToolCall {
   id?: unknown;
@@ -327,19 +329,94 @@ function transientHttpStatus(status: number): boolean {
   return status === 408 || status === 429 || status >= 500;
 }
 
-function retryDelayMs(response: Response, retryIndex: number): number {
+function configuredMaximumRetries(options: SimpleStreamOptions | undefined): number {
+  const configured = options?.maxRetries;
+  return typeof configured === "number" &&
+      Number.isSafeInteger(configured) && configured >= 0
+    ? configured
+    : DEFAULT_MAX_RETRIES;
+}
+
+function configuredMaximumRetryDelayMs(
+  options: SimpleStreamOptions | undefined,
+): number {
+  const configured = options?.maxRetryDelayMs;
+  return typeof configured === "number" &&
+      Number.isFinite(configured) && configured >= 0
+    ? configured
+    : DEFAULT_MAX_RETRY_DELAY_MS;
+}
+
+function retryDelayMs(
+  response: Response,
+  retryIndex: number,
+  maximumDelayMs: number,
+): number {
   const retryAfter = response.headers.get("retry-after")?.trim();
   if (retryAfter) {
+    let requestedDelayMs: number | undefined;
     const seconds = Number(retryAfter);
     if (Number.isFinite(seconds) && seconds >= 0) {
-      return Math.min(60_000, Math.round(seconds * 1_000));
+      requestedDelayMs = Math.round(seconds * 1_000);
+    } else {
+      const date = Date.parse(retryAfter);
+      if (Number.isFinite(date)) {
+        requestedDelayMs = Math.max(0, date - Date.now());
+      }
     }
-    const date = Date.parse(retryAfter);
-    if (Number.isFinite(date)) {
-      return Math.min(60_000, Math.max(0, date - Date.now()));
+    if (requestedDelayMs !== undefined) {
+      if (maximumDelayMs > 0 && requestedDelayMs > maximumDelayMs) {
+        throw new Error(
+          `Provider requested retry after ${String(requestedDelayMs)}ms, ` +
+          `exceeding the ${String(maximumDelayMs)}ms retry delay limit`,
+        );
+      }
+      return requestedDelayMs;
     }
   }
-  return RETRY_DELAYS_MS[Math.min(retryIndex, RETRY_DELAYS_MS.length - 1)]!;
+  const fallback = RETRY_DELAYS_MS[
+    Math.min(retryIndex, RETRY_DELAYS_MS.length - 1)
+  ]!;
+  return maximumDelayMs > 0 ? Math.min(fallback, maximumDelayMs) : fallback;
+}
+
+interface AttemptAbortContext {
+  signal: AbortSignal | undefined;
+  timeoutError(): Error | undefined;
+  cleanup(): void;
+}
+
+function attemptAbortContext(
+  parent: AbortSignal | undefined,
+  timeoutMs: number | undefined,
+): AttemptAbortContext {
+  const hasTimeout = typeof timeoutMs === "number" &&
+    Number.isFinite(timeoutMs) && timeoutMs > 0;
+  if (!hasTimeout) {
+    return {
+      signal: parent,
+      timeoutError: () => undefined,
+      cleanup() {},
+    };
+  }
+
+  const controller = new AbortController();
+  let timeoutError: Error | undefined;
+  const abortFromParent = (): void => controller.abort(parent?.reason);
+  if (parent?.aborted) abortFromParent();
+  else parent?.addEventListener("abort", abortFromParent, { once: true });
+  const timer = setTimeout(() => {
+    timeoutError = new Error(`Provider request timed out after ${String(timeoutMs)}ms`);
+    controller.abort(timeoutError);
+  }, timeoutMs);
+  return {
+    signal: controller.signal,
+    timeoutError: () => timeoutError,
+    cleanup() {
+      clearTimeout(timer);
+      parent?.removeEventListener("abort", abortFromParent);
+    },
+  };
 }
 
 async function waitForRetry(
@@ -466,47 +543,62 @@ export const openAINonStreamingStreamFn: StreamFn = (
       delete finalPayload.stream_options;
       const requestUrl =
         `${model.baseUrl.replace(/\/+$/u, "")}/chat/completions`;
-      const requestInit: RequestInit = {
+      const requestInit: Omit<RequestInit, "signal"> = {
         method: "POST",
         headers: requestHeaders(model, options),
         body: JSON.stringify(finalPayload),
-        ...(options?.signal === undefined
-          ? {}
-          : { signal: options.signal }),
       };
+      const maximumAttempts = configuredMaximumRetries(options) + 1;
+      const maximumRetryDelayMs = configuredMaximumRetryDelayMs(options);
       let response: Response | undefined;
       let bodyText: string | undefined;
-      for (let attempt = 0; attempt < MAX_TRANSIENT_ATTEMPTS; attempt += 1) {
-        try {
-          response = await fetch(requestUrl, requestInit);
-        } catch (error) {
-          if (options?.signal?.aborted || attempt + 1 >= MAX_TRANSIENT_ATTEMPTS) {
-            throw error;
-          }
-          await waitForRetry(RETRY_DELAYS_MS[attempt]!, options?.signal);
-          continue;
-        }
-        await options?.onResponse?.(
-          {
-            status: response.status,
-            headers: Object.fromEntries(response.headers.entries()),
-          },
-          model,
+      for (let attempt = 0; attempt < maximumAttempts; attempt += 1) {
+        response = undefined;
+        bodyText = undefined;
+        const attemptAbort = attemptAbortContext(
+          options?.signal,
+          options?.timeoutMs,
         );
         try {
+          response = await fetch(requestUrl, {
+            ...requestInit,
+            ...(attemptAbort.signal === undefined
+              ? {}
+              : { signal: attemptAbort.signal }),
+          });
+          await options?.onResponse?.(
+            {
+              status: response.status,
+              headers: Object.fromEntries(response.headers.entries()),
+            },
+            model,
+          );
           bodyText = await response.text();
         } catch (error) {
-          if (options?.signal?.aborted || attempt + 1 >= MAX_TRANSIENT_ATTEMPTS) {
-            throw error;
+          const requestError = attemptAbort.timeoutError() ?? error;
+          if (options?.signal?.aborted || attempt + 1 >= maximumAttempts) {
+            throw requestError;
           }
-          await waitForRetry(RETRY_DELAYS_MS[attempt]!, options?.signal);
+          await waitForRetry(
+            retryDelayMs(
+              new Response(null, { status: 503 }),
+              attempt,
+              maximumRetryDelayMs,
+            ),
+            options?.signal,
+          );
           continue;
+        } finally {
+          attemptAbort.cleanup();
         }
         if (
           !response.ok && transientHttpStatus(response.status) &&
-          attempt + 1 < MAX_TRANSIENT_ATTEMPTS
+          attempt + 1 < maximumAttempts
         ) {
-          await waitForRetry(retryDelayMs(response, attempt), options?.signal);
+          await waitForRetry(
+            retryDelayMs(response, attempt, maximumRetryDelayMs),
+            options?.signal,
+          );
           continue;
         }
         break;
@@ -531,8 +623,7 @@ export const openAINonStreamingStreamFn: StreamFn = (
       ) as ChatCompletionResponse;
       if (
         typeof completion.model !== "string" ||
-        (completion.model !== model.id &&
-          !completion.model.startsWith(`${model.id}-`))
+        !responseModelMatchesRequested(model.id, completion.model)
       ) {
         throw new Error(
           `Provider substituted model ${String(completion.model)}; expected ${model.id}`,

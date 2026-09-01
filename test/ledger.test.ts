@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { MemoryLedger } from "../src/evidence-agent/index.js";
 import {
-  MAX_SELECTED_EVIDENCE_CHARS,
+  MAX_INSPECTED_EVIDENCE_CHARS,
   projectMemoryEvidence,
 } from "../src/evidence-agent/index.js";
 import type { StoreSearchHit } from "../src/platform/sqlite/pimem-store.js";
@@ -40,17 +40,20 @@ function evidence(records: readonly MemoryRecord[]) {
 }
 
 describe("MemoryLedger", () => {
-  it("keeps citations within evidence within candidates", () => {
+  it("keeps committed citations equal to read evidence within candidates", () => {
     const ledger = new MemoryLedger("scope-1");
     const first = record("m1", 0);
     const searchOnly = record("m2", 1);
     const expanded = record("m3", 2);
 
     ledger.recordSearchHits([hit(first, 1), hit(searchOnly, 2)]);
-    ledger.recordRead(evidence([first, expanded]));
+    ledger.recordInspect(evidence([first, expanded]));
     ledger.acceptSelection({
       status: "sufficient",
-      citations: [{ memoryId: expanded.memoryId, supports: "Direct support" }],
+      citations: [
+        { memoryId: first.memoryId, supports: "First source" },
+        { memoryId: expanded.memoryId, supports: "Direct support" },
+      ],
       evidenceSummary: "The expanded neighboring turn contains the answer.",
     });
 
@@ -59,24 +62,28 @@ describe("MemoryLedger", () => {
       "m2",
       "m3",
     ]);
-    expect(ledger.evidence.map((memory) => memory.memoryId)).toEqual([
+    expect(ledger.inspectedEvidence.map((memory) => memory.memoryId)).toEqual([
       "m1",
       "m3",
     ]);
     expect(ledger.citations.map((citation) => citation.memoryId)).toEqual([
+      "m1",
       "m3",
     ]);
 
     const expandedCandidate = ledger.candidates.find(
       (candidate) => candidate.memoryId === "m3",
     );
-    expect(expandedCandidate?.read).toBe(true);
-    expect(expandedCandidate?.cited).toBe(true);
+    expect(expandedCandidate?.inspected).toBe(true);
+    expect(expandedCandidate?.committed).toBe(true);
     expect(expandedCandidate?.discoveries).toEqual([
       expect.objectContaining({ tool: "read_expansion" }),
     ]);
     expect(
-      ledger.candidates.find((candidate) => candidate.memoryId === "m2")?.read,
+      ledger.candidates.find((candidate) => candidate.memoryId === "m1")?.committed,
+    ).toBe(true);
+    expect(
+      ledger.candidates.find((candidate) => candidate.memoryId === "m2")?.inspected,
     ).toBe(false);
     expect(() => ledger.assertInvariants()).not.toThrow();
   });
@@ -85,7 +92,7 @@ describe("MemoryLedger", () => {
     const ledger = new MemoryLedger("scope-1");
     const candidate = record("m1", 0);
     ledger.recordSearchHits([hit(candidate, 1)]);
-    ledger.recordRead(evidence([candidate]));
+    ledger.recordInspect(evidence([candidate]));
     const selection = {
       status: "sufficient" as const,
       citations: [{ memoryId: "m1", supports: "Direct support" }],
@@ -111,7 +118,7 @@ describe("MemoryLedger", () => {
     ).toThrow(/at least one memory/u);
   });
 
-  it("rejects citations that were found but not read", () => {
+  it("rejects citations that were found but not inspected", () => {
     const ledger = new MemoryLedger("scope-1");
     const candidate = record("m1", 0);
     ledger.recordSearchHits([hit(candidate, 1)]);
@@ -122,13 +129,13 @@ describe("MemoryLedger", () => {
         citations: [{ memoryId: "m1", supports: "Search preview" }],
         evidenceSummary: "Only a preview was seen.",
       }),
-    ).toThrow(/read in this run/u);
+    ).toThrow(/inspected in this run/u);
   });
 
   it("rejects duplicate citations", () => {
     const ledger = new MemoryLedger("scope-1");
     const candidate = record("m1", 0);
-    ledger.recordRead(evidence([candidate]));
+    ledger.recordInspect(evidence([candidate]));
 
     expect(() => ledger.acceptSelection({
       status: "sufficient",
@@ -140,24 +147,90 @@ describe("MemoryLedger", () => {
     })).toThrow(/Duplicate citation/u);
   });
 
-  it("bounds the final cited evidence package", () => {
+  it("rejects a handoff that omits any source returned by read", () => {
+    const ledger = new MemoryLedger("scope-1");
+    const first = record("m1", 0);
+    const second = record("m2", 1);
+    ledger.recordInspect(evidence([first, second]));
+
+    expect(() => ledger.acceptSelection({
+      status: "sufficient",
+      citations: [{ memoryId: "m1", supports: "First statement." }],
+      evidenceSummary: "One read source was omitted.",
+    })).toThrow(/every exact source returned by read/u);
+  });
+
+  it("accepts and commits the complete read ledger beyond the former selection limit", () => {
     const ledger = new MemoryLedger("scope-1");
     const sources = Array.from({ length: 33 }, (_, index) => ({
       ...record(`m-${String(index)}`, index),
       content: "x".repeat(8_192),
     }));
-    ledger.recordRead(sources.map((source) =>
+    ledger.recordInspect(sources.map((source) =>
       projectMemoryEvidence(source, ["x"], 8_192)
     ));
-
+    expect(ledger.inspectedEvidence).toHaveLength(33);
     expect(() => ledger.acceptSelection({
       status: "sufficient",
       citations: sources.map((source) => ({
         memoryId: source.memoryId,
-        supports: "Direct source.",
+        supports: source.memoryId,
       })),
-      evidenceSummary: "An oversized source set.",
-    })).toThrow(new RegExp(String(MAX_SELECTED_EVIDENCE_CHARS), "u"));
+      evidenceSummary: "All read sources are committed.",
+    })).not.toThrow();
+    expect(ledger.citations).toHaveLength(33);
+    expect(ledger.candidates.every((candidate) => candidate.committed)).toBe(true);
+  });
+
+  it("rejects an over-size inspect atomically before it enters the private ledger", () => {
+    const ledger = new MemoryLedger("scope-1");
+    const admitted = Array.from({ length: 127 }, (_, index) => ({
+      ...record(`m-large-${String(index)}`, index),
+      content: "x".repeat(8_192),
+    }));
+    ledger.recordInspect(admitted.map((source) =>
+      projectMemoryEvidence(source, [], 8_192)
+    ));
+    const overflow = {
+      ...record("m-large-overflow", 127),
+      content: "x".repeat(8_193),
+    };
+
+    expect(() => ledger.recordInspect([
+      projectMemoryEvidence(overflow, [], 8_192),
+    ])).toThrow(new RegExp(
+      `limit of ${String(MAX_INSPECTED_EVIDENCE_CHARS)} characters`,
+      "u",
+    ));
+    expect(ledger.inspectedEvidence).toHaveLength(127);
+    expect(ledger.candidates.some((item) => item.memoryId === overflow.memoryId))
+      .toBe(false);
+  });
+
+  it("retains distinct exact passages when a long memory is inspected twice", () => {
+    const ledger = new MemoryLedger("scope-1");
+    const content =
+      `${"h".repeat(10_000)} FIRST_UNIQUE ${"x".repeat(20_000)}` +
+      ` SECOND_UNIQUE ${"y".repeat(10_000)}`;
+    const source = {
+      ...record("m-long", 0),
+      content,
+      contentHash: "hash-m-long",
+    };
+    const first = projectMemoryEvidence(source, ["FIRST_UNIQUE"], 8_192);
+    const second = projectMemoryEvidence(source, ["SECOND_UNIQUE"], 8_192);
+    expect(first.content).toContain("FIRST_UNIQUE");
+    expect(first.content).not.toContain("SECOND_UNIQUE");
+    expect(second.content).not.toContain("FIRST_UNIQUE");
+    expect(second.content).toContain("SECOND_UNIQUE");
+
+    ledger.recordInspect([first]);
+    ledger.recordInspect([second]);
+
+    expect(ledger.inspectedEvidence).toHaveLength(1);
+    expect(ledger.inspectedEvidence[0]?.content).toContain("FIRST_UNIQUE");
+    expect(ledger.inspectedEvidence[0]?.content).toContain("SECOND_UNIQUE");
+    expect(ledger.evidenceRef(source.memoryId)).toBe("E1");
   });
 
   it("allows an insufficient selection with no citations", () => {
@@ -179,7 +252,7 @@ describe("MemoryLedger", () => {
     const ledger = new MemoryLedger("scope-1");
     const first = record("m1", 0);
     const second = record("m2", 1);
-    ledger.recordRead(evidence([first, second]));
+    ledger.recordInspect(evidence([first, second]));
 
     expect(
       ledger.acceptSelection({
@@ -204,10 +277,10 @@ describe("MemoryLedger", () => {
     });
   });
 
-  it("rejects inventory entries backed only by unread memory", () => {
+  it("rejects inventory entries backed only by uninspected memory", () => {
     const ledger = new MemoryLedger("scope-1");
     const first = record("m1", 0);
-    ledger.recordRead(evidence([first]));
+    ledger.recordInspect(evidence([first]));
 
     expect(() =>
       ledger.acceptSelection({
@@ -217,16 +290,16 @@ describe("MemoryLedger", () => {
         count: 2,
         inventory: [
           { item: "first", memoryIds: ["m1"] },
-          { item: "second", memoryIds: ["m-unread"] },
+          { item: "second", memoryIds: ["m-uninspected"] },
         ],
       }),
-    ).toThrow(/read in this run/u);
+    ).toThrow(/inspected in this run/u);
   });
 
   it("rejects records from another scope", () => {
     const ledger = new MemoryLedger("scope-1");
     const foreign = record("m1", 0, "scope-2");
-    expect(() => ledger.recordRead(evidence([foreign]))).toThrow(/expected scope-1/u);
+    expect(() => ledger.recordInspect(evidence([foreign]))).toThrow(/expected scope-1/u);
   });
 
   it("records bash-discovered source IDs as candidates, not evidence", () => {
@@ -239,13 +312,13 @@ describe("MemoryLedger", () => {
 
     expect(candidates[0]).toMatchObject({
       memoryId: "m-bash",
-      read: false,
-      cited: false,
+      inspected: false,
+      committed: false,
     });
     expect(candidates[0]?.discoveries[0]).toMatchObject({
       tool: "bash_ro",
       retriever: "bash_ro",
     });
-    expect(ledger.evidence).toEqual([]);
+    expect(ledger.inspectedEvidence).toEqual([]);
   });
 });

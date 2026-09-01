@@ -176,7 +176,11 @@ export function modelOptionsFor(
 
 export function skillFor(parsed: ParsedCommand): PiMemSkill {
   const skill = optionalFlag(parsed, "skill") ?? "pimem-v0";
-  if (skill !== "none" && skill !== "pimem-v0") {
+  if (
+    skill !== "none" &&
+    skill !== "pimem-minimal" &&
+    skill !== "pimem-v0"
+  ) {
     throw new Error(`Unknown PiMem skill: ${skill}`);
   }
   return skill;

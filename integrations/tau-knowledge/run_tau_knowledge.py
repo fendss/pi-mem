@@ -28,6 +28,7 @@ from provider_health import wait_for_openai_chat_model
 from result_integrity import (
     build_validity_report,
     locate_results_file,
+    method_execution_contract,
     sha256_file,
 )
 
@@ -241,6 +242,12 @@ def install_run_manifest(
     requested_slots = requested_config.pop("slots", None)
     if existing_config != requested_config:
         mismatches.append("config_except_slots")
+    existing_execution = existing.get("execution_contract")
+    requested_execution = manifest.get("execution_contract")
+    if method_execution_contract(existing_execution) != method_execution_contract(
+        requested_execution
+    ):
+        mismatches.append("execution_contract.method_limits")
     if mismatches:
         raise SystemExit(
             "Refusing infra resume because benchmark semantics changed: "
@@ -498,7 +505,8 @@ def main() -> None:
     os.chdir(tau_root)
 
     operators = (
-        args.operator or ["hybrid", "lexical", "coverage"]
+        args.operator
+        or ["hybrid", "lexical", "chronological", "temporal-index", "numeric-index"]
         if args.condition == "pimem"
         else []
     )

@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { renderEvidenceExcerpts } from "../../../evidence-agent/index.js";
 import {
   MemoryArenaPublicError,
   MemoryArenaOperationDiagnosticError,
@@ -8,6 +9,7 @@ import {
   type MemoryArenaAddInput,
   type MemoryArenaAddResult,
   type MemoryArenaGenerationState,
+  type MemoryArenaCommittedEvidence,
   type MemoryArenaInitializeInput,
   type MemoryArenaInitializeResult,
   type MemoryArenaOperationAuditFailure,
@@ -23,145 +25,14 @@ import type {
   MemoryArenaOperationAuditSpan,
   MemoryArenaPublicBackendDependencies,
 } from "../ports/memory-backend.js";
+import { memoryArenaPiMemFailureDiagnostics } from "../model/failure-diagnostics.js";
 
 function sha256(value: string): string {
   return createHash("sha256").update(value, "utf8").digest("hex");
 }
 
-function recordValue(value: unknown): Record<string, unknown> | undefined {
-  return typeof value === "object" && value !== null
-    ? value as Record<string, unknown>
-    : undefined;
-}
-
-function finiteNumber(
-  record: Record<string, unknown>,
-  key: string,
-): number | undefined {
-  const value = record[key];
-  return typeof value === "number" && Number.isFinite(value)
-    ? value
-    : undefined;
-}
-
-function safeCount(
-  record: Record<string, unknown>,
-  key: string,
-): number | undefined {
-  const value = finiteNumber(record, key);
-  return value !== undefined && Number.isSafeInteger(value) && value >= 0
-    ? value
-    : undefined;
-}
-
-function modelUsage(
-  value: unknown,
-): MemoryArenaOperationFailedRetrieval["usage"] | undefined {
-  const usage = recordValue(value);
-  const cost = recordValue(usage?.cost);
-  if (usage === undefined || cost === undefined) return undefined;
-  const input = finiteNumber(usage, "input");
-  const output = finiteNumber(usage, "output");
-  const cacheRead = finiteNumber(usage, "cacheRead");
-  const cacheWrite = finiteNumber(usage, "cacheWrite");
-  const totalTokens = finiteNumber(usage, "totalTokens");
-  const costInput = finiteNumber(cost, "input");
-  const costOutput = finiteNumber(cost, "output");
-  const costCacheRead = finiteNumber(cost, "cacheRead");
-  const costCacheWrite = finiteNumber(cost, "cacheWrite");
-  const costTotal = finiteNumber(cost, "total");
-  if (
-    input === undefined || output === undefined || cacheRead === undefined ||
-    cacheWrite === undefined || totalTokens === undefined ||
-    costInput === undefined || costOutput === undefined ||
-    costCacheRead === undefined || costCacheWrite === undefined ||
-    costTotal === undefined
-  ) return undefined;
-  const cacheWrite1h = finiteNumber(usage, "cacheWrite1h");
-  const reasoning = finiteNumber(usage, "reasoning");
-  return {
-    input,
-    output,
-    cacheRead,
-    cacheWrite,
-    ...(cacheWrite1h === undefined ? {} : { cacheWrite1h }),
-    ...(reasoning === undefined ? {} : { reasoning }),
-    totalTokens,
-    cost: {
-      input: costInput,
-      output: costOutput,
-      cacheRead: costCacheRead,
-      cacheWrite: costCacheWrite,
-      total: costTotal,
-    },
-  };
-}
-
-function piMemFailureDiagnostics(
-  error: unknown,
-): MemoryArenaOperationFailedRetrieval | undefined {
-  const seen = new Set<unknown>();
-  let current: unknown = error;
-  for (let depth = 0; depth < 8 && current !== undefined; depth += 1) {
-    if (seen.has(current)) break;
-    seen.add(current);
-    const candidate = recordValue(current);
-    if (current instanceof Error && current.name === "PiMemRunError") {
-      const diagnostics = recordValue(candidate?.diagnostics);
-      const usage = modelUsage(diagnostics?.usage);
-      const runId = diagnostics?.runId;
-      const turns = diagnostics === undefined
-        ? undefined
-        : safeCount(diagnostics, "turns");
-      const toolCalls = diagnostics === undefined
-        ? undefined
-        : safeCount(diagnostics, "toolCalls");
-      if (
-        diagnostics !== undefined && typeof runId === "string" &&
-        turns !== undefined && toolCalls !== undefined && usage !== undefined
-      ) {
-        const trace = Array.isArray(diagnostics.trace) ? diagnostics.trace : [];
-        const tools = new Map<string, number>();
-        let errorEntries = 0;
-        for (const entry of trace) {
-          const traceEntry = recordValue(entry);
-          if (traceEntry?.isError === true) errorEntries += 1;
-          const rawTool = traceEntry?.toolName;
-          const tool = typeof rawTool === "string" && rawTool.length > 0
-            ? rawTool.slice(0, 128)
-            : "unknown";
-          tools.set(tool, (tools.get(tool) ?? 0) + 1);
-        }
-        return {
-          runId,
-          turns,
-          toolCalls,
-          candidateCount: Array.isArray(diagnostics.candidates)
-            ? diagnostics.candidates.length
-            : 0,
-          evidenceCount: Array.isArray(diagnostics.evidence)
-            ? diagnostics.evidence.length
-            : 0,
-          trace: {
-            entries: trace.length,
-            errorEntries,
-            byTool: Object.fromEntries(
-              [...tools.entries()].sort(([left], [right]) =>
-                left.localeCompare(right)
-              ),
-            ),
-          },
-          usage,
-        };
-      }
-    }
-    current = candidate?.cause;
-  }
-  return undefined;
-}
-
 function operationFailure(error: unknown): MemoryArenaOperationAuditFailure {
-  const retrieval = piMemFailureDiagnostics(error);
+  const retrieval = memoryArenaPiMemFailureDiagnostics(error);
   const embedding = operationEmbeddingDiagnostics(error);
   if (error instanceof MemoryArenaPublicError) {
     return {
@@ -229,11 +100,24 @@ function cloneRetrieval(
   return {
     ...retrieval,
     citations: retrieval.citations.map((citation) => ({ ...citation })),
+    evidence: retrieval.evidence.map((item) => ({
+      ...item,
+      excerpts: item.excerpts.map((excerpt) => ({ ...excerpt })),
+      metadata: structuredClone(item.metadata),
+    })),
     trace: [...retrieval.trace],
     usage: {
       ...retrieval.usage,
       cost: { ...retrieval.usage.cost },
     },
+    ...(retrieval.retrievalModel === undefined
+      ? {}
+      : {
+          retrievalModel: {
+            ...retrieval.retrievalModel,
+            responseModels: [...retrieval.retrievalModel.responseModels],
+          },
+        }),
     ...(retrieval.inventory === undefined
       ? {}
       : {
@@ -245,16 +129,101 @@ function cloneRetrieval(
     ...(retrieval.audit === undefined
       ? {}
       : { audit: { ...retrieval.audit } }),
+    ...(retrieval.operatorExperiment === undefined
+      ? {}
+      : { operatorExperiment: structuredClone(retrieval.operatorExperiment) }),
   };
 }
 
-function selectedMemoryIds(retrieval: MemoryArenaRetrievalResult): string[] {
-  const selected = new Set<string>();
-  for (const citation of retrieval.citations) selected.add(citation.memoryId);
-  for (const item of retrieval.inventory ?? []) {
-    for (const memoryId of item.memoryIds) selected.add(memoryId);
+function sourceIntegrityError(message: string): MemoryArenaPublicError {
+  return new MemoryArenaPublicError({
+    code: "source_integrity_error",
+    message,
+    httpStatus: 500,
+  });
+}
+
+function validateCommittedEvidence(
+  retrieval: MemoryArenaRetrievalResult,
+): MemoryArenaCommittedEvidence[] {
+  if (!retrieval.evidenceSummary.trim()) {
+    throw sourceIntegrityError("PiMem retrieval omitted its evidence summary");
   }
-  return [...selected];
+  if (retrieval.status === "sufficient" && retrieval.evidence.length === 0) {
+    throw sourceIntegrityError(
+      "PiMem marked retrieval sufficient without committed exact evidence",
+    );
+  }
+
+  const byId = new Map<string, MemoryArenaCommittedEvidence>();
+  for (const source of retrieval.evidence) {
+    if (!source.memoryId.trim() || byId.has(source.memoryId)) {
+      throw sourceIntegrityError(
+        `PiMem returned invalid or duplicate evidence source: ${source.memoryId}`,
+      );
+    }
+    if (
+      !Number.isSafeInteger(source.sourceContentLength) ||
+      source.sourceContentLength < 0 ||
+      !/^[a-f0-9]{64}$/u.test(source.sourceContentHash) ||
+      sha256(source.content) !== source.contentHash ||
+      source.excerpts.length === 0
+    ) {
+      throw sourceIntegrityError(
+        `PiMem returned invalid exact evidence provenance: ${source.memoryId}`,
+      );
+    }
+    let previousEnd = -1;
+    for (const excerpt of source.excerpts) {
+      if (
+        !Number.isSafeInteger(excerpt.start) ||
+        !Number.isSafeInteger(excerpt.end) ||
+        excerpt.start < 0 ||
+        excerpt.end < excerpt.start ||
+        excerpt.end > source.sourceContentLength ||
+        excerpt.start < previousEnd ||
+        excerpt.content.length !== excerpt.end - excerpt.start
+      ) {
+        throw sourceIntegrityError(
+          `PiMem returned invalid exact evidence offsets: ${source.memoryId}`,
+        );
+      }
+      previousEnd = excerpt.end;
+    }
+    if (source.content !== renderEvidenceExcerpts({
+      sourceContentLength: source.sourceContentLength,
+      excerpts: source.excerpts,
+    })) {
+      throw sourceIntegrityError(
+        `PiMem returned evidence content inconsistent with its excerpts: ${source.memoryId}`,
+      );
+    }
+    byId.set(source.memoryId, source);
+  }
+
+  const referencedIds = [
+    ...retrieval.citations.map((citation) => citation.memoryId),
+    ...(retrieval.inventory ?? []).flatMap((item) => item.memoryIds),
+  ];
+  const missing = [...new Set(referencedIds)].filter((id) => !byId.has(id));
+  if (missing.length > 0) {
+    throw sourceIntegrityError(
+      `PiMem selected evidence without exact committed passages: ${missing.join(", ")}`,
+    );
+  }
+  const citationIds = new Set(
+    retrieval.citations.map((citation) => citation.memoryId),
+  );
+  if (
+    citationIds.size !== retrieval.citations.length ||
+    byId.size !== citationIds.size ||
+    [...byId.keys()].some((memoryId) => !citationIds.has(memoryId))
+  ) {
+    throw sourceIntegrityError(
+      "PiMem exact read package and harness-generated citations do not match",
+    );
+  }
+  return retrieval.evidence;
 }
 
 export function renderMemoryArenaPublicPrompt(
@@ -269,6 +238,77 @@ export function renderMemoryArenaPublicPrompt(
     "</memory_context>",
     `User: ${question}`,
   ].join("\n");
+}
+
+function renderCommittedMemory(source: MemoryArenaCommittedEvidence): string {
+  return [
+    "<memory>",
+    `memory_id: ${source.memoryId}`,
+    `session_id: ${source.sessionId}`,
+    `turn_index: ${String(source.turnIndex)}`,
+    `role: ${source.role}`,
+    `timestamp: ${source.timestamp ?? "unknown"}`,
+    "content:",
+    source.content,
+    "</memory>",
+  ].join("\n");
+}
+
+export const MEMORYARENA_ANSWER_HANDOFF_ID = "evidence-aware-v1";
+export const MEMORYARENA_FULL_PARENT_HANDOFF_MAX_UTF8_BYTES = 128 * 1024;
+export const MEMORYARENA_ANSWER_PROMPT_VERSION =
+  "memoryarena-public-budgeted-full-parent-no-summary-no-status-20260831-v3";
+
+function renderMemoryArenaEvidenceSources(
+  question: string,
+  retrieval: MemoryArenaRetrievalResult,
+  contentByMemoryId?: ReadonlyMap<string, string>,
+): string {
+  return [
+    `<retrieval_package selected_sources="${String(retrieval.evidence.length)}">`,
+    "</retrieval_package>",
+    '<memory_context authority="read_exact_sources">',
+    ...(retrieval.evidence.length === 0
+      ? ["None"]
+      : retrieval.evidence.map((source) => renderCommittedMemory(
+          contentByMemoryId?.has(source.memoryId)
+            ? { ...source, content: contentByMemoryId.get(source.memoryId)! }
+            : source,
+        ))),
+    "</memory_context>",
+    `User: ${question}`,
+  ].join("\n");
+}
+
+/**
+ * Evidence-aware answer handoff used by agentic-memory harnesses. Free-text
+ * retrieval summary and sufficiency status remain available in result/audit
+ * data but are intentionally omitted here. Selected immutable parents are
+ * expanded as one all-or-nothing package when the complete prompt fits the
+ * global byte budget; otherwise the exact excerpts returned by read remain the
+ * answer authority.
+ */
+export function renderMemoryArenaEvidencePrompt(
+  question: string,
+  retrieval: MemoryArenaRetrievalResult,
+  originalContentByMemoryId?: ReadonlyMap<string, string>,
+): string {
+  const excerptPrompt = renderMemoryArenaEvidenceSources(question, retrieval);
+  if (
+    originalContentByMemoryId === undefined ||
+    retrieval.evidence.some((source) => !originalContentByMemoryId.has(source.memoryId))
+  ) {
+    return excerptPrompt;
+  }
+  const fullParentPrompt = renderMemoryArenaEvidenceSources(
+    question,
+    retrieval,
+    originalContentByMemoryId,
+  );
+  return new TextEncoder().encode(fullParentPrompt).byteLength <=
+      MEMORYARENA_FULL_PARENT_HANDOFF_MAX_UTF8_BYTES
+    ? fullParentPrompt
+    : excerptPrompt;
 }
 
 export class MemoryArenaPublicMemoryBackend {
@@ -303,29 +343,33 @@ export class MemoryArenaPublicMemoryBackend {
   }
 
   async add(input: MemoryArenaAddInput): Promise<MemoryArenaAddResult> {
+    const appendIdentity = input.messages === undefined
+      ? input.chunk
+      : JSON.stringify({ chunk: input.chunk, messages: input.messages });
     return this.audited({
       operation: "add",
       userId: input.userId,
       memorySystemName: input.memorySystemName,
-      chunkSha256: sha256(input.chunk),
+      chunkSha256: sha256(appendIdentity),
     }, async () => {
       const state = await this.activeState(input);
       const ordinal = await this.dependencies.generations.reserveAppend({
         userId: input.userId,
         generation: state.generation,
-        chunk: input.chunk,
+        chunk: appendIdentity,
       });
       await this.dependencies.chunks.appendOriginalChunk({
         userId: input.userId,
         generation: state.generation,
         ordinal,
         chunk: input.chunk,
+        ...(input.messages === undefined ? {} : { messages: input.messages }),
       });
       const completed = await this.dependencies.generations.completeAppend({
         userId: input.userId,
         generation: state.generation,
         ordinal,
-        chunk: input.chunk,
+        chunk: appendIdentity,
       });
       return {
         result: { userId: input.userId, response: null },
@@ -358,13 +402,18 @@ export class MemoryArenaPublicMemoryBackend {
       let retrieval: MemoryArenaRetrievalResult | undefined;
       let ids: string[] = [];
       let chunks: string[] = [];
+      let originalContentByMemoryId: ReadonlyMap<string, string> | undefined;
       if (state.nextOrdinal > 0) {
         retrieval = await this.dependencies.retriever.retrieve({
           userId: state.userId,
           generation: state.generation,
           question: input.question,
+          ...(input.operatorExperiment === undefined
+            ? {}
+            : { operatorExperiment: input.operatorExperiment }),
         });
-        ids = selectedMemoryIds(retrieval);
+        const evidence = validateCommittedEvidence(retrieval);
+        ids = evidence.map((source) => source.memoryId);
         if (ids.length > 0) {
           const originals = await this.dependencies.chunks.readOriginalChunks({
             userId: state.userId,
@@ -374,19 +423,35 @@ export class MemoryArenaPublicMemoryBackend {
           const byId = new Map(
             originals.map((chunk) => [chunk.memoryId, chunk.content]),
           );
+          originalContentByMemoryId = byId;
           const missing = ids.filter((memoryId) => !byId.has(memoryId));
           if (missing.length > 0) {
-            throw new MemoryArenaPublicError({
-              code: "source_integrity_error",
-              message: `PiMem selected missing source chunks: ${missing.join(", ")}`,
-              httpStatus: 500,
-            });
+            throw sourceIntegrityError(
+              `PiMem selected missing source chunks: ${missing.join(", ")}`,
+            );
           }
-          chunks = ids.map((memoryId) => byId.get(memoryId)!);
+          chunks = evidence.map((source) => {
+            const content = byId.get(source.memoryId)!;
+            if (
+              content.length !== source.sourceContentLength ||
+              sha256(content) !== source.sourceContentHash
+            ) {
+              throw sourceIntegrityError(
+                `PiMem selected a source changed after retrieval: ${source.memoryId}`,
+              );
+            }
+            return content;
+          });
         }
       }
 
-      const prompt = renderMemoryArenaPublicPrompt(input.question, chunks);
+      const prompt = input.answerHandoff === "evidence-aware-v1" && retrieval !== undefined
+        ? renderMemoryArenaEvidencePrompt(
+            input.question,
+            retrieval,
+            originalContentByMemoryId,
+          )
+        : renderMemoryArenaPublicPrompt(input.question, chunks);
       try {
         await this.dependencies.audits.record({
           schemaVersion: 1,
@@ -400,6 +465,13 @@ export class MemoryArenaPublicMemoryBackend {
           ...(retrieval === undefined
             ? {}
             : { retrieval: cloneRetrieval(retrieval) }),
+          ...(retrieval?.operatorExperiment === undefined
+            ? {}
+            : {
+                operatorExperiment: structuredClone(
+                  retrieval.operatorExperiment,
+                ),
+              }),
         });
       } catch (error) {
         if (error instanceof MemoryArenaPublicError) throw error;
@@ -412,7 +484,25 @@ export class MemoryArenaPublicMemoryBackend {
         });
       }
       return {
-        result: { userId: state.userId, prompt },
+        result: {
+          userId: state.userId,
+          prompt,
+          ...(retrieval?.retrievalModel === undefined
+            ? {}
+            : {
+                retrievalModel: {
+                  ...retrieval.retrievalModel,
+                  responseModels: [...retrieval.retrievalModel.responseModels],
+                },
+              }),
+          ...(retrieval?.operatorExperiment === undefined
+            ? {}
+            : {
+                operatorExperiment: structuredClone(
+                  retrieval.operatorExperiment,
+                ),
+              }),
+        },
         audit: {
           generation: state.generation,
           nextOrdinal: state.nextOrdinal,

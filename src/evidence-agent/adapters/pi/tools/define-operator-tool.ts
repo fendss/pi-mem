@@ -15,17 +15,27 @@ export function createDefineOperatorTool(
   const allowedSources = new Set(initialSourceIds);
   return {
     name: "define_operator",
-    label: "Define search operator",
+    label: "Compose retrieval plan",
     description: [
-      "Create one run-local search operator only when the existing catalog cannot express the needed recall pattern.",
-      "List one to four existing operators as sources; multiple sources " +
-      "default to RRF fusion. This tool cannot read memory or create evidence.",
-      `Initial source operators: ${initialSourceIds.join(", ")}.`,
+      "Compose one ordered run-local retrieval plan from primitive retrievers and typed transformations.",
+      "Search steps generate CandidateSets. Later steps may combine, filter, sort, diversify by session, dedupe content, limit, or annotate them. " +
+      "Every input must reference an earlier step. The harness uses the last step as output and fills the fixed session/content modes. " +
+      "This tool cannot read memory or create evidence.",
+      `Primitive retrievers: ${initialSourceIds.join(", ")}.`,
       `Remaining definition budget at run start: ${options.operatorDefinitions.remainingDefinitions()}.`,
     ].join(" "),
     parameters: DefineOperatorParameters,
     async execute(_toolCallId, params) {
-      const sourceIds = params.sources.map((source) => source.operator);
+      const steps = structuredClone(params.steps).map((step) =>
+        step.kind === "diversify"
+          ? { ...step, by: "session" as const }
+          : step.kind === "dedupe"
+            ? { ...step, by: "content" as const }
+            : step
+      );
+      const sourceIds = steps
+        .filter((step) => step.kind === "search")
+        .map((step) => step.operator);
       const unknownSources = sourceIds.filter((source) =>
         !allowedSources.has(source)
       );
@@ -35,39 +45,16 @@ export function createDefineOperatorTool(
           unknownSources.join(", "),
         );
       }
-      if (new Set(sourceIds).size !== sourceIds.length) {
-        throw new Error("Operator sources must be distinct");
-      }
-      const searchSteps = params.sources.map((source, index) => ({
-        id: `source-${index + 1}`,
-        kind: "search" as const,
-        operator: source.operator,
-        ...(source.limit === undefined ? {} : { limit: source.limit }),
-      }));
-      const multipleSources = searchSteps.length > 1;
-      if (!multipleSources && params.combine !== undefined) {
-        throw new Error("combine is only valid with multiple operator sources");
-      }
       const definition = options.operatorDefinitions.define({
         id: params.id,
         version: "run-1",
         guide: {
           summary: params.summary,
           useWhen: [params.summary],
-          cost: multipleSources ? "high" : "medium",
+          cost: sourceIds.length > 2 ? "high" : "medium",
         },
-        steps: multipleSources
-          ? [
-              ...searchSteps,
-              {
-                id: "combined",
-                kind: "combine" as const,
-                inputs: searchSteps.map((step) => step.id),
-                method: params.combine ?? "rrf",
-              },
-            ]
-          : searchSteps,
-        output: multipleSources ? "combined" : "source-1",
+        steps,
+        output: steps.at(-1)!.id,
       });
       const snapshot = options.operatorDefinitions.snapshots().find(
         (item) => item.revision === definition.catalog.revision,
@@ -84,7 +71,7 @@ export function createDefineOperatorTool(
         content: [{
           type: "text" as const,
           text:
-            `Defined ${definition.id}@${definition.version} for this run ` +
+            `Composed ${definition.id}@${definition.version} for this run ` +
             `(catalog revision ${definition.catalog.revision}). ` +
             `Use search with operator=${JSON.stringify(definition.id)}.`,
         }],

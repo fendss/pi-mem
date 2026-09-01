@@ -312,7 +312,7 @@ def _verify_runtime_manifest(
     settings: ProductionSettings,
     state: _ReleaseState,
     context: AttemptContext,
-) -> None:
+) -> Mapping[str, Any]:
     """Bind executor environment to the locked runtime/source manifests."""
 
     try:
@@ -322,6 +322,7 @@ def _verify_runtime_manifest(
     infrastructure = run_manifest.get("infrastructure")
     models = run_manifest.get("models")
     pimem_source = run_manifest.get("pimem_source")
+    effective_configs = run_manifest.get("effective_configs")
     if (
         run_manifest.get("run_id") != context.run_id
         or run_manifest.get("release_id") != RELEASE_ID
@@ -341,6 +342,12 @@ def _verify_runtime_manifest(
         or not models.get("embedding_model")
         or not isinstance(pimem_source, Mapping)
         or pimem_source.get("clean_worktree") is not True
+        or not isinstance(effective_configs, Mapping)
+        or set(effective_configs) != set(SUITE_CONTRACTS)
+        or any(
+            not isinstance(effective_configs.get(suite), Mapping)
+            for suite in SUITE_CONTRACTS
+        )
     ):
         raise IntegrityError(
             "runtime manifest is not bound to this official release, task manifest, "
@@ -381,6 +388,7 @@ def _verify_runtime_manifest(
         raise IntegrityError(
             "PiMem source differs from the clean Git identity locked in the run manifest"
         )
+    return run_manifest
 
 
 def _nested_get(value: Mapping[str, Any], path: Sequence[str]) -> Any:
@@ -414,12 +422,25 @@ def _validate_gateway_url(value: Any) -> str:
     return value.rstrip("/")
 
 
+def _verify_effective_config_lock(
+    source_path: Path,
+    provenance_path: Path,
+    config_lock: Mapping[str, Any],
+) -> None:
+    if (
+        config_lock.get("effective_config_sha256") != file_sha256(source_path)
+        or config_lock.get("provenance_sha256") != file_sha256(provenance_path)
+    ):
+        raise IntegrityError("effective config differs from locked run manifest")
+
+
 def _prepare_attempt_config(
     settings: ProductionSettings,
     task: TaskSpec,
     context: AttemptContext,
     *,
     memory_proxy_url: str,
+    config_lock: Mapping[str, Any],
 ) -> tuple[Path, str, tuple[str, ...]]:
     contract = SUITE_CONTRACTS[task.domain]
     source_path = settings.config_dir / contract.effective_config_name
@@ -429,6 +450,10 @@ def _prepare_attempt_config(
         provenance = read_json(provenance_path)
     except (OSError, ValueError, json.JSONDecodeError) as error:
         raise IntegrityError(f"cannot load bootstrapped effective config: {error}") from error
+    try:
+        _verify_effective_config_lock(source_path, provenance_path, config_lock)
+    except IntegrityError as error:
+        raise IntegrityError(f"{error}: {task.domain}") from error
     if (
         provenance.get("suite") != task.domain
         or provenance.get("code_revision") != OFFICIAL_CODE_REVISION
@@ -550,6 +575,25 @@ def _provider_error(text: str, *, stage: str) -> ProviderRequestError | None:
             text[-2000:], status_code=400, provider_code="invalid_request", stage=stage
         )
     return None
+
+
+def _worker_provider_error(
+    response: Mapping[str, Any],
+    return_code: int,
+    stdout_text: str,
+    stderr_text: str,
+) -> ProviderRequestError | None:
+    if response.get("status") == "ok" and return_code == 0:
+        return None
+    combined_error = "\n".join(
+        [
+            stdout_text,
+            stderr_text,
+            str(response.get("error", "")),
+            str(response.get("swallowed_errors", "")),
+        ]
+    )
+    return _provider_error(combined_error, stage="official-task-group")
 
 
 def _run_worker(
@@ -900,7 +944,11 @@ def memoryarena_executor(
     seam_identity = _assert_production_seam_unchanged()
     settings = ProductionSettings.from_environment()
     state = _load_release_state(settings)
-    _verify_runtime_manifest(artifacts, settings, state, context)
+    run_manifest = _verify_runtime_manifest(artifacts, settings, state, context)
+    effective_configs = run_manifest["effective_configs"]
+    assert isinstance(effective_configs, Mapping)
+    config_lock = effective_configs[task.domain]
+    assert isinstance(config_lock, Mapping)
     expected = state.tasks.get(task.task_key)
     if expected is None or expected.to_manifest_entry() != task.to_manifest_entry():
         raise IntegrityError("executor TaskSpec is not in the concrete 701-task release")
@@ -922,7 +970,11 @@ def memoryarena_executor(
     # Build once to read the gateway without allowing any official process to
     # race the audit proxy.  The temporary URL is overwritten below.
     dummy_config, gateway_url, _ = _prepare_attempt_config(
-        settings, task, context, memory_proxy_url="http://127.0.0.1:1"
+        settings,
+        task,
+        context,
+        memory_proxy_url="http://127.0.0.1:1",
+        config_lock=config_lock,
     )
     dummy_config.unlink()
 
@@ -935,7 +987,11 @@ def memoryarena_executor(
     proxy.start()
     try:
         config_path, repeated_gateway, changed_paths = _prepare_attempt_config(
-            settings, task, context, memory_proxy_url=proxy.url
+            settings,
+            task,
+            context,
+            memory_proxy_url=proxy.url,
+            config_lock=config_lock,
         )
         if repeated_gateway != gateway_url:
             raise IntegrityError("effective config changed while starting attempt")
@@ -997,10 +1053,7 @@ def memoryarena_executor(
     )
     _verify_checkout(settings.checkout)
 
-    combined_error = "\n".join(
-        [stdout_text, stderr_text, str(response.get("error", "")), str(response.get("swallowed_errors", ""))]
-    )
-    detected = _provider_error(combined_error, stage="official-task-group")
+    detected = _worker_provider_error(response, return_code, stdout_text, stderr_text)
     try:
         durable_terminals = _read_pimem_operation_audits(
             settings, context, artifacts

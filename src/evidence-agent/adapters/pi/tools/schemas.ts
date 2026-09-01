@@ -1,73 +1,247 @@
 import { Type } from "@earendil-works/pi-ai";
 
+const WorkingMemory = Type.String({
+  minLength: 1,
+  maxLength: 1600,
+  description:
+    "Replace the persistent working note with a compact statement of facts, " +
+    "their supporting E handles, and the evidence still missing. Exact read " +
+    "payloads are shown for one reasoning turn, so retain useful E handles " +
+    "before continuing. Do not copy long passages. Omit only when unchanged.",
+});
+
+const SearchOperatorId = (description: string) => Type.String({
+  minLength: 1,
+  maxLength: 64,
+  pattern: "^[a-z][a-z0-9._-]{0,63}$",
+  description,
+});
+
+const SearchQueries = (description: string) => Type.Array(
+  Type.String({ minLength: 1 }),
+  {
+    minItems: 1,
+    maxItems: 16,
+    description,
+  },
+);
+
+const MemoryRole = Type.Union([
+  Type.Literal("user"),
+  Type.Literal("assistant"),
+  Type.Literal("system"),
+  Type.Literal("other"),
+]);
+
+const SearchOrder = Type.Union([
+  Type.Literal("relevance"),
+  Type.Literal("chronological"),
+  Type.Literal("reverse-chronological"),
+]);
+
 export function createSearchParameters(operatorIds: readonly string[]) {
   if (operatorIds.length === 0) {
     throw new Error("Search tool requires at least one registered operator");
   }
   return Type.Object({
-    operator: Type.Optional(Type.String({
-      minLength: 1,
-      maxLength: 64,
-      pattern: "^[a-z][a-z0-9._-]{0,63}$",
-      description:
-        `Agent-selected operator. Initially available: ${operatorIds.join(", ")}. ` +
+    workingMemory: Type.Optional(WorkingMemory),
+    operator: Type.Optional(SearchOperatorId(
+      `Agent-selected operator ID. Pass a catalog id exactly; do not append @version. Initially available IDs: ${operatorIds.join(", ")}. ` +
         "A successfully defined run-local operator is also valid. Defaults to the registry default.",
-    })),
-    queries: Type.Array(Type.String({ minLength: 1 }), {
+    )),
+    queries: SearchQueries(
+      "One to twelve complementary semantic access paths or independent evidence needs. " +
+        "Each query must add a distinct evidence-frame signal; do not pad the batch with paraphrases. " +
+        "Never submit more than 16 queries in one search call; sixteen is a hard ceiling, not a target.",
+    ),
+    branches: Type.Optional(Type.Array(Type.Object({
+      operator: SearchOperatorId(
+        `Additional primitive or run-local retrieval path. Available IDs start with: ${operatorIds.join(", ")}.`,
+      ),
+      queries: SearchQueries(
+        "Focused queries for this additional retrieval path.",
+      ),
+    }), {
       minItems: 1,
-      maxItems: 8,
-      description: "Focused query variants or separate evidence needs.",
-    }),
-    limit: Type.Optional(Type.Integer({ minimum: 1, maximum: 100 })),
+      maxItems: 3,
+      description:
+        "Optional additional retrieval paths executed in this same search call. " +
+        "Omit for an ordinary single-retriever search.",
+    })),
+    combine: Type.Optional(Type.Union([
+      Type.Literal("rrf"),
+      Type.Literal("union"),
+      Type.Literal("intersection"),
+    ], {
+      description:
+        "How to combine the primary path with branches. Defaults to rrf. " +
+        "Use union for breadth and intersection only for evidence that must match every path. " +
+        "It has no effect when branches are omitted.",
+    })),
+    roles: Type.Optional(Type.Array(MemoryRole, {
+      minItems: 1,
+      maxItems: 4,
+      description:
+        "Optional source-role filter applied to every retrieval path, such as [\"user\"] for user-stated history.",
+    })),
+    order: Type.Optional(SearchOrder),
+    maxPerSession: Type.Optional(Type.Integer({
+      minimum: 1,
+      maximum: 100,
+      description:
+        "Optional session-diversity cap applied after fusion and pushed into retrieval. " +
+        "Use a small value when independent conversations must contribute.",
+    })),
+    limit: Type.Optional(Type.Integer({
+      minimum: 1,
+      maximum: 20,
+      description:
+        "Visible candidate page size, at most 20. Normally omit it and use the " +
+        "harness default; this does not change the hidden physical reservoir. " +
+        "search_more reveals later bounded pages.",
+    })),
   });
 }
 
 export type SearchParametersSchema = ReturnType<typeof createSearchParameters>;
+
+export const SearchMoreParameters = Type.Object({
+  workingMemory: Type.Optional(WorkingMemory),
+}, {
+  description:
+    "Reveal the next bounded page from the most recent search without changing " +
+    "its operator or queries. Use only when its evidence remains incomplete.",
+});
+
+const StepId = Type.String({
+  minLength: 1,
+  maxLength: 64,
+  pattern: "^[a-z][a-z0-9._-]{0,63}$",
+});
+
+const StepInput = Type.String({
+  minLength: 1,
+  maxLength: 64,
+  pattern: "^[a-z][a-z0-9._-]{0,63}$",
+  description: "ID of an earlier step in this plan.",
+});
+
+const DefineOperatorStep = Type.Union([
+  Type.Object({
+    id: StepId,
+    kind: Type.Literal("search"),
+    operator: Type.String({
+      minLength: 1,
+      maxLength: 64,
+      pattern: "^[a-z][a-z0-9._-]{0,63}$",
+      description: "Primitive retriever ID from the initial catalog.",
+    }),
+    queries: Type.Optional(Type.Array(Type.String({ minLength: 1 }), {
+      minItems: 1,
+      maxItems: 12,
+      description: "Optional step-specific queries; otherwise the later search call supplies them.",
+    })),
+    limit: Type.Optional(Type.Integer({ minimum: 1, maximum: 100 })),
+  }),
+  Type.Object({
+    id: StepId,
+    kind: Type.Literal("combine"),
+    inputs: Type.Array(StepInput, { minItems: 2, maxItems: 4 }),
+    method: Type.Union([
+      Type.Literal("union"),
+      Type.Literal("rrf"),
+      Type.Literal("intersection"),
+    ]),
+    limit: Type.Optional(Type.Integer({ minimum: 1, maximum: 100 })),
+  }),
+  Type.Object({
+    id: StepId,
+    kind: Type.Literal("filter"),
+    input: StepInput,
+    roles: Type.Array(MemoryRole, { minItems: 1, maxItems: 4 }),
+  }),
+  Type.Object({
+    id: StepId,
+    kind: Type.Literal("sort"),
+    input: StepInput,
+    order: SearchOrder,
+  }),
+  Type.Object({
+    id: StepId,
+    kind: Type.Literal("diversify"),
+    input: StepInput,
+    maxPerGroup: Type.Integer({ minimum: 1, maximum: 100 }),
+  }),
+  Type.Object({
+    id: StepId,
+    kind: Type.Literal("dedupe"),
+    input: StepInput,
+  }),
+  Type.Object({
+    id: StepId,
+    kind: Type.Literal("limit"),
+    input: StepInput,
+    limit: Type.Integer({ minimum: 1, maximum: 100 }),
+  }),
+  Type.Object({
+    id: StepId,
+    kind: Type.Literal("annotate"),
+    input: StepInput,
+    method: Type.Union([Type.Literal("temporal"), Type.Literal("numeric")]),
+  }),
+], {
+  description:
+    "One ordered plan step. A step may reference only earlier step IDs.",
+});
 
 export const DefineOperatorParameters = Type.Object({
   id: Type.String({
     minLength: 1,
     maxLength: 64,
     pattern: "^[a-z][a-z0-9._-]{0,63}$",
-    description: "Short run-local operator ID used by a later search call.",
+    description: "Short run-local plan ID used by a later search call.",
   }),
   summary: Type.String({ minLength: 1, maxLength: 240 }),
-  sources: Type.Array(
-    Type.Object({
-      operator: Type.String({
-        minLength: 1,
-        maxLength: 64,
-        pattern: "^[a-z][a-z0-9._-]{0,63}$",
-      }),
-      limit: Type.Optional(Type.Integer({ minimum: 1, maximum: 100 })),
-    }),
-    {
-      minItems: 1,
-      maxItems: 4,
-      description: "Existing operators to run with the later search query.",
-    },
-  ),
-  combine: Type.Optional(
-    Type.Union([Type.Literal("union"), Type.Literal("rrf")]),
-  ),
+  steps: Type.Array(DefineOperatorStep, { minItems: 1, maxItems: 12 }),
 }, {
   description:
-    "Define one run-local search operator by composing existing operators. " +
-    "One source is an alias; multiple sources default to RRF fusion.",
+    "Define an ordered run-local retrieval plan. The last step is automatically the output; " +
+    "diversify always groups by session and dedupe always compares content.",
+});
+
+const CandidateReference = Type.String({
+  pattern: "^C[1-9][0-9]*$",
+  description:
+    "Opaque candidate handle returned by search, such as C1. It is not a class label, rank, or memory ID.",
 });
 
 export const ReadParameters = Type.Object({
-  candidateRefs: Type.Array(Type.Integer({ minimum: 0 }), {
+  workingMemory: Type.Optional(WorkingMemory),
+  candidateRefs: Type.Array(CandidateReference, {
     minItems: 1,
     maxItems: 100,
     description:
-      "Stable candidate numbers returned by search or bash_ro. The harness resolves candidate numbers to exact internal memory IDs.",
+      "Stable candidate handles returned by search or bash_ro. Copy them exactly; the harness resolves them to internal source IDs.",
   }),
-  contextBefore: Type.Optional(Type.Integer({ minimum: 0, maximum: 10 })),
-  contextAfter: Type.Optional(Type.Integer({ minimum: 0, maximum: 10 })),
+  contextBefore: Type.Optional(Type.Integer({
+    minimum: 0,
+    maximum: 10,
+    description:
+      "Neighboring turns from the same session before each hit. Defaults to 1; pass 0 only when the hit is self-contained.",
+  })),
+  contextAfter: Type.Optional(Type.Integer({
+    minimum: 0,
+    maximum: 10,
+    description:
+      "Neighboring turns from the same session after each hit. Defaults to 1; pass 0 only when the hit is self-contained.",
+  })),
 }, {
   description:
-    "Read immutable candidate memories and optional bounded neighboring context. Oversized memories are returned as exact, query-focused excerpts bound to the full source hash.",
+    "Read immutable candidate memories into the final exact-source package with a bounded local session window. " +
+    "One neighboring turn on each side is included by default to preserve " +
+    "referents and local event state. Oversized memories are returned as " +
+    "exact, query-focused excerpts bound to the full source hash. Every source " +
+    "returned by read is automatically committed when finish succeeds.",
 });
 
 export const FinishParameters = Type.Object({
@@ -76,52 +250,23 @@ export const FinishParameters = Type.Object({
     Type.Literal("insufficient"),
   ], {
     description:
-      "Use sufficient only when every independent evidence need is represented by cited raw memory.",
+      "Use sufficient only when the exact sources read so far cover the " +
+      "question. Reading one source does not establish coverage.",
   }),
-  citations: Type.Array(
-    Type.Object({
-      candidateRef: Type.Integer({ minimum: 0 }),
-      supports: Type.String({
-        minLength: 1,
-        description:
-          "One atomic fact stated by this memory only; do not combine sources, calculate, or infer here.",
-      }),
-    }),
-    {
-      maxItems: 32,
-      description:
-        "Source citations covering every independent fact in the evidence package.",
-    },
-  ),
   evidenceSummary: Type.String({
     minLength: 1,
+    maxLength: 2000,
     description:
-      "Lossless compact ledger of the cited facts. Keep distinct items, sessions, and updates separate and add no unsupported conclusion.",
+      "Compact source-grounded conclusion from inspected evidence, preserving " +
+      "specific names, values, and unresolved gaps for the answer stage. Do " +
+      "not copy long passages or manage citations, hashes, or provenance.",
   }),
-  count: Type.Optional(Type.Integer({
-    minimum: 0,
-    description:
-      "Optional source-grounded aggregate count. Omit for non-count evidence.",
-  })),
-  inventory: Type.Optional(
-    Type.Array(
-      Type.Object({
-        item: Type.String({
-          minLength: 1,
-          description: "One distinct, explicitly supported inventory item.",
-        }),
-        candidateRefs: Type.Array(Type.Integer({ minimum: 0 }), {
-          minItems: 1,
-          description:
-            "Sources for this item. Every referenced candidate must also appear in citations.",
-        }),
-      }),
-      {
-        description:
-          "Optional evidence ledger for an explicitly enumerated list. Do not fabricate one row per unnamed member of an aggregate count.",
-      },
-    ),
-  ),
+}, {
+  description:
+    "Stop retrieval with a semantic handoff. Use as the only tool call in an " +
+    "assistant turn, after observing the latest search or read result in an " +
+    "earlier turn. The harness automatically commits every exact source " +
+    "returned by read and generates citations, hashes, provenance, and package formatting.",
 });
 
 export const BashRoParameters = Type.Object({

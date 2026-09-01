@@ -367,7 +367,12 @@ def endpoint(base_url: str) -> str:
 
 
 def returned_model_matches(requested: str, returned: str) -> bool:
-    return returned == requested or returned.startswith(f"{requested}-")
+    if returned == requested:
+        return True
+    suffix = returned.removeprefix(f"{requested}-")
+    return returned.startswith(f"{requested}-") and bool(
+        re.fullmatch(r"\d{4}-\d{2}-\d{2}", suffix)
+    )
 
 
 def blocking_chat(
@@ -403,9 +408,12 @@ def blocking_chat(
     content = payload.get("choices", [{}])[0].get("message", {}).get("content")
     if not isinstance(content, str) or not content.strip():
         raise ValueError("Chat endpoint returned no answer content")
+    returned_model = payload.get("model")
+    if not isinstance(returned_model, str) or not returned_model.strip():
+        raise ValueError("Chat endpoint returned no model identity")
     return {
         "content": content.strip(),
-        "model": payload.get("model", model),
+        "model": returned_model,
         "usage": payload.get("usage") or {},
     }
 
@@ -661,6 +669,11 @@ async def run_judge(args: argparse.Namespace) -> None:
                     max_tokens=256,
                     timeout=60,
                     top_p=0.9 if args.protocol == "refind-2026" else None,
+                )
+            if not returned_model_matches(model, response["model"]):
+                raise ValueError(
+                    f"Judge provider substituted model {response['model']}; "
+                    f"expected {model}"
                 )
             try:
                 label = (

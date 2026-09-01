@@ -1,5 +1,5 @@
 import { AsyncLocalStorage } from "node:async_hooks";
-import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { mkdtemp, readFile, rm, unlink } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -9,6 +9,7 @@ import {
 } from "../src/benchmark/memoryarena-public/adapters/measured-embedder.js";
 import {
   PiMemMemoryArenaAdapter,
+  memoryArenaPiMemRunFailure,
   memoryArenaPublicScopeId,
   memoryArenaRetryableUpstreamError,
   memoryArenaUpstreamAuthStatus,
@@ -19,14 +20,19 @@ import {
 } from "../src/benchmark/memoryarena-public/composition/create-runtime.js";
 import { createRetrievalContext } from "../src/composition/create-retrieval-context.js";
 import type { PiModelRuntime } from "../src/platform/pi/load-model-runtime.js";
-import type { PiMemResult } from "../src/evidence-agent/index.js";
+import type {
+  PiMemResult,
+  RunPiMemOptions,
+} from "../src/evidence-agent/index.js";
 import { MemoryStore } from "../src/platform/sqlite/pimem-store.js";
 import { OpenAICompatibleEmbedder } from "../src/retrieval/adapters/openai/openai-compatible-embedder.js";
 import {
   embeddingProfile,
   type EmbeddingMetrics,
   type EmbeddingRequestOptions,
+  type SearchOperatorDefinition,
 } from "../src/retrieval/index.js";
+import { sha256 } from "../src/util.js";
 
 const temporaryDirectories: string[] = [];
 
@@ -93,7 +99,348 @@ async function temporaryDirectory(): Promise<string> {
   return directory;
 }
 
+function reusableOperator(id = "reusable-recall"): SearchOperatorDefinition {
+  return {
+    id,
+    version: "experiment-v1",
+    guide: {
+      summary: "Recall and deduplicate complementary evidence.",
+      useWhen: ["A question needs evidence from several memories."],
+      cost: "medium",
+    },
+    steps: [
+      { id: "recall", kind: "search", operator: "hybrid" },
+      { id: "unique", kind: "dedupe", input: "recall", by: "content" },
+    ],
+    output: "unique",
+  };
+}
+
+function operatorExperimentResult(options: {
+  question: string;
+  definition?: SearchOperatorDefinition;
+}): PiMemResult {
+  const definition = options.definition;
+  const definitionHash = definition === undefined
+    ? undefined
+    : sha256(JSON.stringify(definition));
+  const cited = definition !== undefined;
+  const evidenceContent = "Direct supporting evidence.";
+  return {
+    runId: `run-${options.question}`,
+    scopeId: "scope-experiment",
+    question: options.question,
+    status: cited ? "sufficient" : "insufficient",
+    citations: cited
+      ? [{ memoryId: "memory-1", supports: "Direct supporting evidence." }]
+      : [],
+    evidenceSummary: cited ? evidenceContent : "No evidence.",
+    candidates: [],
+    evidence: cited
+      ? [{
+          memoryId: "memory-1",
+          scopeId: "scope-experiment",
+          sessionId: "session-1",
+          turnIndex: 0,
+          role: "other",
+          content: evidenceContent,
+          contentHash: sha256(evidenceContent),
+          sourceContentHash: sha256(evidenceContent),
+          sourceContentLength: evidenceContent.length,
+          truncated: false,
+          excerpts: [{
+            start: 0,
+            end: evidenceContent.length,
+            content: evidenceContent,
+          }],
+          metadata: {},
+        }]
+      : [],
+    trace: definition === undefined || definitionHash === undefined
+      ? []
+      : [{
+          step: 1,
+          toolCallId: "search-1",
+          toolName: "search",
+          args: { operator: definition.id },
+          isError: false,
+          details: {
+            kind: "search",
+            operator: definition.id,
+            composition: { definitionHash },
+            candidateReferences: [{ candidateRef: 1, memoryId: "memory-1" }],
+          },
+        }],
+    operatorCatalog: { revision: 1, hash: "a".repeat(64) },
+    operatorDefinitions: definition === undefined || definitionHash === undefined
+      ? []
+      : [{ revision: 1, definitionHash, definition }],
+    metrics: {
+      searchCalls: cited ? 1 : 0,
+      readCalls: cited ? 1 : 0,
+      bashCalls: 0,
+      operatorDefinitionCalls: cited ? 1 : 0,
+      candidateCount: cited ? 1 : 0,
+      inspectedEvidenceCount: cited ? 1 : 0,
+      evidenceCount: cited ? 1 : 0,
+      citedCount: cited ? 1 : 0,
+      retrievalProfile: "fts5",
+      embeddingCalls: 0,
+      embeddingLatencyMs: 0,
+      denseCandidateCount: 0,
+      rerankCandidateCount: 0,
+      expiredNavigationResults: 0,
+      compactedReadResults: 0,
+    },
+    retrieval: { retrievalProfile: "fts5" },
+    retrievalModel: {
+      providerId: "test",
+      modelId: "test",
+      responseModels: ["test"],
+      thinkingLevel: "off",
+      transport: "non-stream",
+    },
+    usage: {
+      input: 0,
+      output: 0,
+      cacheRead: 0,
+      cacheWrite: 0,
+      totalTokens: 0,
+      cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
+    },
+  };
+}
+
+function experimentAdapter(
+  run: (options: RunPiMemOptions) => Promise<PiMemResult>,
+): PiMemMemoryArenaAdapter {
+  return new PiMemMemoryArenaAdapter({
+    rawStore: {} as never,
+    runtimeStore: {} as never,
+    operatorRegistry: {} as never,
+    embedder: {} as never,
+    modelRuntime: {} as PiModelRuntime,
+    runPiMemImpl: run,
+  });
+}
+
 describe("MemoryArena Public PiMem adapter", () => {
+  it("maps typed agent failures without exposing the raw model message", () => {
+    for (const [piMemCode, expected] of [
+      ["tool_protocol_exhausted", {
+        code: "retrieval_agent_protocol_error",
+        httpStatus: 422,
+        retryable: false,
+      }],
+      ["turn_budget_exhausted", {
+        code: "retrieval_agent_budget_exhausted",
+        httpStatus: 422,
+        retryable: false,
+      }],
+      ["tool_budget_exhausted", {
+        code: "retrieval_agent_budget_exhausted",
+        httpStatus: 422,
+        retryable: false,
+      }],
+      ["run_timeout", {
+        code: "retrieval_agent_timeout",
+        httpStatus: 504,
+        retryable: false,
+      }],
+      ["provider_error", {
+        code: "upstream_failure",
+        httpStatus: 502,
+        retryable: false,
+      }],
+      ["runtime_error", {
+        code: "retrieval_agent_failed",
+        httpStatus: 500,
+        retryable: false,
+      }],
+    ] as const) {
+      const source = Object.assign(new Error("SECRET provider/model output"), {
+        name: "PiMemRunError",
+        code: piMemCode,
+      });
+      const mapped = memoryArenaPiMemRunFailure(source);
+      expect(mapped, piMemCode).toMatchObject(expected);
+      expect(mapped?.message, piMemCode).not.toContain("SECRET");
+      expect(mapped?.cause, piMemCode).toBe(source);
+    }
+  });
+
+  it("runs static experiments with the requested search cap and no definition budget", async () => {
+    const runs: RunPiMemOptions[] = [];
+    const adapter = experimentAdapter(async (options) => {
+      runs.push(options);
+      return operatorExperimentResult({ question: options.question });
+    });
+
+    const retrieval = await adapter.retrieve({
+      userId: "static-user",
+      generation: 1,
+      question: "Static question?",
+      operatorExperiment: {
+        mode: "static",
+        questionId: "static:q-1",
+        maxSearchCalls: 3,
+      },
+    });
+
+    expect(runs).toHaveLength(1);
+    expect(runs[0]).toMatchObject({
+      question: "Static question?",
+      maxSearchCalls: 3,
+      maxOperatorDefinitions: 0,
+      operatorDefinitions: [],
+    });
+    expect(retrieval.operatorExperiment).toEqual({
+      mode: "static",
+      questionId: "static:q-1",
+      maxSearchCalls: 3,
+      retrievalStatus: "insufficient",
+      searchCalls: 0,
+      operatorDefinitions: [],
+    });
+  });
+
+  it("starts every ephemeral question without inherited definitions", async () => {
+    const runs: RunPiMemOptions[] = [];
+    const definition = reusableOperator();
+    const adapter = experimentAdapter(async (options) => {
+      runs.push(options);
+      return operatorExperimentResult({
+        question: options.question,
+        definition,
+      });
+    });
+
+    const first = await adapter.retrieve({
+      userId: "ephemeral-user",
+      generation: 1,
+      question: "First question?",
+      operatorExperiment: {
+        mode: "ephemeral",
+        questionId: "ephemeral:q-1",
+        maxSearchCalls: 4,
+      },
+    });
+    const second = await adapter.retrieve({
+      userId: "ephemeral-user",
+      generation: 1,
+      question: "Second question?",
+      operatorExperiment: {
+        mode: "ephemeral",
+        questionId: "ephemeral:q-2",
+        maxSearchCalls: 4,
+      },
+    });
+
+    expect(runs).toHaveLength(2);
+    expect(runs.map((run) => ({
+      maxSearchCalls: run.maxSearchCalls,
+      maxOperatorDefinitions: run.maxOperatorDefinitions,
+      operatorDefinitions: run.operatorDefinitions,
+    }))).toEqual([
+      { maxSearchCalls: 4, maxOperatorDefinitions: 4, operatorDefinitions: [] },
+      { maxSearchCalls: 4, maxOperatorDefinitions: 4, operatorDefinitions: [] },
+    ]);
+    expect(first.operatorExperiment).toMatchObject({
+      mode: "ephemeral",
+      questionId: "ephemeral:q-1",
+      operatorDefinitions: [{ definition }],
+    });
+    expect(first).toMatchObject({
+      evidenceSummary: "Direct supporting evidence.",
+      evidence: [{
+        memoryId: "memory-1",
+        content: "Direct supporting evidence.",
+        excerpts: [{ start: 0, end: 27 }],
+      }],
+    });
+    expect(second.operatorExperiment).toMatchObject({
+      mode: "ephemeral",
+      questionId: "ephemeral:q-2",
+      operatorDefinitions: [{ definition }],
+    });
+    expect(first.operatorExperiment).not.toHaveProperty("evolutionSnapshot");
+    expect(second.operatorExperiment).not.toHaveProperty("evolutionSnapshot");
+  });
+
+  it("restores and advances cumulative operator evolution snapshots", async () => {
+    const runs: RunPiMemOptions[] = [];
+    const definition = reusableOperator();
+    const adapter = experimentAdapter(async (options) => {
+      runs.push(options);
+      return operatorExperimentResult({
+        question: options.question,
+        definition,
+      });
+    });
+
+    const first = await adapter.retrieve({
+      userId: "cumulative-user",
+      generation: 1,
+      question: "First cumulative question?",
+      operatorExperiment: {
+        mode: "cumulative",
+        questionId: "cumulative:q-1",
+        maxSearchCalls: 4,
+      },
+    });
+    const firstSnapshot = first.operatorExperiment?.evolutionSnapshot;
+    expect(firstSnapshot).toMatchObject({
+      sequence: 1,
+      seenQuestionIds: ["cumulative:q-1"],
+      entries: [{
+        definition,
+        phase: "provisional",
+        successfulQuestionIds: ["cumulative:q-1"],
+      }],
+    });
+
+    const second = await adapter.retrieve({
+      userId: "cumulative-user",
+      generation: 1,
+      question: "Second cumulative question?",
+      operatorExperiment: {
+        mode: "cumulative",
+        questionId: "cumulative:q-2",
+        maxSearchCalls: 4,
+        evolutionSnapshot: firstSnapshot!,
+      },
+    });
+
+    expect(runs).toHaveLength(2);
+    expect(runs[0]).toMatchObject({
+      maxSearchCalls: 4,
+      maxOperatorDefinitions: 4,
+      operatorDefinitions: [],
+    });
+    expect(runs[1]).toMatchObject({
+      maxSearchCalls: 4,
+      maxOperatorDefinitions: 4,
+      operatorDefinitions: [definition],
+    });
+    expect(second.operatorExperiment).toMatchObject({
+      mode: "cumulative",
+      questionId: "cumulative:q-2",
+      observation: {
+        questionId: "cumulative:q-2",
+        decisions: [{ action: "credited", reason: "evidence-contributing" }],
+      },
+      evolutionSnapshot: {
+        sequence: 2,
+        seenQuestionIds: ["cumulative:q-1", "cumulative:q-2"],
+        entries: [{
+          definition,
+          phase: "promoted",
+          successfulQuestionIds: ["cumulative:q-1", "cumulative:q-2"],
+        }],
+      },
+    });
+  });
+
   it("appends raw chunks as independent other-role sessions and never seals", async () => {
     const directory = await temporaryDirectory();
     const store = await MemoryStore.create(join(directory, "memory.sqlite"));
@@ -137,6 +484,68 @@ describe("MemoryArena Public PiMem adapter", () => {
       ]);
       expect(store.hasPendingAppendRequests(scopeId)).toBe(false);
       expect(store.getOnlineScopeState(scopeId)).toBe("ingesting");
+      expect(store.getEmbeddingIndexStatus(scopeId, embeddingProfile(embedder)))
+        .toMatchObject({ total: 2, indexed: 2, missing: 0 });
+    } finally {
+      store.close();
+    }
+  });
+
+  it("appends a visible conversation as exact role-aware turns in one session", async () => {
+    const directory = await temporaryDirectory();
+    const store = await MemoryStore.create(join(directory, "structured-memory.sqlite"));
+    const embedder = new DeterministicEmbedder();
+    const retrieval = createRetrievalContext(store, "pimem-hybrid", embedder);
+    const adapter = new PiMemMemoryArenaAdapter({
+      rawStore: store,
+      runtimeStore: retrieval.store,
+      operatorRegistry: retrieval.operatorRegistry,
+      embedder,
+      modelRuntime: {} as PiModelRuntime,
+    });
+    const scopeId = memoryArenaPublicScopeId("structured-user", 1);
+    try {
+      await adapter.appendOriginalChunk({
+        userId: "structured-user",
+        generation: 1,
+        ordinal: 0,
+        chunk: "canonical public session identity",
+        messages: [
+          {
+            role: "user",
+            content: "exact user turn",
+            timestamp: "2025-01-02T03:04:00",
+          },
+          {
+            role: "assistant",
+            content: "exact assistant turn",
+            timestamp: "2025-01-02T03:04:00",
+          },
+        ],
+      });
+
+      const records = store.listScopeRecords(scopeId);
+      expect(records).toHaveLength(2);
+      expect(new Set(records.map((record) => record.sessionId)).size).toBe(1);
+      expect(records.map((record) => ({
+        turnIndex: record.turnIndex,
+        role: record.role,
+        content: record.content,
+        timestamp: record.timestamp,
+      }))).toEqual([
+        {
+          turnIndex: 0,
+          role: "user",
+          content: "exact user turn",
+          timestamp: "2025-01-02T03:04:00",
+        },
+        {
+          turnIndex: 1,
+          role: "assistant",
+          content: "exact assistant turn",
+          timestamp: "2025-01-02T03:04:00",
+        },
+      ]);
       expect(store.getEmbeddingIndexStatus(scopeId, embeddingProfile(embedder)))
         .toMatchObject({ total: 2, indexed: 2, missing: 0 });
     } finally {
@@ -300,7 +709,13 @@ describe("MemoryArena Public PiMem adapter", () => {
           trace: [],
           metrics: {},
           retrieval: {},
-          retrievalModel: {},
+          retrievalModel: {
+            providerId: "test-provider",
+            modelId: "test-retrieval",
+            responseModels: ["test-retrieval"],
+            thinkingLevel: "medium",
+            transport: "non-stream",
+          },
           usage: {
             input: 0,
             output: 0,
@@ -400,5 +815,24 @@ describe("MemoryArena Public PiMem adapter", () => {
       user_id: "runtime-user",
       generation: 1,
     });
+  });
+
+  it("fails closed when the database no longer matches its persistence marker", async () => {
+    const directory = await temporaryDirectory();
+    const runtime = await createMemoryArenaPublicRuntime({
+      dataDir: directory,
+      modelRuntime: {} as PiModelRuntime,
+      embedder: new DeterministicEmbedder(),
+    });
+    await runtime.close();
+    await unlink(runtime.paths.database);
+
+    await expect(createMemoryArenaPublicRuntime({
+      dataDir: directory,
+      modelRuntime: {} as PiModelRuntime,
+      embedder: new DeterministicEmbedder(),
+    })).rejects.toThrow(
+      "database and persistence identity must be created together",
+    );
   });
 });

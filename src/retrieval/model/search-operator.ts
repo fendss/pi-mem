@@ -1,8 +1,10 @@
 import type {
   EvidenceOperatorResult,
   RetrievalHit,
+  SearchOrder,
   SearchRequest,
 } from "./retrieval.js";
+import type { MemoryRole } from "../../memory/index.js";
 
 export type SearchOperatorCost = "low" | "medium" | "high";
 
@@ -22,11 +24,13 @@ export interface SearchOperatorCatalogEntry {
 export interface SearchOperatorInput {
   queries: string[];
   limit: number;
+  roles?: MemoryRole[];
   maxPerSession?: number;
 }
 
 export interface SearchOperatorExecutionContext {
   scopeId: string;
+  question?: string;
   questionDate?: string;
   signal?: AbortSignal;
 }
@@ -43,12 +47,13 @@ export interface CandidateSet {
   readonly hits: readonly RetrievalHit[];
 }
 
-export type SearchOperatorCombineMethod = "union" | "rrf";
+export type SearchOperatorCombineMethod = "union" | "rrf" | "intersection";
 
 export interface SearchOperatorDefinitionSearchStep {
   id: string;
   kind: "search";
   operator: string;
+  queries?: string[];
   limit?: number;
 }
 
@@ -59,6 +64,59 @@ export interface SearchOperatorDefinitionCombineStep {
   method: SearchOperatorCombineMethod;
   limit?: number;
 }
+
+export interface SearchOperatorDefinitionFilterStep {
+  id: string;
+  kind: "filter";
+  input: string;
+  roles: MemoryRole[];
+}
+
+export interface SearchOperatorDefinitionSortStep {
+  id: string;
+  kind: "sort";
+  input: string;
+  order: SearchOrder;
+}
+
+export interface SearchOperatorDefinitionDiversifyStep {
+  id: string;
+  kind: "diversify";
+  input: string;
+  by: "session";
+  maxPerGroup: number;
+}
+
+export interface SearchOperatorDefinitionDedupeStep {
+  id: string;
+  kind: "dedupe";
+  input: string;
+  by: "content";
+}
+
+export interface SearchOperatorDefinitionLimitStep {
+  id: string;
+  kind: "limit";
+  input: string;
+  limit: number;
+}
+
+export interface SearchOperatorDefinitionAnnotateStep {
+  id: string;
+  kind: "annotate";
+  input: string;
+  method: "temporal" | "numeric";
+}
+
+export type SearchOperatorDefinitionStep =
+  | SearchOperatorDefinitionSearchStep
+  | SearchOperatorDefinitionCombineStep
+  | SearchOperatorDefinitionFilterStep
+  | SearchOperatorDefinitionSortStep
+  | SearchOperatorDefinitionDiversifyStep
+  | SearchOperatorDefinitionDedupeStep
+  | SearchOperatorDefinitionLimitStep
+  | SearchOperatorDefinitionAnnotateStep;
 
 /**
  * A deliberately small, declarative operator definition.
@@ -71,19 +129,26 @@ export interface SearchOperatorDefinition {
   id: string;
   version: string;
   guide: SearchOperatorGuide;
-  steps: Array<
-    SearchOperatorDefinitionSearchStep | SearchOperatorDefinitionCombineStep
-  >;
+  steps: SearchOperatorDefinitionStep[];
   output: string;
 }
 
 export interface SearchOperatorCompositionStepTrace {
   id: string;
-  kind: "search" | "combine";
+  kind: SearchOperatorDefinitionStep["kind"];
   operator?: string;
   operatorVersion?: string;
+  queries?: string[];
   inputs?: string[];
+  input?: string;
   method?: SearchOperatorCombineMethod;
+  roles?: MemoryRole[];
+  order?: SearchOrder;
+  by?: "session" | "content";
+  maxPerSession?: number;
+  maxPerGroup?: number;
+  limit?: number;
+  annotation?: "temporal" | "numeric";
   candidateCount: number;
 }
 

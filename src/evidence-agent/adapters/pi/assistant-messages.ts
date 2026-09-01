@@ -1,5 +1,6 @@
 import type { AssistantMessage } from "@earendil-works/pi-ai";
 import type { ModelUsage } from "../../model/evidence.js";
+import { responseModelMatchesRequested } from "../../../util.js";
 
 export function lastAssistantMessage(
   messages: readonly unknown[],
@@ -36,7 +37,7 @@ export function assistantMessageText(
 }
 
 function responseModelMatches(requested: string, actual: string): boolean {
-  return actual === requested || actual.startsWith(`${requested}-`);
+  return responseModelMatchesRequested(requested, actual);
 }
 
 export function validateResponseModels(

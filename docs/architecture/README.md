@@ -8,7 +8,7 @@ PiMem is a domain-oriented modular monolith. Top-level modules describe product 
 |---|---|---|
 | `memory` | Immutable source memories, scopes, sessions, ingest, exact reads | Ranking, citations, dataset labels |
 | `retrieval` | Search requests, hits, ranking, embeddings, temporal and numeric facts | Agent protocol, citations, evaluation labels |
-| `evidence-agent` | Search/read/finish protocol, ledger, evidence selection, citations | Evaluation-specific answer formatting and scoring |
+| `evidence-agent` | Search/read/finish protocol, ledger, exact-evidence retention, harness-owned citations | Evaluation-specific answer formatting and scoring |
 | `agent-runtime` | Stateful Pi Agent loop that interleaves memory tools with caller-owned environment tools | Environment action execution and evaluation |
 | `benchmark` | Questions, answer stage, durable runs, retry, artifacts, evaluation | Raw-memory or retrieval implementation details |
 

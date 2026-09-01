@@ -25,6 +25,7 @@ import {
   PIMEM_SKILL_VERSION,
   MAX_EVIDENCE_CHARS_PER_MEMORY,
   MAX_READ_RESULT_CHARS,
+  MAX_SELECTED_EVIDENCE_COUNT,
   MAX_SELECTED_EVIDENCE_CHARS,
   PiMemRunError,
   piMemSystemPrompt,
@@ -374,7 +375,7 @@ export async function benchmarkLongMemEval(
       max_read_result_chars: MAX_READ_RESULT_CHARS,
       max_evidence_chars_per_memory: MAX_EVIDENCE_CHARS_PER_MEMORY,
       max_selected_evidence_chars: MAX_SELECTED_EVIDENCE_CHARS,
-      max_citations: 32,
+      max_citations: MAX_SELECTED_EVIDENCE_COUNT,
     });
 
     const runOne = async (

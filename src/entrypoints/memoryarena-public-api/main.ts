@@ -6,14 +6,20 @@ import {
 } from "../../benchmark/memoryarena-public/index.js";
 import { createMemoryArenaPublicRuntime } from "../../benchmark/memoryarena-public/composition/create-runtime.js";
 import {
+  type PiMemSkill,
+} from "../../evidence-agent/index.js";
+import {
   loadPiModelRuntime,
   type LoadPiModelRuntimeOptions,
+  type PiModelRuntime,
 } from "../../platform/pi/load-model-runtime.js";
 import { OpenAICompatibleEmbedder } from "../../retrieval/adapters/openai/openai-compatible-embedder.js";
 import {
   MemoryArenaPublicApiService,
   MemoryArenaPublicApplication,
 } from "./application.js";
+import { memoryArenaHttpError } from "./http-errors.js";
+import { createMemoryArenaRuntimeIdentity } from "./runtime-contract.js";
 
 const MAX_BODY_BYTES = 32 * 1024 * 1024;
 
@@ -55,6 +61,14 @@ function thinkingLevelEnvironment(): NonNullable<
   return value as NonNullable<LoadPiModelRuntimeOptions["thinkingLevel"]>;
 }
 
+function skillEnvironment(): PiMemSkill {
+  const value = process.env.PIMEM_SKILL?.trim() || "pimem-v0";
+  if (!new Set(["none", "pimem-minimal", "pimem-v0"]).has(value)) {
+    throw new Error("PIMEM_SKILL is invalid");
+  }
+  return value as PiMemSkill;
+}
+
 async function jsonBody(request: IncomingMessage): Promise<unknown> {
   const chunks: Buffer[] = [];
   let size = 0;
@@ -93,12 +107,19 @@ function respond(
   status: number,
   body: unknown,
   retryable = false,
+  errorCode?: string,
 ): void {
   response.writeHead(status, {
     "content-type": "application/json; charset=utf-8",
     "cache-control": "no-store",
+    ...(errorCode === undefined
+      ? {}
+      : {
+          "x-pimem-error-code": errorCode,
+          "x-pimem-retryable": String(retryable),
+        }),
     ...(retryable
-      ? { "retry-after": "5", "x-pimem-retryable": "true" }
+      ? { "retry-after": "5" }
       : {}),
   });
   response.end(`${JSON.stringify(body)}\n`);
@@ -108,7 +129,7 @@ async function main(): Promise<void> {
   const dataDir = resolve(
     process.env.PIMEM_DATA_DIR?.trim() || "./data/memoryarena-public",
   );
-  const modelRuntime = await loadPiModelRuntime({
+  const loadedModelRuntime = await loadPiModelRuntime({
     agentDir: resolve(
       process.env.PIMEM_AGENT_DIR?.trim() || "./deploy/benchmark-agent-config",
     ),
@@ -124,7 +145,33 @@ async function main(): Promise<void> {
       ? "non-stream"
       : "sse",
   });
+  const requestPolicy = {
+    timeoutMs: loadedModelRuntime.model.reasoning ? 120_000 : 90_000,
+    maxRetries: 1,
+    maxRetryDelayMs: 5_000,
+  };
+  const modelRuntime: PiModelRuntime = {
+    ...loadedModelRuntime,
+    requestPolicy,
+    streamFn: (model, context, options) =>
+      loadedModelRuntime.streamFn(model, context, {
+        timeoutMs: requestPolicy.timeoutMs,
+        maxRetries: requestPolicy.maxRetries,
+        maxRetryDelayMs: requestPolicy.maxRetryDelayMs,
+        ...options,
+      }),
+  };
   const embedder = OpenAICompatibleEmbedder.fromEnvironment();
+  const skill = skillEnvironment();
+  const maxRunMs = integerEnvironment("PIMEM_MAX_RUN_MS", 300_000, 1_800_000);
+  const maxTurns = integerEnvironment("PIMEM_MAX_TURNS", 64, 256);
+  const maxToolCalls = integerEnvironment("PIMEM_MAX_TOOL_CALLS", 80, 512);
+  const maxSearchCalls = integerEnvironment("PIMEM_MAX_SEARCH_CALLS", 4, 16);
+  const maximumConcurrentWraps = integerEnvironment(
+    "PIMEM_MAX_CONCURRENT_WRAPS",
+    16,
+    256,
+  );
   const runtime = await createMemoryArenaPublicRuntime({
     dataDir,
     modelRuntime,
@@ -132,12 +179,44 @@ async function main(): Promise<void> {
     memorySystemName:
       process.env.PIMEM_MEMORY_SYSTEM_NAME?.trim() ||
       MEMORYARENA_PUBLIC_MEMORY_SYSTEM,
-    maxRunMs: integerEnvironment("PIMEM_MAX_RUN_MS", 300_000, 1_800_000),
-    maxTurns: integerEnvironment("PIMEM_MAX_TURNS", 64, 256),
-    maxToolCalls: integerEnvironment("PIMEM_MAX_TOOL_CALLS", 80, 512),
+    skill,
+    maxRunMs,
+    maxTurns,
+    maxToolCalls,
   });
+  const runtimeIdentity = createMemoryArenaRuntimeIdentity({
+    sourceIdentity: requiredEnvironment("PIMEM_SOURCE_IDENTITY"),
+    buildIdentity: requiredEnvironment("PIMEM_BUILD_IDENTITY"),
+    skill,
+    modelRuntime,
+    logicalModelId: requiredEnvironment("PIMEM_LOGICAL_MODEL_ID"),
+    protocol: requiredEnvironment("PIMEM_RETRIEVAL_PROTOCOL"),
+    baseUrl:
+      process.env.OPENAI_API_BASE?.trim() ||
+      requiredEnvironment("PIMEM_AGENT_BASE_URL"),
+    maxRunMs,
+    maxTurns,
+    maxToolCalls,
+    maxSearchCalls,
+    requestTimeoutMs: requestPolicy.timeoutMs,
+    requestMaxRetries: requestPolicy.maxRetries,
+    requestMaxRetryDelayMs: requestPolicy.maxRetryDelayMs,
+    maxConcurrentWraps: maximumConcurrentWraps,
+  });
+  const expectedRuntimeIdentity = process.env
+    .PIMEM_EXPECTED_RUNTIME_IDENTITY_SHA256?.trim();
+  if (
+    expectedRuntimeIdentity !== undefined &&
+    expectedRuntimeIdentity !== runtimeIdentity.sha256
+  ) {
+    throw new Error("Configured runtime identity does not match the service contract");
+  }
   const service = new MemoryArenaPublicApiService(
-    new MemoryArenaPublicApplication(runtime.backend),
+    new MemoryArenaPublicApplication(runtime.backend, {
+      maximumConcurrentWraps,
+    }),
+    runtimeIdentity,
+    runtime.persistenceIdentity,
   );
   const host = process.env.HOST?.trim() || "127.0.0.1";
   const port = integerEnvironment("PORT", 3111, 65_535);
@@ -145,6 +224,14 @@ async function main(): Promise<void> {
     const started = Date.now();
     const path = new URL(request.url ?? "/", "http://localhost").pathname;
     try {
+      if (request.method === "GET" && path === "/health") {
+        respond(response, 200, service.health());
+        return;
+      }
+      if (request.method === "GET" && path === "/runtime") {
+        respond(response, 200, service.runtime());
+        return;
+      }
       if (request.method !== "POST") {
         respond(response, 404, { detail: "Not Found" });
         return;
@@ -164,22 +251,24 @@ async function main(): Promise<void> {
       }
       respond(response, 404, { detail: "Not Found" });
     } catch (error) {
-      if (error instanceof MemoryArenaPublicError) {
-        respond(
-          response,
-          error.httpStatus,
-          { detail: error.message },
-          error.retryable,
-        );
-      } else {
-        respond(response, 500, { detail: "Internal Server Error" });
-      }
+      const failure = memoryArenaHttpError(error);
+      respond(
+        response,
+        failure.status,
+        failure.body,
+        failure.retryable,
+        failure.code,
+      );
     } finally {
+      const health = path === "/memory/wrap_user_prompt"
+        ? service.health()
+        : undefined;
       process.stderr.write(`${JSON.stringify({
         method: request.method,
         path,
         status: response.statusCode,
         duration_ms: Date.now() - started,
+        ...(health === undefined ? {} : { load: health }),
       })}\n`);
     }
   });
@@ -201,7 +290,10 @@ async function main(): Promise<void> {
       host,
       port,
       memory_system_name: runtime.memorySystemName,
+      retrieval_skill: skill,
+      runtime_identity_sha256: runtimeIdentity.sha256,
       data_dir: runtime.paths.root,
+      load: service.health(),
     })}\n`);
   });
 }

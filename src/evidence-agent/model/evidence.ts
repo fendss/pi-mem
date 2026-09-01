@@ -1,7 +1,9 @@
 import type { MemoryRole } from "../../memory/index.js";
 import type { MemoryEvidence } from "./memory-evidence.js";
+import type { MemoryPassage } from "../../retrieval/index.js";
 import type {
   RetrievalMetadata,
+  RetrievalMetadataFilter,
   RetrievalProfile,
   SearchOperatorCatalogIdentity,
   SearchOperatorDefinitionSnapshot,
@@ -14,9 +16,14 @@ export interface CandidateDiscovery {
   retriever?: string;
   rank?: number;
   score?: number;
+  /** Query-authored metadata filters used by the physical retrieval route. */
+  metadataFilters?: RetrievalMetadataFilter[];
 }
 
 export interface MemoryCandidate {
+  /** Passage identity used by the opaque C reference. */
+  candidateId: string;
+  /** Immutable parent memory identity used for citation and provenance. */
   memoryId: string;
   scopeId: string;
   sessionId: string;
@@ -24,9 +31,10 @@ export interface MemoryCandidate {
   role: MemoryRole;
   timestamp?: string;
   preview: string;
+  passage?: MemoryPassage;
   discoveries: CandidateDiscovery[];
-  read: boolean;
-  cited: boolean;
+  inspected: boolean;
+  committed: boolean;
 }
 
 export interface Citation {
@@ -104,6 +112,7 @@ export interface PiMemResult {
     bashCalls: number;
     operatorDefinitionCalls: number;
     candidateCount: number;
+    inspectedEvidenceCount: number;
     evidenceCount: number;
     citedCount: number;
     retrievalProfile: RetrievalProfile;

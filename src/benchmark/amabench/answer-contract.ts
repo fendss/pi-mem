@@ -3,7 +3,7 @@ import type { BenchmarkAnswerPrompt } from "../answer-from-evidence.js";
 import type { AmaBenchPrivateQuery } from "./dataset-adapter.js";
 
 export const AMA_BENCH_ANSWER_PROMPT_VERSION =
-  "ama-bench-v4-openend-cited-trajectory-v1";
+  "ama-bench-v4-openend-read-trajectory-v3";
 
 export const AMA_BENCH_ANSWER_PROMPT_TEMPLATE = `You are answering a question about an agent-environment trajectory.
 
@@ -35,8 +35,8 @@ function renderEvidence(
 }
 
 /**
- * Converts PiMem output to the benchmark-owned answer prompt. Only explicitly
- * cited Evidence is admitted; searched/read-but-uncited records are excluded.
+ * Converts PiMem output to the benchmark-owned answer prompt. Every exact
+ * source returned by read is admitted; search-only candidates are excluded.
  */
 export function buildAmaBenchAnswerPrompt(
   context: AmaBenchAnswerContext,
@@ -48,18 +48,21 @@ export function buildAmaBenchAnswerPrompt(
     throw new Error("AMA-Bench answer context has mismatched question text");
   }
 
-  const evidenceById = new Map(
-    context.retrieval.evidence.map((memory) => [memory.memoryId, memory]),
+  const evidenceIds = new Set(
+    context.retrieval.evidence.map((memory) => memory.memoryId),
   );
-  const selected = context.retrieval.citations.map((citation) => {
-    const memory = evidenceById.get(citation.memoryId);
-    if (memory === undefined) {
-      throw new Error(
-        `AMA-Bench citation is missing Evidence: ${citation.memoryId}`,
-      );
-    }
-    return memory;
-  });
+  const citationIds = new Set(
+    context.retrieval.citations.map((citation) => citation.memoryId),
+  );
+  if (
+    evidenceIds.size !== context.retrieval.evidence.length ||
+    citationIds.size !== context.retrieval.citations.length ||
+    evidenceIds.size !== citationIds.size ||
+    [...evidenceIds].some((memoryId) => !citationIds.has(memoryId))
+  ) {
+    throw new Error("AMA-Bench exact read package and citations do not match");
+  }
+  const selected = [...context.retrieval.evidence];
   const evidence = selected
     .sort((left, right) => {
       const sessionOrder = left.sessionId.localeCompare(right.sessionId);

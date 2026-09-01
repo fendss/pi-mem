@@ -1,4 +1,9 @@
-import type { RetrievalHit } from "../../retrieval/index.js";
+import {
+  retrievalHitIdentity,
+  sourceQuoteMatchScore,
+  type MemoryPassage,
+  type RetrievalHit,
+} from "../../retrieval/index.js";
 import type {
   Citation,
   MemoryCandidate,
@@ -6,7 +11,9 @@ import type {
 } from "./evidence.js";
 import type { MemoryRecord } from "../../memory/index.js";
 import {
-  MAX_SELECTED_EVIDENCE_CHARS,
+  MAX_INSPECTED_EVIDENCE_COUNT,
+  MAX_INSPECTED_EVIDENCE_CHARS,
+  mergeMemoryEvidence,
   type MemoryEvidence,
 } from "./memory-evidence.js";
 import { compactPreview } from "../../util.js";
@@ -14,8 +21,18 @@ import { compactPreview } from "../../util.js";
 function cloneCandidate(candidate: MemoryCandidate): MemoryCandidate {
   return {
     ...candidate,
+    ...(candidate.passage === undefined
+      ? {}
+      : { passage: { ...candidate.passage } }),
     discoveries: candidate.discoveries.map((discovery) => ({
       ...discovery,
+      ...(discovery.metadataFilters === undefined
+        ? {}
+        : {
+            metadataFilters: discovery.metadataFilters.map((filter) => ({
+              ...filter,
+            })),
+          }),
     })),
   };
 }
@@ -48,21 +65,21 @@ function cloneSelection(selection: PiMemSelection): PiMemSelection {
  *
  * The only legal state transition is:
  *
- *   candidate -> read evidence -> cited evidence
+ *   candidate -> read exact evidence -> automatically committed evidence
  *
- * Raw records are never inferred from model output. Search and read tools add
- * them from structured store results, while finish may only select from records
- * that were successfully read during this run.
+ * Raw records are never inferred from model output. Search and read add them
+ * from structured store results. Finish commits the complete read ledger and
+ * the harness derives citations and provenance from it.
  */
 export class MemoryLedger {
   readonly scopeId: string;
 
   private readonly candidatesById = new Map<string, MemoryCandidate>();
+  private readonly candidateIdsByMemoryId = new Map<string, Set<string>>();
   private readonly evidenceById = new Map<string, MemoryEvidence>();
-  private readonly candidateRefById = new Map<string, number>();
-  private readonly candidateIdByRef = new Map<number, string>();
-  private readonly evidenceRefById = new Map<string, number>();
-  private readonly evidenceIdByRef = new Map<number, string>();
+  private readonly candidateRefById = new Map<string, string>();
+  private readonly candidateIdByRef = new Map<string, string>();
+  private readonly evidenceRefById = new Map<string, string>();
   private acceptedSelection: PiMemSelection | undefined;
   private step = 0;
 
@@ -83,7 +100,7 @@ export class MemoryLedger {
     return [...this.candidatesById.values()].map(cloneCandidate);
   }
 
-  get evidence(): MemoryEvidence[] {
+  get inspectedEvidence(): MemoryEvidence[] {
     return [...this.evidenceById.values()].map(cloneEvidence);
   }
 
@@ -100,51 +117,91 @@ export class MemoryLedger {
       : undefined;
   }
 
-  get readIds(): ReadonlySet<string> {
+  get inspectedIds(): ReadonlySet<string> {
     return new Set(this.evidenceById.keys());
   }
 
-  hasRead(memoryId: string): boolean {
+  hasInspected(memoryId: string): boolean {
     return this.evidenceById.has(memoryId);
   }
 
-  candidateRef(memoryId: string): number | undefined {
-    return this.candidateRefById.get(memoryId);
+  candidateRef(candidateOrMemoryId: string): string | undefined {
+    const direct = this.candidateRefById.get(candidateOrMemoryId);
+    if (direct !== undefined) return direct;
+    const candidateId = this.candidateIdsByMemoryId.get(candidateOrMemoryId)
+      ?.values().next().value as string | undefined;
+    return candidateId === undefined
+      ? undefined
+      : this.candidateRefById.get(candidateId);
   }
 
-  evidenceRef(memoryId: string): number | undefined {
+  candidateRefForQuote(memoryId: string, quote: string): string | undefined {
+    const candidates = this.selectMemoryCandidates([memoryId]);
+    const best = candidates
+      .map((candidate) => ({
+        candidate,
+        score: sourceQuoteMatchScore(
+          candidate.passage?.content ?? candidate.preview,
+          quote,
+        ),
+      }))
+      .sort((left, right) => right.score - left.score)[0];
+    return best !== undefined && best.score > 0
+      ? this.candidateRef(best.candidate.candidateId)
+      : this.candidateRef(memoryId);
+  }
+
+  evidenceRef(memoryId: string): string | undefined {
     return this.evidenceRefById.get(memoryId);
   }
 
-  resolveCandidateRefs(refs: readonly number[]): string[] {
+  resolveCandidateRefs(refs: readonly string[]): string[] {
+    return this.resolveCandidates(refs).map((candidate) => candidate.memoryId);
+  }
+
+  resolveCandidates(refs: readonly string[]): MemoryCandidate[] {
     return [...new Set(refs)].map((ref) => {
-      const memoryId = this.candidateIdByRef.get(ref);
-      if (memoryId === undefined) {
+      const candidateId = this.candidateIdByRef.get(ref);
+      const candidate = candidateId === undefined
+        ? undefined
+        : this.candidatesById.get(candidateId);
+      if (candidate === undefined) {
         throw new Error(
-          `Unknown candidate reference ${String(ref)}. Valid candidate range is ` +
-            `${this.candidateIdByRef.size === 0 ? "empty" : `1-${String(this.candidateIdByRef.size)}`}.`,
+          `Unknown candidate reference ${ref}. Valid candidate range is ` +
+            `${this.candidateIdByRef.size === 0 ? "empty" : `C1-C${String(this.candidateIdByRef.size)}`}.`,
         );
       }
-      return memoryId;
+      return cloneCandidate(candidate);
     });
   }
 
-  resolveEvidenceRef(ref: number): string {
-    const memoryId = this.evidenceIdByRef.get(ref);
-    if (memoryId === undefined) {
-      throw new Error(
-        `Unknown evidence reference ${String(ref)}. Valid evidence range is ` +
-          `${this.evidenceIdByRef.size === 0 ? "empty" : `1-${String(this.evidenceIdByRef.size)}`}.`,
-      );
+  selectCandidates(candidateOrMemoryIds: readonly string[]): MemoryCandidate[] {
+    const selected: MemoryCandidate[] = [];
+    const seen = new Set<string>();
+    for (const identity of new Set(candidateOrMemoryIds)) {
+      const direct = this.candidatesById.get(identity);
+      const candidates = direct === undefined
+        ? [...(this.candidateIdsByMemoryId.get(identity) ?? [])]
+          .map((candidateId) => this.candidatesById.get(candidateId))
+          .filter((candidate): candidate is MemoryCandidate => candidate !== undefined)
+        : [direct];
+      for (const candidate of candidates) {
+        if (seen.has(candidate.candidateId)) continue;
+        seen.add(candidate.candidateId);
+        selected.push(cloneCandidate(candidate));
+      }
     }
-    return memoryId;
+    return selected;
   }
 
-  selectCandidates(memoryIds: readonly string[]): MemoryCandidate[] {
+  /** Returns every passage/legacy candidate belonging to the given parents. */
+  selectMemoryCandidates(memoryIds: readonly string[]): MemoryCandidate[] {
     const selected: MemoryCandidate[] = [];
     for (const memoryId of new Set(memoryIds)) {
-      const candidate = this.candidatesById.get(memoryId);
-      if (candidate) selected.push(cloneCandidate(candidate));
+      for (const candidateId of this.candidateIdsByMemoryId.get(memoryId) ?? []) {
+        const candidate = this.candidatesById.get(candidateId);
+        if (candidate !== undefined) selected.push(cloneCandidate(candidate));
+      }
     }
     return selected;
   }
@@ -155,50 +212,121 @@ export class MemoryLedger {
   ): MemoryCandidate[] {
     for (const hit of hits) {
       this.assertScope(hit.record);
-      this.upsertCandidate(hit.record, hit.preview, {
-        step,
-        tool: "search",
-        query: hit.query,
-        retriever: hit.retriever,
-        rank: hit.rank,
-        score: hit.score,
-      });
+      const candidateId = retrievalHitIdentity(hit);
+      for (const query of hit.matchedQueries ?? [hit.query]) {
+        const metadataFilters = hit.matchedMetadataFilters?.filter(
+          (filter) => filter.query === query,
+        );
+        this.upsertCandidate(candidateId, hit.record, hit.preview, {
+          step,
+          tool: "search",
+          query,
+          retriever: hit.retriever,
+          rank: hit.rank,
+          score: hit.score,
+          ...(metadataFilters === undefined || metadataFilters.length === 0
+            ? {}
+            : {
+                metadataFilters: metadataFilters.map((filter) => ({
+                  ...filter,
+                })),
+              }),
+        }, hit.passage);
+      }
     }
     this.assertInvariants();
-    return this.selectCandidates(hits.map((hit) => hit.record.memoryId));
+    return this.selectCandidates(hits.map(retrievalHitIdentity));
   }
 
   /**
-   * Records bounded exact source excerpts returned by read.
+   * Records bounded exact source excerpts returned by inspect.
    *
    * Context neighbors (and direct IDs discovered through bash) may not have
    * appeared in search. They are first promoted to candidates with an explicit
-   * read_expansion provenance entry, then marked as read evidence.
+   * read_expansion provenance entry, then marked as inspected evidence.
    */
-  recordRead(
+  recordInspect(
     evidenceRecords: readonly MemoryEvidence[],
     step = this.nextStep(),
+    inspectedCandidateIds: readonly string[] = [],
   ): MemoryEvidence[] {
+    // A successful read enters the final exact-source package. Bound the ledger
+    // before mutating it so the all-read handoff remains atomic.
+    const nextEvidenceById = new Map<string, MemoryEvidence>(
+      [...this.evidenceById].map(([memoryId, evidence]) => [
+        memoryId,
+        cloneEvidence(evidence),
+      ] as const),
+    );
     for (const evidence of evidenceRecords) {
       this.assertScope(evidence);
-      if (!this.candidatesById.has(evidence.memoryId)) {
-        this.upsertCandidate(evidence, compactPreview(evidence.content), {
+      const existingEvidence = nextEvidenceById.get(evidence.memoryId);
+      nextEvidenceById.set(
+        evidence.memoryId,
+        existingEvidence === undefined
+          ? cloneEvidence(evidence)
+          : mergeMemoryEvidence(existingEvidence, evidence),
+      );
+    }
+    if (nextEvidenceById.size > MAX_INSPECTED_EVIDENCE_COUNT) {
+      throw new Error(
+        `Read rejected: retaining this batch would exceed the inspected ` +
+          `evidence limit of ${String(MAX_INSPECTED_EVIDENCE_COUNT)} memories. ` +
+          "No source from this read was retained.",
+      );
+    }
+    const nextEvidenceChars = [...nextEvidenceById.values()].reduce(
+      (sum, evidence) => sum + evidence.content.length,
+      0,
+    );
+    if (nextEvidenceChars > MAX_INSPECTED_EVIDENCE_CHARS) {
+      throw new Error(
+        `Read rejected: retaining this batch would exceed the inspected ` +
+          `evidence limit of ${String(MAX_INSPECTED_EVIDENCE_CHARS)} characters. ` +
+          "No source from this read was retained.",
+      );
+    }
+
+    const explicitCandidateIds = new Set(inspectedCandidateIds);
+    const explicitlyInspectedMemoryIds = new Set(
+      inspectedCandidateIds
+        .map((candidateId) => this.candidatesById.get(candidateId)?.memoryId)
+        .filter((memoryId): memoryId is string => memoryId !== undefined),
+    );
+    for (const evidence of evidenceRecords) {
+      const needsExpansionCandidate = explicitCandidateIds.size > 0
+        ? !explicitlyInspectedMemoryIds.has(evidence.memoryId)
+        : !this.candidateIdsByMemoryId.has(evidence.memoryId);
+      if (needsExpansionCandidate) {
+        this.upsertCandidate(evidence.memoryId, evidence, compactPreview(evidence.content), {
           step,
           tool: "read_expansion",
         });
       }
-
-      const candidate = this.candidatesById.get(evidence.memoryId);
-      if (!candidate) {
-        throw new Error(`Internal ledger error: missing ${evidence.memoryId}`);
-      }
-      candidate.read = true;
       if (!this.evidenceById.has(evidence.memoryId)) {
-        const evidenceRef = this.evidenceIdByRef.size + 1;
+        const evidenceRef = `E${String(this.evidenceRefById.size + 1)}`;
         this.evidenceRefById.set(evidence.memoryId, evidenceRef);
-        this.evidenceIdByRef.set(evidenceRef, evidence.memoryId);
       }
-      this.evidenceById.set(evidence.memoryId, cloneEvidence(evidence));
+      const existingEvidence = this.evidenceById.get(evidence.memoryId);
+      this.evidenceById.set(
+        evidence.memoryId,
+        existingEvidence === undefined
+          ? cloneEvidence(evidence)
+          : mergeMemoryEvidence(existingEvidence, evidence),
+      );
+    }
+    const inspectedMemoryIds = new Set(
+      evidenceRecords.map((evidence) => evidence.memoryId),
+    );
+    for (const candidate of this.candidatesById.values()) {
+      if (!inspectedMemoryIds.has(candidate.memoryId)) continue;
+      if (
+        explicitCandidateIds.size === 0 ||
+        explicitCandidateIds.has(candidate.candidateId) ||
+        candidate.discoveries.some((item) => item.tool === "read_expansion")
+      ) {
+        candidate.inspected = true;
+      }
     }
     this.assertInvariants();
     return evidenceRecords.map(cloneEvidence);
@@ -211,7 +339,7 @@ export class MemoryLedger {
   ): MemoryCandidate[] {
     for (const record of records) {
       this.assertScope(record);
-      this.upsertCandidate(record, compactPreview(record.content), {
+      this.upsertCandidate(record.memoryId, record, compactPreview(record.content), {
         step,
         tool: "bash_ro",
         query: command,
@@ -230,7 +358,6 @@ export class MemoryLedger {
     if (!evidenceSummary) {
       throw new Error("evidenceSummary must not be empty");
     }
-
     const seenCitationIds = new Set<string>();
     const citations = input.citations.map((citation) => {
       const memoryId = citation.memoryId.trim();
@@ -243,7 +370,7 @@ export class MemoryLedger {
       }
       if (!this.evidenceById.has(memoryId)) {
         throw new Error(
-          `Finish rejected: citation must reference memory read in this run: ` +
+          `Finish rejected: citation must reference memory inspected in this run: ` +
             `${memoryId}. Do not repeat this call; call read for that memory ` +
             `before citing it, or remove the citation.`,
         );
@@ -254,17 +381,14 @@ export class MemoryLedger {
       seenCitationIds.add(memoryId);
       return { memoryId, supports };
     });
-    const selectedEvidenceChars = [...seenCitationIds].reduce(
-      (sum, memoryId) => sum + this.evidenceById.get(memoryId)!.content.length,
-      0,
-    );
-    if (selectedEvidenceChars > MAX_SELECTED_EVIDENCE_CHARS) {
+    if (
+      seenCitationIds.size !== this.evidenceById.size ||
+      [...this.evidenceById.keys()].some((memoryId) => !seenCitationIds.has(memoryId))
+    ) {
       throw new Error(
-        `Selected evidence exceeds the ${String(MAX_SELECTED_EVIDENCE_CHARS)} ` +
-          "character runtime budget; cite a smaller direct evidence set or mark the package insufficient",
+        "Finish must commit every exact source returned by read",
       );
     }
-
     const inventory = input.inventory?.map((entry) => {
       const item = entry.item.trim();
       const memoryIds = [
@@ -272,12 +396,12 @@ export class MemoryLedger {
       ].filter(Boolean);
       if (!item) throw new Error("Inventory item must not be empty");
       if (memoryIds.length === 0) {
-        throw new Error(`Inventory item must cite read memory: ${item}`);
+        throw new Error(`Inventory item must cite inspected memory: ${item}`);
       }
       for (const memoryId of memoryIds) {
         if (!this.evidenceById.has(memoryId)) {
           throw new Error(
-            `Inventory item must reference memory read in this run: ${memoryId}`,
+            `Inventory item must reference memory inspected in this run: ${memoryId}`,
           );
         }
       }
@@ -305,13 +429,16 @@ export class MemoryLedger {
     }
 
     for (const citation of citations) {
-      const candidate = this.candidatesById.get(citation.memoryId);
-      if (!candidate) {
+      const candidates = this.selectMemoryCandidates([citation.memoryId])
+        .filter((candidate) => candidate.inspected);
+      if (candidates.length === 0) {
         throw new Error(
-          `Internal ledger error: cited evidence is not a candidate: ${citation.memoryId}`,
+          `Internal ledger error: committed evidence is not an inspected candidate: ${citation.memoryId}`,
         );
       }
-      candidate.cited = true;
+      for (const candidate of candidates) {
+        this.candidatesById.get(candidate.candidateId)!.committed = true;
+      }
     }
 
     this.acceptedSelection = selection;
@@ -321,24 +448,24 @@ export class MemoryLedger {
 
   assertInvariants(): void {
     for (const [memoryId] of this.evidenceById) {
-      const candidate = this.candidatesById.get(memoryId);
-      if (!candidate || !candidate.read) {
+      const candidates = this.selectMemoryCandidates([memoryId]);
+      if (!candidates.some((candidate) => candidate.inspected)) {
         throw new Error(
-          `Ledger invariant violated: evidence is not a read candidate: ${memoryId}`,
+          `Ledger invariant violated: evidence is not an inspected candidate: ${memoryId}`,
         );
       }
     }
 
     for (const citation of this.acceptedSelection?.citations ?? []) {
-      const candidate = this.candidatesById.get(citation.memoryId);
+      const candidates = this.selectMemoryCandidates([citation.memoryId]);
       if (!this.evidenceById.has(citation.memoryId)) {
         throw new Error(
           `Ledger invariant violated: citation is not evidence: ${citation.memoryId}`,
         );
       }
-      if (!candidate?.cited) {
+      if (!candidates.some((candidate) => candidate.committed)) {
         throw new Error(
-          `Ledger invariant violated: citation is not marked cited: ${citation.memoryId}`,
+          `Ledger invariant violated: citation is not marked committed: ${citation.memoryId}`,
         );
       }
     }
@@ -353,24 +480,42 @@ export class MemoryLedger {
   }
 
   private upsertCandidate(
+    candidateId: string,
     record: Pick<
       MemoryRecord,
       "memoryId" | "scopeId" | "sessionId" | "turnIndex" | "role" | "timestamp"
     >,
     preview: string,
     discovery: MemoryCandidate["discoveries"][number],
+    passage?: MemoryPassage,
   ): void {
-    const existing = this.candidatesById.get(record.memoryId);
+    const existing = this.candidatesById.get(candidateId);
     if (existing) {
+      const previousBestSearchRank = existing.discoveries.reduce<number | undefined>(
+        (best, item) => {
+          if (item.tool !== "search" || item.rank === undefined) return best;
+          return best === undefined ? item.rank : Math.min(best, item.rank);
+        },
+        undefined,
+      );
       const discoveryKey = JSON.stringify(discovery);
       const alreadyRecorded = existing.discoveries.some(
         (item) => JSON.stringify(item) === discoveryKey,
       );
       if (!alreadyRecorded) existing.discoveries.push({ ...discovery });
+      if (
+        discovery.tool === "search" &&
+        discovery.rank !== undefined &&
+        (previousBestSearchRank === undefined ||
+          discovery.rank <= previousBestSearchRank)
+      ) {
+        existing.preview = preview;
+      }
       return;
     }
 
     const candidate: MemoryCandidate = {
+      candidateId,
       memoryId: record.memoryId,
       scopeId: record.scopeId,
       sessionId: record.sessionId,
@@ -378,15 +523,20 @@ export class MemoryLedger {
       role: record.role,
       preview,
       discoveries: [{ ...discovery }],
-      read: false,
-      cited: false,
+      inspected: false,
+      committed: false,
+      ...(passage === undefined ? {} : { passage: { ...passage } }),
     };
     if (record.timestamp !== undefined) {
       candidate.timestamp = record.timestamp;
     }
-    this.candidatesById.set(record.memoryId, candidate);
-    const candidateRef = this.candidateIdByRef.size + 1;
-    this.candidateRefById.set(record.memoryId, candidateRef);
-    this.candidateIdByRef.set(candidateRef, record.memoryId);
+    this.candidatesById.set(candidateId, candidate);
+    const candidatesForMemory = this.candidateIdsByMemoryId.get(record.memoryId) ??
+      new Set<string>();
+    candidatesForMemory.add(candidateId);
+    this.candidateIdsByMemoryId.set(record.memoryId, candidatesForMemory);
+    const candidateRef = `C${String(this.candidateIdByRef.size + 1)}`;
+    this.candidateRefById.set(candidateId, candidateRef);
+    this.candidateIdByRef.set(candidateRef, candidateId);
   }
 }

@@ -231,6 +231,24 @@ describe("evidence benchmark runtime", () => {
     );
   });
 
+  it("rejects source revision changes when only concurrency may migrate", async () => {
+    const root = await temporaryDirectory();
+    const path = join(root, "run-manifest.json");
+    await ensureBenchmarkRunManifest(path, {
+      benchmark: "ama-bench",
+      source_revision: { commit: "a".repeat(40), dirty: false },
+      slots: 8,
+    });
+
+    await expect(migrateBenchmarkRunInfrastructure(path, {
+      benchmark: "ama-bench",
+      source_revision: { commit: "b".repeat(40), dirty: false },
+      slots: 64,
+    }, ["slots"])).rejects.toThrow(
+      /would change the experiment configuration/u,
+    );
+  });
+
   it("allows only one configuration to create a new manifest concurrently", async () => {
     const root = await temporaryDirectory();
     const path = join(root, "run-manifest.json");

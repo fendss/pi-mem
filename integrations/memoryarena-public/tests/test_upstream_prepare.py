@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import hashlib
+import json
 import subprocess
 import sys
 import tempfile
@@ -10,8 +12,8 @@ from pathlib import Path
 INTEGRATION_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(INTEGRATION_ROOT))
 
-from upstream.contracts import UpstreamContractError  # noqa: E402
-from upstream.prepare import pimem_source_identity  # noqa: E402
+from upstream.contracts import SUITE_CONTRACTS, UpstreamContractError  # noqa: E402
+from upstream.prepare import effective_config_identity, pimem_source_identity  # noqa: E402
 
 
 class UpstreamPrepareTests(unittest.TestCase):
@@ -64,6 +66,34 @@ class UpstreamPrepareTests(unittest.TestCase):
         )
         with self.assertRaisesRegex(UpstreamContractError, "credentials"):
             pimem_source_identity(self.root)
+
+    def test_effective_configs_are_bound_by_content(self):
+        config_dir = self.root.parent / "effective-configs"
+        config_dir.mkdir()
+        for suite, contract in SUITE_CONTRACTS.items():
+            config_path = config_dir / contract.effective_config_name
+            config_path.write_text(json.dumps({"suite": suite}), encoding="utf-8")
+            config_hash = hashlib.sha256(config_path.read_bytes()).hexdigest()
+            (config_dir / f"{suite}.manifest.json").write_text(
+                json.dumps(
+                    {
+                        "suite": suite,
+                        "code_revision": "6cd9de14b71915e39ac742a20dc33785e14b6aab",
+                        "data_revision": "da1a37c8b19280e18627ca01cf368195a5e1d92e",
+                        "effective_config_sha256": config_hash,
+                        "official_config_unchanged": True,
+                        "evaluator_policy": "official_only",
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+        identity = effective_config_identity(config_dir)
+        self.assertEqual(set(identity), set(SUITE_CONTRACTS))
+        target = config_dir / SUITE_CONTRACTS["formal_reasoning_math"].effective_config_name
+        target.write_text(json.dumps({"agent": {"model_name": "changed"}}), encoding="utf-8")
+        with self.assertRaisesRegex(UpstreamContractError, "provenance mismatch"):
+            effective_config_identity(config_dir)
 
 
 if __name__ == "__main__":

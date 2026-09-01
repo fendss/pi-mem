@@ -282,7 +282,7 @@ describe("AMA-Bench v4 trusted adapter", () => {
 });
 
 describe("AMA-Bench answer and evaluation contracts", () => {
-  it("builds answer context from cited Evidence only and in trajectory order", () => {
+  it("builds answer context from every exact read source in trajectory order", () => {
     const { query } = identities();
     const retrieval = {
       scopeId: query.scopeId,
@@ -290,6 +290,7 @@ describe("AMA-Bench answer and evaluation contracts", () => {
       citations: [
         { memoryId: "m-step-2", supports: "final state" },
         { memoryId: "m-step-1", supports: "prior state" },
+        { memoryId: "m-read-third", supports: "later read state" },
       ],
       evidence: [
         {
@@ -305,10 +306,10 @@ describe("AMA-Bench answer and evaluation contracts", () => {
           content: "Step 1:\nAction: submit\nObservation: processing",
         },
         {
-          memoryId: "m-uncited",
+          memoryId: "m-read-third",
           sessionId: "s-one",
           turnIndex: 3,
-          content: "UNCITED_MEMORY_MUST_NOT_ESCAPE",
+          content: "THIRD_READ_MEMORY_MUST_REACH_ANSWER",
         },
       ],
     } as unknown as PiMemResult;
@@ -321,7 +322,7 @@ describe("AMA-Bench answer and evaluation contracts", () => {
     expect(prompt.userPrompt.indexOf("m-step-1")).toBeLessThan(
       prompt.userPrompt.indexOf("m-step-2"),
     );
-    expect(prompt.userPrompt).not.toContain("UNCITED_MEMORY_MUST_NOT_ESCAPE");
+    expect(prompt.userPrompt).toContain("THIRD_READ_MEMORY_MUST_REACH_ANSWER");
     expect(prompt.userPrompt).toContain("Question: PRIVATE_QUESTION_TEXT");
   });
 
@@ -334,13 +335,13 @@ describe("AMA-Bench answer and evaluation contracts", () => {
       evidence: [],
     } as unknown as PiMemResult;
     expect(() => buildAmaBenchAnswerPrompt({ query, retrieval })).toThrow(
-      /missing Evidence/u,
+      /exact read package and citations do not match/u,
     );
   });
 
   it("pins the answer prompt and joins labels only at evaluator time", () => {
     expect(AMA_BENCH_ANSWER_PROMPT_VERSION).toBe(
-      "ama-bench-v4-openend-cited-trajectory-v1",
+      "ama-bench-v4-openend-read-trajectory-v3",
     );
     expect(sha256(AMA_BENCH_ANSWER_PROMPT_TEMPLATE)).toBe(
       "2b69bd452419a83ec205779a283442094855e9b0476ab54a51c6316a57839ab5",

@@ -9,6 +9,7 @@ export {
   type MemoryArenaAddInput,
   type MemoryArenaAddResult,
   type MemoryArenaCitation,
+  type MemoryArenaCommittedEvidence,
   type MemoryArenaEmbeddingMetrics,
   type MemoryArenaErrorCode,
   type MemoryArenaGenerationState,
@@ -41,7 +42,11 @@ export type {
   MemoryArenaWrapAuditSink,
 } from "./ports/memory-backend.js";
 export {
+  MEMORYARENA_ANSWER_HANDOFF_ID,
+  MEMORYARENA_ANSWER_PROMPT_VERSION,
+  MEMORYARENA_FULL_PARENT_HANDOFF_MAX_UTF8_BYTES,
   MemoryArenaPublicMemoryBackend,
+  renderMemoryArenaEvidencePrompt,
   renderMemoryArenaPublicPrompt,
 } from "./use-cases/memory-backend.js";
 export {

@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 import { benchmarkLongMemEval } from "./commands/benchmark-longmemeval.js";
+import { benchmarkMemoryAgentBench } from "./commands/benchmark-memoryagentbench.js";
 import { benchmarkEvidence } from "./commands/benchmark-evidence.js";
 import { evaluateBenchmark } from "./commands/evaluate-benchmark.js";
 import { ingestBenchmark } from "./commands/ingest-benchmark.js";
@@ -23,6 +24,7 @@ Commands:
   ingest-tau-knowledge --tau-root DIR --data-dir DIR [--retrieval-profile fts5|pimem-hybrid] [--embedding-slots N] [--embedding-rps N]
   run-longmemeval    --data-dir DIR --question-id ID [--retrieval-profile fts5|pimem-hybrid] [--model ID] [--skill none|pimem-v0]
   benchmark-longmemeval --data-dir DIR --output-dir DIR [--question-id ID ...] [--retrieval-profile fts5|pimem-hybrid] [--model ID] [--skill none|pimem-v0] [--slots N]
+  benchmark-memoryagentbench --input-dir DIR --output-dir DIR --subset ID [--evolution static|ephemeral|cumulative] [--question-limit N] [--max-search-calls N] [--retrieval-profile fts5|pimem-hybrid] [--model ID]
   longmemeval-suite --source FILE --data-dir DIR --output-dir DIR --embedding-env FILE --answer-env FILE --judge-env FILE --retrieval-agent-dir DIR --retrieval-provider ID --retrieval-model ID --answer-agent-dir DIR --answer-provider ID --answer-model ID --archive FILE.tar.gz --evaluation-archive FILE.tar.gz [--retrieval-env FILE] [--skill none|pimem-v0] [--slots N] [--frozen-slots N] [--judge-slots N]
   prepare-longmemeval-eval --source FILE --predictions FILE --output FILE
   package-benchmark   --output-dir DIR --archive FILE.tar.gz
@@ -53,6 +55,9 @@ async function main(): Promise<void> {
       return;
     case "benchmark-longmemeval":
       await benchmarkLongMemEval(parsed);
+      return;
+    case "benchmark-memoryagentbench":
+      await benchmarkMemoryAgentBench(parsed);
       return;
     case "longmemeval-suite":
       await longMemEvalSuite(parsed);

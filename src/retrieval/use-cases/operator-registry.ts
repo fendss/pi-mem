@@ -209,11 +209,11 @@ class RunSearchOperatorCatalog implements RuntimeSearchOperatorCatalog {
 export function renderSearchOperatorCatalog(
   entries: readonly SearchOperatorCatalogEntry[],
 ): string {
-  if (entries.length === 0) return "No search operators are available.";
+  if (entries.length === 0) return "No primitive retrievers are available.";
   return [
-    "Available search operators:",
+    "Available primitive retrievers and run-local plans (pass the id exactly as search.operator; version is informational):",
     ...entries.flatMap((entry) => [
-      `- ${entry.id}@${entry.version} | cost=${entry.guide.cost} | ${entry.guide.summary}`,
+      `- id=${entry.id} | version=${entry.version} | cost=${entry.guide.cost} | ${entry.guide.summary}`,
       `  use_when=${entry.guide.useWhen.join("; ")}`,
       ...(entry.guide.avoidWhen === undefined || entry.guide.avoidWhen.length === 0
         ? []

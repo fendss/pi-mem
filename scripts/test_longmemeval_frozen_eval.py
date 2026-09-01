@@ -86,6 +86,15 @@ class FrozenInputPreparationTest(unittest.TestCase):
 
 
 class PromptContractTest(unittest.TestCase):
+    def test_model_identity_accepts_only_exact_or_dated_snapshot(self) -> None:
+        self.assertTrue(EVAL.returned_model_matches("gpt-5.4", "gpt-5.4"))
+        self.assertTrue(
+            EVAL.returned_model_matches("gpt-5.4", "gpt-5.4-2026-08-20")
+        )
+        self.assertFalse(
+            EVAL.returned_model_matches("gpt-5.4", "gpt-5.4-mini")
+        )
+
     def test_answer_prompt_matches_ldbd_contract(self) -> None:
         self.assertEqual(
             hashlib.sha256(EVAL.ANSWER_PROMPT.encode()).hexdigest(),

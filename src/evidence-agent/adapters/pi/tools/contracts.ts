@@ -6,10 +6,12 @@ import type {
   EvidenceOperatorResult,
   MemoryToolStore,
   RuntimeSearchOperatorCatalog,
+  SearchCoverageProgress,
   SearchOperatorCatalog,
   SearchOperatorCompositionTrace,
   SearchOperatorDefinitionSnapshot,
   SearchRequest,
+  MemoryPassage,
 } from "../../../../retrieval/index.js";
 import type {
   MemoryCandidate,
@@ -17,24 +19,63 @@ import type {
   PiMemSelection,
 } from "../../../index.js";
 import type { MemoryLedger } from "../../../model/memory-ledger.js";
+import type { MemoryObservation } from "../memory-observation.js";
 import {
   BashRoParameters,
   DefineOperatorParameters,
   FinishParameters,
   ReadParameters,
+  SearchMoreParameters,
   type SearchParametersSchema,
 } from "./schemas.js";
+
+export type CandidateToolDetails = Omit<MemoryCandidate, "passage"> & {
+  passage?: Omit<MemoryPassage, "content">;
+};
 
 export interface SearchToolDetails {
   kind: "search";
   request: SearchRequest;
+  executedQueries: string[];
   operator: string;
   operatorVersion: string;
   operatorResult?: EvidenceOperatorResult;
   composition?: SearchOperatorCompositionTrace;
-  candidateReferences: Array<{ candidateRef: number; memoryId: string }>;
-  candidates: MemoryCandidate[];
+  candidateReferences: Array<{
+    candidateRef: string;
+    candidateId?: string;
+    memoryId: string;
+  }>;
+  candidates: CandidateToolDetails[];
+  /**
+   * Reservoir candidates exposed as a compact, directly readable directory.
+   * They are retrieved by the same physical search as `candidates`; they are
+   * not a second search or a second ranking.
+   */
+  directoryCandidateReferences?: Array<{
+    candidateRef: string;
+    candidateId?: string;
+    memoryId: string;
+  }>;
+  directoryCandidates?: CandidateToolDetails[];
+  coverageProgress: SearchCoverageProgress;
   repeatedQueries?: string[];
+  /** Auditable boundary for the one physical retrieval; full passage text is omitted. */
+  physicalPlan?: {
+    candidateReservoirLimit: number;
+    candidateReservoirCount: number;
+    exhausted: boolean;
+  };
+  pagination?: {
+    mode: "initial" | "continuation";
+    page: number;
+    depth: number;
+    hasMore: boolean;
+    /** Candidates still available as compact C-ref directory entries. */
+    directoryCandidateCount?: number;
+    /** False for search; true when search_more only changes presentation. */
+    presentationOnly?: boolean;
+  };
 }
 
 export interface DefineOperatorToolDetails {
@@ -45,7 +86,7 @@ export interface DefineOperatorToolDetails {
 
 export interface ReadToolDetails {
   kind: "read";
-  requestedCandidateRefs: number[];
+  requestedCandidateRefs: string[];
   requestedMemoryIds: string[];
   contextBefore: number;
   contextAfter: number;
@@ -61,16 +102,31 @@ export interface ReadToolDetails {
     | "truncated"
   > & { excerpts: Array<{ start: number; end: number }> }>;
   evidenceReferences: Array<{
-    evidenceRef: number;
-    candidateRef: number;
+    evidenceRef: string;
+    candidateRef: string;
     memoryId: string;
   }>;
   expandedMemoryIds: string[];
-  candidates: MemoryCandidate[];
+  candidates: CandidateToolDetails[];
 }
 
 export interface FinishToolDetails {
   kind: "finish";
+  /** Harness-generated E refs for every exact source returned by read. */
+  committedEvidenceRefs: string[];
+  committedEvidence: Array<Pick<
+    MemoryEvidence,
+    | "memoryId"
+    | "scopeId"
+    | "sessionId"
+    | "turnIndex"
+    | "role"
+    | "timestamp"
+    | "contentHash"
+    | "sourceContentHash"
+    | "sourceContentLength"
+    | "truncated"
+  >>;
   selection: PiMemSelection;
 }
 
@@ -82,7 +138,7 @@ export interface BashRoToolDetails {
   exitCode: number | null;
   truncated: boolean;
   memoryIds: string[];
-  candidateReferences: Array<{ candidateRef: number; memoryId: string }>;
+  candidateReferences: Array<{ candidateRef: string; memoryId: string }>;
   candidates: MemoryCandidate[];
 }
 
@@ -108,11 +164,14 @@ export interface CreatePiMemToolsOptions {
   evidenceFocus?: () => readonly string[];
   questionDate?: string;
   searchDefaults?: Pick<SearchRequest, "limit" | "order" | "maxPerSession">;
-  searchGuidance?: string;
+  maxSearchCalls?: number;
+  /** Shared model-facing snapshot. Created automatically by createPiMemTools. */
+  observation?: MemoryObservation;
 }
 
 export interface PiMemTools {
   search: AgentTool<SearchParametersSchema, SearchToolDetails>;
+  searchMore: AgentTool<typeof SearchMoreParameters, SearchToolDetails>;
   defineOperator?: AgentTool<
     typeof DefineOperatorParameters,
     DefineOperatorToolDetails

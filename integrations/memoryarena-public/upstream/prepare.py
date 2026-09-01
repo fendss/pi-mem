@@ -6,10 +6,22 @@ from pathlib import Path
 from typing import Sequence
 from urllib.parse import urlparse, urlsplit, urlunsplit
 
-from runtime.artifacts import locked_manifest_document, read_json, validate_locked_manifest, write_json_atomic
+from runtime.artifacts import (
+    file_sha256,
+    locked_manifest_document,
+    read_json,
+    validate_locked_manifest,
+    write_json_atomic,
+)
 from runtime.usage import load_price_table
 
-from .contracts import OFFICIAL_CODE_REVISION, PUBLIC_DATA_REVISION, RELEASE_ID, UpstreamContractError
+from .contracts import (
+    OFFICIAL_CODE_REVISION,
+    PUBLIC_DATA_REVISION,
+    RELEASE_ID,
+    SUITE_CONTRACTS,
+    UpstreamContractError,
+)
 from .manifest import validate_official_locked_task_manifest
 
 
@@ -65,6 +77,31 @@ def pimem_source_identity(root: Path) -> dict[str, object]:
     }
 
 
+def effective_config_identity(config_dir: Path) -> dict[str, dict[str, str]]:
+    identity: dict[str, dict[str, str]] = {}
+    for suite, contract in sorted(SUITE_CONTRACTS.items()):
+        config_path = config_dir / contract.effective_config_name
+        provenance_path = config_dir / f"{suite}.manifest.json"
+        provenance = read_json(provenance_path)
+        config_sha256 = file_sha256(config_path)
+        if (
+            provenance.get("suite") != suite
+            or provenance.get("code_revision") != OFFICIAL_CODE_REVISION
+            or provenance.get("data_revision") != PUBLIC_DATA_REVISION
+            or provenance.get("effective_config_sha256") != config_sha256
+            or provenance.get("official_config_unchanged") is not True
+            or provenance.get("evaluator_policy") != "official_only"
+        ):
+            raise UpstreamContractError(
+                f"effective config provenance mismatch: {suite}"
+            )
+        identity[suite] = {
+            "effective_config_sha256": config_sha256,
+            "provenance_sha256": file_sha256(provenance_path),
+        }
+    return identity
+
+
 def prepare_source_run_manifest(
     *,
     run_id: str,
@@ -73,6 +110,7 @@ def prepare_source_run_manifest(
     retrieval_model: str,
     embedding_model: str,
     pimem_root: Path,
+    config_dir: Path,
     price_table_path: Path | None = None,
 ) -> dict:
     if not run_id or not retrieval_model or not embedding_model:
@@ -97,6 +135,7 @@ def prepare_source_run_manifest(
             "embedding_model": embedding_model,
         },
         "pimem_source": pimem_source_identity(pimem_root),
+        "effective_configs": effective_config_identity(config_dir),
         "infrastructure": {
             "provider_proxy_url": provider_proxy_url.rstrip("/"),
         },
@@ -112,6 +151,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--retrieval-model", required=True)
     parser.add_argument("--embedding-model", required=True)
     parser.add_argument("--pimem-root", type=Path, required=True)
+    parser.add_argument("--config-dir", type=Path, required=True)
     parser.add_argument("--price-table", type=Path)
     parser.add_argument("--output", type=Path, required=True)
     return parser
@@ -127,6 +167,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             retrieval_model=args.retrieval_model,
             embedding_model=args.embedding_model,
             pimem_root=args.pimem_root.resolve(),
+            config_dir=args.config_dir.resolve(),
             price_table_path=args.price_table.resolve() if args.price_table else None,
         )
         write_json_atomic(args.output.resolve(), document)

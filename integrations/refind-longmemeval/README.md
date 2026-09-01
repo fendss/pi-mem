@@ -38,3 +38,23 @@ must be resumed instead of scored.
 Required environment variables are documented by the script's startup checks.
 Secrets stay in mode-`0600` env files and must not be copied into the run
 manifest or repository.
+
+For routine runs, copy `run_s50.example.yaml` outside the repository, edit the
+paths, credentials, models, and concurrency in that single file, and set it to
+mode `0600`. `run.max_search_calls` defaults to the ReFind-comparable budget of
+`4`; larger values are diagnostic capability runs and must not be reported as
+equal-budget ReFind comparisons. Validate without exposing credentials, then
+run:
+
+```bash
+chmod 600 /secure/path/run_s50.yaml
+node integrations/refind-longmemeval/run_s50_from_yaml.mjs \
+  --check /secure/path/run_s50.yaml
+node integrations/refind-longmemeval/run_s50_from_yaml.mjs \
+  /secure/path/run_s50.yaml
+```
+
+The YAML launcher validates the evaluator-source schema before any paid model
+call and passes secrets only through the child environment. It never
+prints them or includes them in benchmark manifests. The older env-file inputs
+remain supported for existing resumable runs.

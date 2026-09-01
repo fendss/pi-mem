@@ -6,7 +6,12 @@ import {
   lastAssistantMessage,
   type ModelMetadata,
 } from "../evidence-agent/index.js";
-import { assertNonEmpty, newRunId, sha256 } from "../util.js";
+import {
+  assertNonEmpty,
+  newRunId,
+  responseModelMatchesRequested,
+  sha256,
+} from "../util.js";
 
 export interface BenchmarkAnswerPrompt {
   adapterId: string;
@@ -34,7 +39,7 @@ export interface BenchmarkAnswerResult {
 }
 
 export function returnedModelMatches(requested: string, returned: string): boolean {
-  return returned === requested || returned.startsWith(`${requested}-`);
+  return responseModelMatchesRequested(requested, returned);
 }
 
 /** Runs benchmark-owned answer synthesis after PiMem has finished retrieval. */

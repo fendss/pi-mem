@@ -1,7 +1,12 @@
 import type { AgentMessage } from "@earendil-works/pi-agent-core";
 import type { ToolResultMessage } from "@earendil-works/pi-ai";
 
-const NAVIGATION_TOOLS = new Set(["search", "define_operator", "bash_ro"]);
+const NAVIGATION_TOOLS = new Set([
+  "search",
+  "search_more",
+  "define_operator",
+  "bash_ro",
+]);
 
 export interface EphemeralContextSnapshot {
   expiredNavigationResults: number;
@@ -25,8 +30,9 @@ function trailingToolResultStart(messages: readonly AgentMessage[]): number {
 
 /**
  * Keeps the current tool batch visible once, then expires navigation payloads.
- * Full results remain in the audit trace and ledger; selected read evidence stays
- * in model context.
+ * Full results remain in the audit trace and ledger. Every read in a tool
+ * batch reaches the model once; later turns retain only E-handle receipts in
+ * the latest observation instead of replaying raw inspected evidence.
  */
 export function createEphemeralMemoryContext(): EphemeralMemoryContext {
   const expiredNavigationIds = new Set<string>();
@@ -36,13 +42,15 @@ export function createEphemeralMemoryContext(): EphemeralMemoryContext {
       const currentBatchStart = trailingToolResultStart(messages);
       return messages.map((message, index) => {
         if (
-          index >= currentBatchStart ||
           !isToolResult(message) ||
           (!NAVIGATION_TOOLS.has(message.toolName) && message.toolName !== "read") ||
           message.isError
         ) {
           return message;
         }
+        // Preserve every result in the current batch. Keeping only the final
+        // read would discard exact evidence before the model could reason over it.
+        if (index >= currentBatchStart) return message;
         const read = message.toolName === "read";
         if (read) compactedReadIds.add(message.toolCallId);
         else expiredNavigationIds.add(message.toolCallId);
@@ -51,10 +59,14 @@ export function createEphemeralMemoryContext(): EphemeralMemoryContext {
           content: [{
             type: "text" as const,
             text: read
-              ? "[read evidence text compacted after one reasoning turn; it remains eligible for citation and in the audit trace. Re-read the candidate if exact wording is needed again.]"
+              ? "[exact read payload removed from active context; it remains " +
+                "in the final-source ledger and the latest <MEMORY> snapshot " +
+                "retains only its E-handle receipt.]"
+              : message.toolName === "search" || message.toolName === "search_more"
+              ? "[search payload expired from active context; discovered uninspected " +
+                "candidates remain directly readable in the latest <MEMORY> directory.]"
               : `[${message.toolName} navigation output expired from active ` +
-                "context; full output remains in the audit trace. Read selected " +
-                "candidate numbers or run a focused search for an uncovered subclaim.]",
+                "context; full output remains in the audit trace.]",
           }],
         };
       });

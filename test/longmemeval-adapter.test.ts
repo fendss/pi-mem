@@ -218,11 +218,14 @@ describe("LongMemEval-S trusted adapter", () => {
     );
   });
 
-  it("builds the LDBD answer prompt from cited evidence only", () => {
+  it("builds the LDBD answer prompt from every exact read source", () => {
     const retrieval = {
       status: "sufficient",
       evidenceSummary: "ORGANIZED_EVIDENCE_SUMMARY",
-      citations: [{ memoryId: "m-cited", supports: "Exact value" }],
+      citations: [
+        { memoryId: "m-cited", supports: "Exact value" },
+        { memoryId: "m-read-second", supports: "Second exact value" },
+      ],
       evidence: [
         {
           memoryId: "m-cited",
@@ -231,9 +234,9 @@ describe("LongMemEval-S trusted adapter", () => {
           content: "CITED_SOURCE_VALUE",
         },
         {
-          memoryId: "m-read-only",
+          memoryId: "m-read-second",
           role: "assistant",
-          content: "UNSELECTED_READ_NOISE",
+          content: "SECOND_READ_SOURCE_VALUE",
         },
       ],
     } as unknown as PiMemResult;
@@ -242,20 +245,21 @@ describe("LongMemEval-S trusted adapter", () => {
 
     expect(prompt.adapterId).toBe("longmemeval-s");
     expect(prompt.promptVersion).toBe(
-      "ldbd-longmemeval-answer-48dbfff3-retrieval-package-v1",
+      "ldbd-longmemeval-answer-read-evidence-v6",
     );
     expect(prompt.userPrompt).toContain("CITED_SOURCE_VALUE");
     expect(prompt.userPrompt).toContain("memoryId=m-cited");
-    expect(prompt.userPrompt).not.toContain("UNSELECTED_READ_NOISE");
-    expect(prompt.userPrompt).toContain("ORGANIZED_EVIDENCE_SUMMARY");
-    expect(prompt.userPrompt).toContain("<retrieval_package>");
+    expect(prompt.userPrompt).toContain("SECOND_READ_SOURCE_VALUE");
+    expect(prompt.userPrompt).not.toContain("ORGANIZED_EVIDENCE_SUMMARY");
+    expect(prompt.userPrompt).not.toContain("retrieval_summary");
+    expect(prompt.userPrompt).not.toContain("retrieval_package");
     expect(prompt.userPrompt).toContain("<memories>");
     expect(prompt.userPrompt).toContain("Question: What is the value?");
   });
 
   it("pins the byte-exact LDBD answer prompt contract", () => {
     expect(LONGMEMEVAL_ANSWER_PROMPT_VERSION).toBe(
-      "ldbd-longmemeval-answer-48dbfff3-retrieval-package-v1",
+      "ldbd-longmemeval-answer-read-evidence-v6",
     );
     expect(
       sha256(LONGMEMEVAL_ANSWER_PROMPT_TEMPLATE),

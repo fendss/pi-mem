@@ -4,12 +4,30 @@ export type {
   EvidenceOperatorSearchContext,
   NumericValueKind,
   RetrievalHit,
+  RetrievalMetadataFilter,
   RetrievalMetadata,
   RetrievalMetricsSnapshot,
   RetrievalProfile,
+  SearchCoverageProgress,
+  SearchFrontierStatus,
   SearchOrder,
+  SearchQueryCoverageProgress,
   SearchRequest,
 } from "./model/retrieval.js";
+export {
+  assertPassageMatchesRecord,
+  memoryPassages,
+  projectSearchHitsToPassages,
+  rankMemoryPassages,
+  retrievalHitIdentity,
+  sourceQuoteMatchScore,
+  MAX_PASSAGES_PER_PARENT_HIT,
+  MAX_PASSAGE_CHARS,
+  MAX_PASSAGE_OVERLAP_CHARS,
+  PASSAGE_VIEW_VERSION,
+  TARGET_PASSAGE_CHARS,
+  type MemoryPassage,
+} from "./model/passage.js";
 export type {
   CandidateSet,
   DefinedSearchOperator,
@@ -20,9 +38,16 @@ export type {
   SearchOperatorCompositionTrace,
   SearchOperatorCost,
   SearchOperatorDefinition,
+  SearchOperatorDefinitionAnnotateStep,
   SearchOperatorDefinitionCombineStep,
+  SearchOperatorDefinitionDedupeStep,
+  SearchOperatorDefinitionDiversifyStep,
+  SearchOperatorDefinitionFilterStep,
+  SearchOperatorDefinitionLimitStep,
   SearchOperatorDefinitionSearchStep,
   SearchOperatorDefinitionSnapshot,
+  SearchOperatorDefinitionSortStep,
+  SearchOperatorDefinitionStep,
   SearchOperatorExecutionContext,
   SearchOperatorGuide,
   SearchOperatorInput,
@@ -42,6 +67,8 @@ export type {
 } from "./model/embedder.js";
 export {
   createSearchMemory,
+  type SearchMemoryBranch,
+  type SearchMemoryParams,
   type SearchMemoryResult,
 } from "./search-memory.js";
 export type {

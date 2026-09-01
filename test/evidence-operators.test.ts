@@ -83,10 +83,34 @@ describe("timeline evidence operator", () => {
     expect(result.rows.map((row) => row.memoryId)).toEqual(["m-early", "m-late"]);
     expect(result.rows[0]).toMatchObject({ eventTime: "2023-03-01" });
   });
+
+  it("surfaces resolved sidecar dates with the source row", () => {
+    const source = hit(
+      "m-relative",
+      "I ordered the replacement two days ago.",
+      "2023-03-20T10:00:00",
+    );
+    source.operatorTemporalFacts = [{
+      expression: "two days ago",
+      resolvedDate: "2023-03-18",
+      basis: "relative-to-memory",
+    }];
+
+    const result = buildTimelineOperatorResult(
+      [source],
+      "When did I order the replacement?",
+      "2023/03/25 (Sat) 18:26",
+    );
+
+    expect(result.rows[0]).toMatchObject({
+      eventTime: "2023-03-20",
+      mentionedDates: ["2023-03-18"],
+    });
+  });
 });
 
 describe("aggregate evidence operator", () => {
-  it("extracts, deduplicates, excludes targets, and proposes a grounded total", () => {
+  it("extracts and classifies source quantities without proposing an unchecked total", () => {
     const result = buildAggregateOperatorResult([
       hit("m-herbs", "I earned a total of $120 selling herbs.", "2023-05-01T10:00:00"),
       hit("m-jam", "I earned $225 selling jam.", "2023-05-08T10:00:00"),
@@ -100,11 +124,9 @@ describe("aggregate evidence operator", () => {
       "increment",
       "target",
     ]);
-    expect(result.derived).toMatchObject({
-      proposedTotal: 495,
-      unit: "USD",
-      excludedTargetCount: 1,
-    });
+    expect(result.rows.map((row) => row.value)).toEqual([120, 225, 150, 500]);
+    expect(result.derived).toMatchObject({ excludedTargetCount: 1 });
+    expect(result.derived).not.toHaveProperty("proposedTotal");
   });
 
   it("uses the latest cumulative snapshot instead of summing snapshots", () => {

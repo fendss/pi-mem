@@ -1,6 +1,7 @@
-import type { MemoryRecord } from "../../../memory/index.js";
-import { buildAggregateOperatorResult } from "../../operators/numeric-operator.js";
-import { buildTimelineOperatorResult } from "../../operators/temporal-operator.js";
+import {
+  resolveTemporalQuestion,
+  temporalAuxiliaryRequest,
+} from "../../operators/temporal-operator.js";
 import type {
   EvidenceOperatorSearchContext,
   RetrievalHit,
@@ -11,28 +12,24 @@ import type { SearchOperatorInput } from "../../model/search-operator.js";
 import type { SearchOperatorStore } from "../../ports/memory-tool-store.js";
 import type { SearchOperator } from "../../ports/search-operator.js";
 
-const VERSION = "1";
+const VERSION = "3";
 
 function makeSearchRequest(
   input: SearchOperatorInput,
-  overrides: {
-    limit?: number;
-    roles?: MemoryRecord["role"][];
-    order?: SearchOrder;
-  } = {},
+  order: SearchOrder = "relevance",
 ): SearchRequest {
   return {
     queries: [...input.queries],
-    limit: overrides.limit ?? input.limit,
-    order: overrides.order ?? "relevance",
-    ...(overrides.roles === undefined ? {} : { roles: overrides.roles }),
+    limit: input.limit,
+    order,
+    ...(input.roles === undefined ? {} : { roles: [...input.roles] }),
     ...(input.maxPerSession === undefined
       ? {}
       : { maxPerSession: input.maxPerSession }),
   };
 }
 
-function mergeOperatorHits(
+function mergeHits(
   preferred: readonly RetrievalHit[],
   fallback: readonly RetrievalHit[],
   limit: number,
@@ -42,63 +39,10 @@ function mergeOperatorHits(
     if (!merged.has(hit.record.memoryId)) merged.set(hit.record.memoryId, hit);
     if (merged.size >= limit) break;
   }
-  return [...merged.values()];
-}
-
-async function coverageHits(
-  store: SearchOperatorStore,
-  scopeId: string,
-  input: SearchOperatorInput,
-  signal?: AbortSignal,
-): Promise<RetrievalHit[]> {
-  const grouped = new Map<string, {
-    hits: RetrievalHit[];
-    queries: Set<string>;
-    score: number;
-  }>();
-  for (const query of input.queries) {
-    const hits = await store.search(scopeId, {
-      queries: [query],
-      limit: Math.min(100, Math.max(20, input.limit * 2)),
-      order: "relevance",
-      ...(input.maxPerSession === undefined
-        ? {}
-        : { maxPerSession: input.maxPerSession }),
-    }, signal);
-    for (const hit of hits) {
-      const entry = grouped.get(hit.record.sessionId) ?? {
-        hits: [],
-        queries: new Set<string>(),
-        score: 0,
-      };
-      entry.hits.push(hit);
-      entry.queries.add(query);
-      entry.score += 1 / (60 + hit.rank);
-      grouped.set(hit.record.sessionId, entry);
-    }
-  }
-  const orderedSessions = [...grouped.entries()].sort((left, right) =>
-    right[1].queries.size - left[1].queries.size ||
-    right[1].score - left[1].score ||
-    left[0].localeCompare(right[0])
-  );
-  const selected = new Map<string, RetrievalHit>();
-  for (const [, session] of orderedSessions) {
-    let sessionCount = 0;
-    for (const hit of session.hits.sort((left, right) =>
-      left.rank - right.rank || left.record.turnIndex - right.record.turnIndex
-    )) {
-      if (selected.has(hit.record.memoryId)) continue;
-      selected.set(hit.record.memoryId, hit);
-      sessionCount += 1;
-      if (selected.size >= input.limit) return [...selected.values()];
-      if (
-        input.maxPerSession !== undefined &&
-        sessionCount >= input.maxPerSession
-      ) break;
-    }
-  }
-  return [...selected.values()];
+  return [...merged.values()].map((hit, index) => ({
+    ...hit,
+    rank: index + 1,
+  }));
 }
 
 function hybridOperator(store: SearchOperatorStore): SearchOperator {
@@ -106,9 +50,9 @@ function hybridOperator(store: SearchOperatorStore): SearchOperator {
     id: "hybrid",
     version: VERSION,
     guide: {
-      summary: "Broad semantic and lexical recall when source wording is uncertain.",
-      useWhen: ["The fact is known but its exact wording is uncertain."],
-      avoidWhen: ["A rare exact name, quotation, identifier, or number is already known."],
+      summary: "Primitive relevance retriever combining the configured semantic and lexical index.",
+      useWhen: ["Source wording may differ from the question."],
+      avoidWhen: ["Only an exact rare string is useful."],
       cost: "medium",
     },
     async execute(context, input) {
@@ -126,9 +70,9 @@ function lexicalOperator(store: SearchOperatorStore): SearchOperator {
     id: "lexical",
     version: VERSION,
     guide: {
-      summary: "Exact text search for names, labels, quotations, numbers, and actions.",
-      useWhen: ["The query contains a distinctive exact textual anchor."],
-      avoidWhen: ["The source is likely paraphrased or uses unknown wording."],
+      summary: "Primitive exact-text retriever.",
+      useWhen: ["A name, quotation, identifier, number, or distinctive phrase is known."],
+      avoidWhen: ["The source is likely paraphrased."],
       cost: "low",
     },
     async execute(context, input) {
@@ -143,46 +87,18 @@ function lexicalOperator(store: SearchOperatorStore): SearchOperator {
   };
 }
 
-function coverageOperator(store: SearchOperatorStore): SearchOperator {
+function chronologicalOperator(store: SearchOperatorStore): SearchOperator {
   return {
-    id: "coverage",
+    id: "chronological",
     version: VERSION,
     guide: {
-      summary: "Search independent evidence needs and merge unique memories across sessions.",
-      useWhen: ["The question contains multiple items, alternatives, stages, or participants."],
-      avoidWhen: ["Only one atomic fact is required."],
-      cost: "high",
-    },
-    async execute(context, input) {
-      const expandedInput = { ...input, limit: Math.max(40, input.limit) };
-      return {
-        request: makeSearchRequest(expandedInput),
-        hits: await coverageHits(
-          store,
-          context.scopeId,
-          expandedInput,
-          context.signal,
-        ),
-      };
-    },
-  };
-}
-
-function historyOperator(store: SearchOperatorStore): SearchOperator {
-  return {
-    id: "history",
-    version: VERSION,
-    guide: {
-      summary: "Return user claims chronologically for preferences, constraints, and updates.",
-      useWhen: ["The requested answer depends on user history or the latest stated state."],
-      avoidWhen: ["Chronology and source role do not matter."],
+      summary: "Primitive query retriever ordered by source time.",
+      useWhen: ["A plan will compare earlier, later, latest, or previous source records."],
+      avoidWhen: ["Relevance rank alone should determine candidate order."],
       cost: "medium",
     },
     async execute(context, input) {
-      const request = makeSearchRequest(
-        { ...input, limit: Math.max(40, input.limit) },
-        { roles: ["user"], order: "chronological" },
-      );
+      const request = makeSearchRequest(input, "chronological");
       return {
         request,
         hits: await store.search(context.scopeId, request, context.signal),
@@ -191,60 +107,64 @@ function historyOperator(store: SearchOperatorStore): SearchOperator {
   };
 }
 
-function evidenceOperator(
+function evidenceIndexOperator(
   store: SearchOperatorStore,
   operator: "temporal" | "numeric",
 ): SearchOperator {
   const temporal = operator === "temporal";
   return {
-    id: operator,
+    id: temporal ? "temporal-index" : "numeric-index",
     version: VERSION,
     guide: temporal
       ? {
-          summary: "Find and organize date facts, intervals, and time windows.",
-          useWhen: ["The answer depends on event dates, relative time, or temporal order."],
-          avoidWhen: ["No temporal relation needs reconstruction."],
-          cost: "high",
+          summary: "Primitive date-index retriever; compose with annotate(temporal) for a timeline.",
+          useWhen: ["Date mentions, source timestamps, or a relative-date window should generate candidates."],
+          avoidWhen: ["No temporal field is evidence-bearing."],
+          cost: "medium",
         }
       : {
-          summary: "Find explicit quantities and organize changing numeric states.",
-          useWhen: ["The answer depends on quantities, totals, targets, or numeric updates."],
-          avoidWhen: ["Numbers are incidental rather than evidence-bearing."],
-          cost: "high",
+          summary: "Primitive numeric-fact index retriever; compose with annotate(numeric) for typed values.",
+          useWhen: ["Amounts, counts, thresholds, totals, or changing numeric states should generate candidates."],
+          avoidWhen: ["Numbers are incidental."],
+          cost: "medium",
         },
     async execute(context, input) {
       const request = makeSearchRequest(input);
-      const primaryHits = await store.search(
-        context.scopeId,
-        request,
-        context.signal,
-      );
       const maxCandidates = temporal ? 60 : 80;
+      const question = context.question ?? request.queries.join(" ");
+      const temporalPlan = temporal
+        ? resolveTemporalQuestion(question, context.questionDate)
+        : undefined;
+      const auxiliaryRequest = temporalPlan === undefined
+        ? undefined
+        : temporalAuxiliaryRequest(request, temporalPlan);
+      const [primaryHits, auxiliaryHits] = await Promise.all([
+        store.search(context.scopeId, request, context.signal),
+        auxiliaryRequest === undefined
+          ? Promise.resolve([])
+          : store.search(context.scopeId, auxiliaryRequest, context.signal),
+      ]);
+      const seedHits = mergeHits(primaryHits, auxiliaryHits, maxCandidates);
       const expansionContext: EvidenceOperatorSearchContext = {
         operator,
         maxCandidates,
+        ...(temporalPlan === undefined || temporalPlan.targets.length === 0
+          ? {}
+          : { targetDates: temporalPlan.targets.map((target) => target.date) }),
       };
-      const databaseHits = store.expandEvidenceOperator === undefined
+      const indexedHits = store.expandEvidenceOperator === undefined
         ? []
         : await store.expandEvidenceOperator(
             context.scopeId,
             request,
             expansionContext,
-            primaryHits,
+            seedHits,
           );
-      const hits = databaseHits.length === 0
-        ? primaryHits
-        : mergeOperatorHits(databaseHits, primaryHits, maxCandidates);
       return {
         request,
-        hits,
-        operatorResult: temporal
-          ? buildTimelineOperatorResult(
-              databaseHits.length === 0 ? primaryHits : databaseHits,
-              request.queries.join(" "),
-              context.questionDate,
-            )
-          : buildAggregateOperatorResult(databaseHits),
+        hits: indexedHits.length === 0
+          ? seedHits
+          : mergeHits(indexedHits, seedHits, maxCandidates),
       };
     },
   };
@@ -256,9 +176,8 @@ export function builtInSearchOperators(
   return [
     hybridOperator(store),
     lexicalOperator(store),
-    coverageOperator(store),
-    evidenceOperator(store, "temporal"),
-    evidenceOperator(store, "numeric"),
-    historyOperator(store),
+    chronologicalOperator(store),
+    evidenceIndexOperator(store, "temporal"),
+    evidenceIndexOperator(store, "numeric"),
   ];
 }

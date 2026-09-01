@@ -70,6 +70,16 @@ describe("deterministic ingest and source store", () => {
         limit: 5,
       });
       expect(hits[0]?.record.content).toBe("I adopted a cat named Miso.");
+      const multiQueryHit = store.search("scope-1", {
+        queries: ["cat Miso", "adopted Miso"],
+        limit: 5,
+      }).find((hit) =>
+        hit.record.memoryId === "m-000000000000000000000001"
+      );
+      expect(multiQueryHit?.matchedQueries).toEqual([
+        "cat Miso",
+        "adopted Miso",
+      ]);
       const assistantHits = store.search("scope-1", {
         queries: ["Miso"],
         roles: ["assistant"],
@@ -154,6 +164,60 @@ describe("deterministic ingest and source store", () => {
     }
   });
 
+  it("uses informative anchors instead of matching query stopwords", async () => {
+    const { store } = await temporaryStore();
+    const input: MemorySessionInput[] = [
+      {
+        scopeId: "scope-1",
+        sessionId: "session-unrelated",
+        turns: [{
+          id: "m-200000000000000000000001",
+          role: "user",
+          content: "An unrelated gardening note.",
+        }],
+      },
+      {
+        scopeId: "scope-1",
+        sessionId: "session-shirt",
+        turns: [{
+          id: "m-200000000000000000000002",
+          role: "user",
+          content: "I bought a simple white shirt.",
+        }],
+      },
+      {
+        scopeId: "scope-1",
+        sessionId: "session-headphones",
+        turns: [{
+          id: "m-200000000000000000000003",
+          role: "user",
+          content: "I recently got a new pair of Sony headphones. The headphones cost $378.",
+        }],
+      },
+    ];
+    try {
+      await ingestMemorySessions(store, input);
+
+      const purchase = store.search("scope-1", {
+        queries: ["I bought an iPad"],
+        limit: 5,
+      });
+      const exactProduct = store.search("scope-1", {
+        queries: ["new pair Sony headphones"],
+        limit: 5,
+      });
+
+      expect(purchase.map((item) => item.record.memoryId)).toEqual([
+        "m-200000000000000000000002",
+      ]);
+      expect(exactProduct[0]?.record.memoryId).toBe(
+        "m-200000000000000000000003",
+      );
+    } finally {
+      store.close();
+    }
+  });
+
   it("expands timeline and aggregate evidence from versioned database facts", async () => {
     const { store } = await temporaryStore();
     const input: MemorySessionInput[] = [
@@ -219,6 +283,24 @@ describe("deterministic ingest and source store", () => {
       );
       expect(timeline[0]?.retriever).toBe("pimem-timeline-db");
       expect(timeline[0]?.record.memoryId).toBe("m-100000000000000000000001");
+      const targetDateTimeline = store.expandEvidenceOperator(
+        "scope-1",
+        { queries: ["unknown source wording"], limit: 1 },
+        {
+          operator: "temporal",
+          maxCandidates: 20,
+          targetDates: ["2024-01-10"],
+        },
+        [],
+      );
+      expect(targetDateTimeline[0]).toMatchObject({
+        record: { memoryId: "m-100000000000000000000001" },
+        query: "database timeline dates 2024-01-10",
+        matchedQueries: ["unknown source wording"],
+        operatorTemporalFacts: [expect.objectContaining({
+          resolvedDate: "2024-01-10",
+        })],
+      });
 
       const aggregate = store.expandEvidenceOperator(
         "scope-1",
@@ -240,6 +322,16 @@ describe("deterministic ingest and source store", () => {
       );
       expect(aggregate.every((hit) => hit.retriever === "pimem-aggregate-db"))
         .toBe(true);
+      expect(aggregate.every((hit) =>
+        (hit.operatorSourceSpans?.length ?? 0) > 0 &&
+        hit.operatorSourceSpans!.every((span) =>
+          hit.record.content.slice(span.start, span.end).length > 0
+        )
+      )).toBe(true);
+      expect(aggregate.every((hit) =>
+        hit.query === "database numeric facts for market sales" &&
+        JSON.stringify(hit.matchedQueries) === JSON.stringify(["market sales"])
+      )).toBe(true);
 
       const firstStatus = store.ensureEvidenceFactIndex("scope-1");
       const secondStatus = store.ensureEvidenceFactIndex("scope-1");

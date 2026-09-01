@@ -188,7 +188,9 @@ async function main(): Promise<void> {
   const selectedOperators = parsed.flags.get("operator") ?? [
     "hybrid",
     "lexical",
-    "coverage",
+    "chronological",
+    "temporal-index",
+    "numeric-index",
   ];
   const rawStore = await MemoryStore.create(paths.database);
   try {

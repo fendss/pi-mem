@@ -1,4 +1,5 @@
 import type { MemoryRecord, MemoryRole } from "../../memory/index.js";
+import type { MemoryPassage } from "./passage.js";
 
 export type SearchOrder =
   | "relevance"
@@ -8,6 +9,7 @@ export type SearchOrder =
 export interface EvidenceOperatorSearchContext {
   operator: "temporal" | "numeric";
   maxCandidates: number;
+  targetDates?: string[];
 }
 
 export type NumericValueKind =
@@ -65,9 +67,28 @@ export interface SearchRequest {
   maxPerSession?: number;
 }
 
+/** Metadata constraint copied verbatim from one Agent-authored query path. */
+export interface RetrievalMetadataFilter {
+  source: "agent-query";
+  query: string;
+  expression: string;
+  after: string;
+  before: string;
+}
+
 export interface RetrievalHit {
   record: MemoryRecord;
+  /** Exact passage selected from the immutable parent record for Agent review. */
+  passage?: MemoryPassage;
   query: string;
+  /**
+   * Query paths that admitted this hit into a multi-query result. Primitive
+   * stores may omit this when they only expose the winning query; consumers
+   * must then treat `query` as the single known path rather than infer more.
+   */
+  matchedQueries?: string[];
+  /** Physical metadata routes that also admitted this hit. */
+  matchedMetadataFilters?: RetrievalMetadataFilter[];
   retriever:
     | "fts5"
     | "pimem-hybrid"
@@ -76,7 +97,51 @@ export interface RetrievalHit {
   rank: number;
   score: number;
   preview: string;
+  /** Exact immutable-source spans surfaced by structured index primitives. */
+  operatorSourceSpans?: Array<{ start: number; end: number }>;
   operatorNumericFactIndexes?: number[];
+  operatorTemporalFacts?: Array<{
+    expression: string;
+    resolvedDate: string;
+    basis: string;
+  }>;
+}
+
+export type SearchFrontierStatus =
+  | "new-sessions"
+  | "known-session-depth"
+  | "no-new-candidates";
+
+export interface SearchQueryCoverageProgress {
+  query: string;
+  repeated: boolean;
+  returnedCandidateCount: number;
+  returnedSessionCount: number;
+  newCandidateCount: number;
+  newSessionCount: number;
+}
+
+/**
+ * Honest, run-local search progress. This describes only what the current
+ * bounded query window returned relative to earlier navigation results. It is
+ * deliberately not a recall estimate and never claims corpus completeness.
+ */
+export interface SearchCoverageProgress {
+  call: number;
+  status: SearchFrontierStatus;
+  requestedLimit: number;
+  reachedRequestedLimit: boolean;
+  returnedCandidateCount: number;
+  returnedSessionCount: number;
+  newCandidateCount: number;
+  repeatedCandidateCount: number;
+  newSessionCount: number;
+  repeatedSessionCount: number;
+  newQueryCount: number;
+  repeatedQueryCount: number;
+  consecutiveNoNewCandidateCalls: number;
+  consecutiveNoNewSessionCalls: number;
+  queries: SearchQueryCoverageProgress[];
 }
 
 export type RetrievalProfile = "fts5" | "pimem-hybrid";

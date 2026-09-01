@@ -1,8 +1,16 @@
 import type { CreatePiMemToolsOptions, PiMemTools, ReadToolDetails } from "./contracts.js";
-import { normalizeHarnessRefs } from "./candidate-refs.js";
-import { renderMemories } from "./render-tool-result.js";
-import { projectMemoryEvidenceBatch } from "../../../model/memory-evidence.js";
+import { uniqueCandidateRefs } from "./candidate-refs.js";
+import { renderInspectedEvidence } from "./render-tool-result.js";
+import {
+  MAX_READ_RESULT_CHARS,
+  projectMemoryEvidenceBatch,
+  projectPassageEvidence,
+  type MemoryEvidence,
+} from "../../../model/memory-evidence.js";
 import { ReadParameters } from "./schemas.js";
+import { candidateToolDetails } from "./candidate-details.js";
+
+const DEFAULT_LOCAL_CONTEXT_TURNS = 1;
 
 export function createReadTool(
   options: CreatePiMemToolsOptions,
@@ -11,19 +19,25 @@ export function createReadTool(
     name: "read",
     label: "Read memory",
     description:
-      "Read selected immutable source memories using candidate numbers. Use bounded contextBefore/contextAfter when adjacent source context is needed, then reuse candidate numbers in finish.",
+      "Read selected immutable sources into the final exact-source package using candidate handles such as C1. " +
+      "The exact payload is retained privately under short E handles and every " +
+      "source returned by read is automatically committed when finish succeeds. " +
+      "One same-session turn on each side is included by default.",
     parameters: ReadParameters,
     async execute(_toolCallId, params) {
-      const candidateRefs = normalizeHarnessRefs(params.candidateRefs);
+      if (params.workingMemory !== undefined) {
+        options.observation?.recordWorkingMemory(params.workingMemory);
+      }
+      const candidateRefs = uniqueCandidateRefs(params.candidateRefs);
       if (options.ledger.candidates.length === 0) {
         return {
-          content: [{ type: "text", text: "No candidates exist. Call search again; do not guess a candidate number." }],
+          content: [{ type: "text", text: "No candidates exist. Call search again; do not guess a candidate handle." }],
           details: {
             kind: "read",
             requestedCandidateRefs: candidateRefs,
             requestedMemoryIds: [],
-            contextBefore: params.contextBefore ?? 0,
-            contextAfter: params.contextAfter ?? 0,
+            contextBefore: params.contextBefore ?? DEFAULT_LOCAL_CONTEXT_TURNS,
+            contextAfter: params.contextAfter ?? DEFAULT_LOCAL_CONTEXT_TURNS,
             evidence: [],
             evidenceReferences: [],
             expandedMemoryIds: [],
@@ -31,36 +45,96 @@ export function createReadTool(
           },
         };
       }
-      const memoryIds = options.ledger.resolveCandidateRefs(candidateRefs);
-      const contextBefore = params.contextBefore ?? 0;
-      const contextAfter = params.contextAfter ?? 0;
+      const selectedCandidates = options.ledger.resolveCandidates(candidateRefs);
+      const memoryIds = [...new Set(
+        selectedCandidates.map((candidate) => candidate.memoryId),
+      )];
+      const contextBefore = params.contextBefore ?? DEFAULT_LOCAL_CONTEXT_TURNS;
+      const contextAfter = params.contextAfter ?? DEFAULT_LOCAL_CONTEXT_TURNS;
       const memories = options.store.read(
         options.scopeId,
         memoryIds,
         contextBefore,
         contextAfter,
       );
-      const projected = projectMemoryEvidenceBatch(memories, (memory) => {
-        const candidate = options.ledger.selectCandidates([memory.memoryId])[0];
+      const memoriesById = new Map(
+        memories.map((memory) => [memory.memoryId, memory]),
+      );
+      const exactPassages: Array<{
+        evidence: MemoryEvidence;
+        candidateId: string;
+      }> = selectedCandidates.flatMap((candidate) => {
+        if (candidate.passage === undefined) return [];
+        const memory = memoriesById.get(candidate.memoryId);
+        if (memory === undefined) {
+          throw new Error(`Read did not return parent memory ${candidate.memoryId}`);
+        }
+        return [{
+          evidence: projectPassageEvidence(memory, candidate.passage),
+          candidateId: candidate.candidateId,
+        }];
+      });
+      const passageParentIds = new Set(
+        exactPassages.map((item) => item.evidence.memoryId),
+      );
+      const boundedRecords = memories.filter((memory) =>
+        !passageParentIds.has(memory.memoryId)
+      );
+      const boundedEvidence = projectMemoryEvidenceBatch(boundedRecords, (memory) => {
+        const candidates = options.ledger.selectMemoryCandidates([memory.memoryId]);
         return [
           ...(options.question === undefined ? [] : [options.question]),
           ...(options.evidenceFocus?.() ?? []),
-          ...(candidate?.discoveries.flatMap((discovery) =>
+          ...candidates.flatMap((candidate) =>
+            candidate.discoveries.flatMap((discovery) =>
             discovery.query === undefined ? [] : [discovery.query]
-          ) ?? []),
+          )),
         ];
       });
-      const recorded = options.ledger.recordRead(projected);
+      const projected = [
+        ...exactPassages.map((item) => item.evidence),
+        ...boundedEvidence,
+      ];
+      const renderedChars = projected.reduce(
+        (sum, evidence) => sum + evidence.content.length,
+        0,
+      );
+      if (renderedChars > MAX_READ_RESULT_CHARS) {
+        throw new Error(
+          `Read result would exceed ${String(MAX_READ_RESULT_CHARS)} characters. ` +
+            "Read fewer candidate passages or request less neighboring context.",
+        );
+      }
+      const inspectedCandidateIds = selectedCandidates.map(
+        (candidate) => candidate.candidateId,
+      );
+      const recorded = options.ledger.recordInspect(
+        projected,
+        undefined,
+        inspectedCandidateIds,
+      );
       const requested = new Set(memoryIds);
       const expandedMemoryIds = recorded
         .map((memory) => memory.memoryId)
         .filter((memoryId) => !requested.has(memoryId));
-      const candidates = options.ledger.selectCandidates(
-        recorded.map((memory) => memory.memoryId),
-      );
-      const evidenceReferences = recorded.map((memory) => ({
+      const candidates = options.ledger.selectCandidates([
+        ...inspectedCandidateIds,
+        ...expandedMemoryIds,
+      ]);
+      const renderedCandidateIds = [
+        ...exactPassages.map((item) => item.candidateId),
+        ...boundedEvidence.map((memory) =>
+          selectedCandidates.find((candidate) =>
+            candidate.memoryId === memory.memoryId &&
+            candidate.passage === undefined
+          )?.candidateId ?? memory.memoryId
+        ),
+      ];
+      const evidenceReferences = recorded.map((memory, index) => ({
         evidenceRef: options.ledger.evidenceRef(memory.memoryId)!,
-        candidateRef: options.ledger.candidateRef(memory.memoryId)!,
+        candidateRef: options.ledger.candidateRef(
+          renderedCandidateIds[index] ?? memory.memoryId,
+        )!,
         memoryId: memory.memoryId,
       }));
       const details: ReadToolDetails = {
@@ -85,12 +159,27 @@ export function createReadTool(
         })),
         evidenceReferences,
         expandedMemoryIds,
-        candidates,
+        candidates: candidateToolDetails(candidates),
       };
       return {
         content: [{
           type: "text",
-          text: renderMemories(recorded, options.ledger, options.questionDate),
+          text: [
+            "<READ_RESULT>",
+            "Inspected exact evidence (visible for this reasoning turn and " +
+              "retained privately in the evidence ledger; it will enter the final source package):",
+            renderInspectedEvidence(
+              recorded,
+              options.ledger,
+              options.questionDate,
+              renderedCandidateIds,
+            ),
+            "Every exact source shown above will be committed when finish succeeds.",
+            "</READ_RESULT>",
+            ...(options.observation === undefined
+              ? []
+              : ["", options.observation.render()]),
+          ].join("\n"),
         }],
         details,
       };

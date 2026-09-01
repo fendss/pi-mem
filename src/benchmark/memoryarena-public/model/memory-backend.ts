@@ -1,4 +1,12 @@
-import type { ModelUsage } from "../../../evidence-agent/index.js";
+import type {
+  MemoryEvidence,
+  ModelMetadata,
+  ModelUsage,
+  OperatorEvolutionObservation,
+  OperatorEvolutionSnapshot,
+  PiMemProviderFailureKind,
+} from "../../../evidence-agent/index.js";
+import type { SearchOperatorDefinitionSnapshot } from "../../../retrieval/index.js";
 
 export const MEMORYARENA_PUBLIC_BENCHMARK = "MemoryArena Public";
 export const MEMORYARENA_PUBLIC_MEMORY_SYSTEM = "pimem";
@@ -21,10 +29,39 @@ export interface MemoryArenaInitializeInput {
 
 export interface MemoryArenaAddInput extends MemoryArenaInitializeInput {
   chunk: string;
+  messages?: MemoryArenaAppendMessage[];
+}
+
+export interface MemoryArenaAppendMessage {
+  role: "user" | "assistant" | "system" | "other";
+  content: string;
+  timestamp?: string;
 }
 
 export interface MemoryArenaWrapInput extends MemoryArenaInitializeInput {
   question: string;
+  answerHandoff?: "evidence-aware-v1";
+  operatorExperiment?: MemoryArenaOperatorExperimentInput;
+}
+
+export type MemoryArenaOperatorMode = "static" | "ephemeral" | "cumulative";
+
+export interface MemoryArenaOperatorExperimentInput {
+  mode: MemoryArenaOperatorMode;
+  questionId: string;
+  maxSearchCalls: number;
+  evolutionSnapshot?: OperatorEvolutionSnapshot;
+}
+
+export interface MemoryArenaOperatorExperimentResult {
+  mode: MemoryArenaOperatorMode;
+  questionId: string;
+  maxSearchCalls: number;
+  retrievalStatus: "sufficient" | "insufficient";
+  searchCalls: number;
+  operatorDefinitions: SearchOperatorDefinitionSnapshot[];
+  observation?: OperatorEvolutionObservation;
+  evolutionSnapshot?: OperatorEvolutionSnapshot;
 }
 
 export interface MemoryArenaInitializeResult {
@@ -41,6 +78,8 @@ export interface MemoryArenaAddResult {
 export interface MemoryArenaWrapResult {
   userId: string;
   prompt: string;
+  retrievalModel?: ModelMetadata;
+  operatorExperiment?: MemoryArenaOperatorExperimentResult;
 }
 
 export interface MemoryArenaCitation {
@@ -53,14 +92,21 @@ export interface MemoryArenaInventoryItem {
   memoryIds: string[];
 }
 
+/** Exact, ledger-committed excerpts bound to one immutable parent memory. */
+export type MemoryArenaCommittedEvidence = MemoryEvidence;
+
 export interface MemoryArenaRetrievalResult {
   runId: string;
   status: "sufficient" | "insufficient";
   citations: MemoryArenaCitation[];
   inventory?: MemoryArenaInventoryItem[];
+  evidenceSummary: string;
+  evidence: MemoryArenaCommittedEvidence[];
   trace: readonly unknown[];
   usage: ModelUsage;
+  retrievalModel?: ModelMetadata;
   audit?: Record<string, unknown>;
+  operatorExperiment?: MemoryArenaOperatorExperimentResult;
 }
 
 export interface MemoryArenaOriginalChunk {
@@ -78,6 +124,7 @@ export interface MemoryArenaWrapAuditRecord {
   prompt: string;
   selectedMemoryIds: string[];
   retrieval?: MemoryArenaRetrievalResult;
+  operatorExperiment?: MemoryArenaOperatorExperimentResult;
 }
 
 export type MemoryArenaOperation =
@@ -126,6 +173,8 @@ export interface MemoryArenaOperationFailedRetrieval {
   candidateCount: number;
   evidenceCount: number;
   trace: MemoryArenaOperationTraceSummary;
+  providerFailureKind?: PiMemProviderFailureKind;
+  providerResponseModel?: string;
   usage: ModelUsage;
 }
 
@@ -157,9 +206,14 @@ export type MemoryArenaErrorCode =
   | "generation_conflict"
   | "append_pending"
   | "source_integrity_error"
+  | "retrieval_agent_protocol_error"
+  | "retrieval_agent_budget_exhausted"
+  | "retrieval_agent_timeout"
+  | "retrieval_agent_failed"
   | "upstream_unauthorized"
   | "upstream_forbidden"
   | "upstream_unavailable"
+  | "upstream_failure"
   | "state_unavailable"
   | "artifact_unavailable";
 

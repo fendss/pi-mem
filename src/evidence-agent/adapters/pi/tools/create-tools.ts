@@ -3,7 +3,8 @@ import type { CreatePiMemToolsOptions, PiMemTools } from "./contracts.js";
 import { createFinishTool } from "./finish-tool.js";
 import { createDefineOperatorTool } from "./define-operator-tool.js";
 import { createReadTool } from "./read-tool.js";
-import { createSearchTool } from "./search-tool.js";
+import { createSearchTools } from "./search-tool.js";
+import { createMemoryObservation } from "../memory-observation.js";
 
 export function createPiMemTools(
   options: CreatePiMemToolsOptions,
@@ -13,26 +14,38 @@ export function createPiMemTools(
       `Tool scope ${options.scopeId} does not match ledger scope ${options.ledger.scopeId}`,
     );
   }
-  const search = createSearchTool(options);
+  const observation = options.observation ?? createMemoryObservation({
+    ledger: options.ledger,
+    ...(options.question === undefined ? {} : { question: options.question }),
+    ...(options.questionDate === undefined
+      ? {}
+      : { questionDate: options.questionDate }),
+    ...(options.maxSearchCalls === undefined
+      ? {}
+      : { maxSearchCalls: options.maxSearchCalls }),
+  });
+  const sharedOptions = { ...options, observation };
+  const { search, searchMore } = createSearchTools(sharedOptions);
   const defineOperator =
     options.operatorDefinitions === undefined ||
     options.operatorDefinitions.remainingDefinitions() === 0
     ? undefined
     : createDefineOperatorTool({
-        ...options,
+        ...sharedOptions,
         operatorDefinitions: options.operatorDefinitions,
       });
-  const read = createReadTool(options);
+  const read = createReadTool(sharedOptions);
   const bashRo =
     options.bashRo === undefined
       ? undefined
       : createBashRoTool({
-          ...options,
+          ...sharedOptions,
           bashRo: options.bashRo,
         });
-  const finish = createFinishTool(options);
+  const finish = createFinishTool(sharedOptions);
   const all = [
     search,
+    searchMore,
     ...(defineOperator === undefined ? [] : [defineOperator]),
     read,
     ...(bashRo === undefined ? [] : [bashRo]),
@@ -40,6 +53,7 @@ export function createPiMemTools(
   ];
   return {
     search,
+    searchMore,
     ...(defineOperator === undefined ? {} : { defineOperator }),
     read,
     ...(bashRo === undefined ? {} : { bashRo }),

@@ -6,9 +6,10 @@ import {
 } from "../../../retrieval/index.js";
 import { sha256 } from "../../../util.js";
 
-export type PiMemSkill = "none" | "pimem-v0";
+export type PiMemSkill = "none" | "pimem-minimal" | "pimem-v0";
 
-export const PIMEM_SKILL_VERSION = "pimem-v0-runtime-operators-1";
+export const PIMEM_SKILL_VERSION = "pimem-v0-auto-read-commit-9";
+export const PIMEM_MINIMAL_SKILL_VERSION = "pimem-minimal-auto-read-commit-5";
 
 const DEFAULT_SKILL_PATH = fileURLToPath(
   new URL("../../../../.agents/skills/pimem-retrieval/SKILL.md", import.meta.url),
@@ -17,42 +18,53 @@ const DEFAULT_SKILL_PATH = fileURLToPath(
 export const PIMEM_SKILL_TEXT = readFileSync(DEFAULT_SKILL_PATH, "utf8");
 export const PIMEM_SKILL_HASH = sha256(PIMEM_SKILL_TEXT);
 
-export const PI_MEM_BASE_SYSTEM_PROMPT = `You are PiMem: a memory retrieval and evidence-selection agent.
+const MINIMAL_SKILL_PATH = fileURLToPath(
+  new URL(
+    "../../../../.agents/skills/pimem-retrieval-minimal/SKILL.md",
+    import.meta.url,
+  ),
+);
 
-Your only task is to locate immutable source memories relevant to the caller's question and return a compact cited evidence package. Do not generate or format the caller's final response. Different callers apply different response protocols after retrieval.
+export const PIMEM_MINIMAL_SKILL_TEXT = readFileSync(
+  MINIMAL_SKILL_PATH,
+  "utf8",
+);
+export const PIMEM_MINIMAL_SKILL_HASH = sha256(PIMEM_MINIMAL_SKILL_TEXT);
 
-Evidence policy:
-- Match question typos to the exact intended entity while treating merely similar entities as distractors.
-- Select direct source observations for every required subclaim.
-- Preserve exact names, titles, places, labels, values, source roles, and timestamps in the evidence summary.
-- Reconstruct temporal or update chains when the requested slot depends on order.
-- If a required entity or component remains unsupported after focused searches, mark the package insufficient rather than guessing or substituting zero.
+export const PI_MEM_TOOL_SYSTEM_PROMPT = `You are PiMem: a memory retrieval agent.
 
-Tool policy:
-- search previews are ephemeral navigation. They remain in the audit trace but expire from active model context after one turn.
-- read only selected evidence. Oversized memories are exposed as bounded exact
-  excerpts tied to the immutable source hash. Every cited memory must be read.
-- old read text is compacted after one reasoning turn; re-read a candidate when
-  exact wording is needed again.
-- bash_ro is a focused last resort for exact matching, not a mandatory full-scope scan. Its output is navigation and also expires.
-- Call finish alone with status, concise evidenceSummary, and citations. Count and inventory are optional evidence metadata.
-`;
+Your task is to locate source memories that may help a downstream model answer the caller's question. Do not answer or format the caller's final response.
 
-function activeSkillPrompt(): string {
-  return `<active_skill name="pimem-retrieval" version="${PIMEM_SKILL_VERSION}">\n${PIMEM_SKILL_TEXT}\n</active_skill>`;
+Tool contract:
+- search returns navigation candidates; queries alone use the default retriever, while optional branches, role filters, ordering, and session diversity form one inline retrieval program. Previews are not source evidence.
+- search_more reveals another bounded page from the most recent search without changing its operator or queries.
+- read takes candidate handles and adds bounded exact source evidence to the final source package under short E handles. Read only sources that may be useful downstream. If retrieval continues, preserve useful facts with their E handles in workingMemory because raw read payloads are shown for one reasoning turn.
+- finish reports status and a compact retrieval note. The harness automatically commits every exact source returned by read and generates citations, hashes, provenance, and answer-package formatting. Observe prior tool results, then call finish as the only tool call in that assistant turn.
+- The harness owns source identity, provenance, package limits, and formatting.`;
+
+/** Backward-compatible name for the shared mechanics-only system prompt. */
+export const PI_MEM_BASE_SYSTEM_PROMPT = PI_MEM_TOOL_SYSTEM_PROMPT;
+
+function activeSkillPrompt(skill: Exclude<PiMemSkill, "none">): string {
+  const minimal = skill === "pimem-minimal";
+  const name = minimal ? "pimem-retrieval-minimal" : "pimem-retrieval";
+  const version = minimal ? PIMEM_MINIMAL_SKILL_VERSION : PIMEM_SKILL_VERSION;
+  const text = minimal ? PIMEM_MINIMAL_SKILL_TEXT : PIMEM_SKILL_TEXT;
+  return `<active_skill name="${name}" version="${version}">\n${text}\n</active_skill>`;
 }
 
 export function piMemSystemPrompt(
   skill: PiMemSkill = "pimem-v0",
-  basePrompt: string = PI_MEM_BASE_SYSTEM_PROMPT,
+  basePrompt?: string,
   operatorCatalog: readonly SearchOperatorCatalogEntry[] = [],
 ): string {
+  const resolvedBasePrompt = basePrompt ?? PI_MEM_TOOL_SYSTEM_PROMPT;
   const catalogPrompt = operatorCatalog.length === 0
     ? ""
     : `<search_operator_catalog>\n${renderSearchOperatorCatalog(operatorCatalog)}\n</search_operator_catalog>`;
   return [
-    basePrompt,
+    resolvedBasePrompt,
     catalogPrompt,
-    ...(skill === "none" ? [] : [activeSkillPrompt()]),
+    ...(skill === "none" ? [] : [activeSkillPrompt(skill)]),
   ].filter(Boolean).join("\n\n");
 }

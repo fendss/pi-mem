@@ -17,9 +17,27 @@ describe("benchmark answer boundary", () => {
     ).toBe(true);
   });
 
+  it("accepts a canonical dated response for an explicit routing alias", () => {
+    expect(
+      returnedModelMatches(
+        "gpt-5-mini-medium",
+        "gpt-5-mini-2025-08-07",
+      ),
+    ).toBe(true);
+    expect(
+      returnedModelMatches(
+        "gpt-5-mini-medium",
+        "gpt-5-2025-08-07",
+      ),
+    ).toBe(false);
+  });
+
   it("rejects provider model substitution", () => {
     expect(
       returnedModelMatches("gpt-4o-mini", "gpt-4.1-mini-2025-04-14"),
+    ).toBe(false);
+    expect(
+      returnedModelMatches("gpt-5.4", "gpt-5.4-mini"),
     ).toBe(false);
   });
 

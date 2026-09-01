@@ -69,6 +69,11 @@ function openAiCompletionsAdapter(): PiModelRuntimeAdapter {
   return {
     id: "openai-completions",
     defaultTransport: "sse",
+    requestPolicy: {
+      timeoutMs: 90_000,
+      maxRetries: 1,
+      maxRetryDelayMs: 5_000,
+    },
     createModel(input) {
       return {
         id: input.modelId,
@@ -90,6 +95,11 @@ function openAiReasoningCompletionsAdapter(): PiModelRuntimeAdapter {
   return {
     id: "openai-reasoning-completions",
     defaultTransport: "non-stream",
+    requestPolicy: {
+      timeoutMs: 120_000,
+      maxRetries: 1,
+      maxRetryDelayMs: 5_000,
+    },
     createModel(input) {
       return {
         id: input.modelId,

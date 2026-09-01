@@ -73,4 +73,21 @@ describe("bounded memory evidence", () => {
     expect(renderedChars).toBeLessThan(72 * 1024);
     expect(evidence.every((item) => item.truncated)).toBe(true);
   });
+
+  it("keeps exact excerpts within the batch budget beyond 256 memories", () => {
+    const records = Array.from({ length: 300 }, (_, index) =>
+      record(
+        `${"head ".repeat(2_000)}target-${String(index)}`,
+        `m-wide-${String(index)}`,
+      )
+    );
+    const evidence = projectMemoryEvidenceBatch(records, () => ["target"]);
+    const exactChars = evidence.flatMap((item) => item.excerpts)
+      .reduce((sum, excerpt) => sum + excerpt.content.length, 0);
+
+    expect(evidence).toHaveLength(records.length);
+    expect(exactChars).toBeLessThanOrEqual(MAX_READ_RESULT_CHARS);
+    expect(evidence.every((item) => item.truncated)).toBe(true);
+    expect(evidence.every((item) => item.content.includes("target-"))).toBe(true);
+  });
 });

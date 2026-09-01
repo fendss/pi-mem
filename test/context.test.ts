@@ -18,10 +18,10 @@ function toolResult(
 }
 
 describe("ephemeral memory context", () => {
-  it("shows the current navigation batch once and expires older search output", async () => {
+  it("keeps every result in the current tool batch once", async () => {
     const context = createEphemeralMemoryContext();
     const oldSearch = toolResult("search-1", "search", "large noisy preview");
-    const selectedRead = toolResult("read-1", "read", "selected exact evidence");
+    const selectedInspect = toolResult("read-1", "read", "selected exact evidence");
     const currentSearch = toolResult("search-2", "search", "current preview");
     const messages = [
       oldSearch,
@@ -30,15 +30,15 @@ describe("ephemeral memory context", () => {
         content: "continue",
         timestamp: 2,
       } satisfies AgentMessage,
-      selectedRead,
+      selectedInspect,
       currentSearch,
     ];
 
     const transformed = await context.transformContext(messages);
 
     expect(transformed[0]).not.toBe(oldSearch);
-    expect(JSON.stringify(transformed[0])).toMatch(/expired from active/u);
-    expect(transformed[2]).toBe(selectedRead);
+    expect(JSON.stringify(transformed[0])).toMatch(/search payload expired/u);
+    expect(transformed[2]).toBe(selectedInspect);
     expect(transformed[3]).toBe(currentSearch);
     expect(JSON.stringify(oldSearch)).toContain("large noisy preview");
     expect(context.snapshot()).toEqual({
@@ -77,18 +77,43 @@ describe("ephemeral memory context", () => {
     });
   });
 
-  it("keeps read evidence for one reasoning turn then compacts its text", async () => {
+  it("compacts an inspect after the model-facing turn has advanced", async () => {
     const context = createEphemeralMemoryContext();
-    const oldRead = toolResult("read-1", "read", "bounded exact evidence");
+    const oldInspect = toolResult("read-1", "read", "bounded exact evidence");
     const messages = [
-      oldRead,
+      oldInspect,
       { role: "user", content: "continue", timestamp: 2 } satisfies AgentMessage,
     ];
 
     const transformed = await context.transformContext(messages);
 
-    expect(JSON.stringify(transformed[0])).toMatch(/compacted after one reasoning turn/u);
+    expect(transformed[0]).not.toBe(oldInspect);
     expect(JSON.stringify(transformed[0])).not.toContain("bounded exact evidence");
+    expect(JSON.stringify(transformed[0])).toContain("final-source ledger");
+    expect(context.snapshot()).toEqual({
+      expiredNavigationResults: 0,
+      compactedReadResults: 1,
+    });
+  });
+
+  it("removes an old inspect payload after the turn while preserving its E receipt", async () => {
+    const context = createEphemeralMemoryContext();
+    const oldInspect = toolResult("read-1", "read", "Philips LED bulb");
+    const latestSearch = toolResult(
+      "search-2",
+      "search",
+      "<MEMORY>\nInspected evidence ledger\n- evidence E1 · inspected from C1\n</MEMORY>",
+    );
+    const messages = [
+      oldInspect,
+      { role: "user", content: "continue", timestamp: 2 } satisfies AgentMessage,
+      latestSearch,
+    ];
+
+    const transformed = await context.transformContext(messages);
+
+    expect(JSON.stringify(transformed[0])).not.toContain("Philips LED bulb");
+    expect(JSON.stringify(transformed[2])).toContain("evidence E1");
     expect(context.snapshot()).toEqual({
       expiredNavigationResults: 0,
       compactedReadResults: 1,
