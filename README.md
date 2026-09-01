@@ -11,7 +11,7 @@ search / read / bash_ro
         ↓
 Pi Agent searches and reads exact evidence
         ↓
-finish({})
+finish({ status, evidenceSummary })
         ↓
 harness-owned evidence package → caller-owned answer adapter
 ```
@@ -30,7 +30,7 @@ runner. Ingest never invokes a generative model.
 - [`docs/architecture/code-catalog.md`](docs/architecture/code-catalog.md) states what every function, class, and class method does.
 - [`deploy/README.md`](deploy/README.md) documents the Dockerized LDBD Add/Search API.
 
-## Version 1.0
+## Current capabilities
 
 - deterministic TypeScript ingest and an immutable SQLite source store;
 - SQLite FTS5 plus optional `text-embedding-v4` dense retrieval, candidate-local BM25, and RRF;
@@ -41,21 +41,24 @@ runner. Ingest never invokes a generative model.
 - networkless, read-only Docker shell over one sanitized scope;
 - Pi Core retrieval-agent loop where `read` retains exact evidence and the
   harness owns citation, provenance, deduplication, and package formatting;
-- zero-argument `finish` with an optional `sufficient` / `insufficient`
-  coverage signal;
+- `finish` with an explicit `sufficient` / `insufficient` coverage signal and
+  concise synthesis; the harness automatically commits every exact source
+  returned by `read`;
 - benchmark integrations for LongMemEval-S, AMA-Bench v4, and the official
   τ-Knowledge interactive environment;
 - automatic candidate, evidence, citation and tool-trace export;
 - trusted LongMemEval-S adapter with memory/private/gold separation.
 
-The runtime enforces:
+The runtime enforces that the final cited package is the deduplicated exact-read
+ledger:
 
 ```text
-Citations ⊆ Evidence ⊆ Candidates
+Citations = Evidence = Exact reads ⊆ Candidates
 ```
 
 Search previews and shell output are candidates only. A memory must be
-successfully read in the current run before `finish` may cite it.
+successfully read in the current run before the harness can include it at
+`finish`.
 
 ## Leakage boundary
 
@@ -531,5 +534,7 @@ pattern.
 npm run typecheck
 npm test
 npm run build
-python3 -m unittest scripts/test_longmemeval_frozen_eval.py
+npm run test:python
+# or run the complete release gate:
+npm run check
 ```

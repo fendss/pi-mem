@@ -4,7 +4,7 @@ import type {
   SearchOperatorCatalogIdentity,
   SearchOperatorDefinition,
   SearchOperatorDefinitionSnapshot,
-} from "../model/search-operator.js";
+} from "../model/operator.js";
 import type { SearchOperator } from "./search-operator.js";
 
 /** Read-only operator resolution needed by search execution. */

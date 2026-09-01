@@ -22,7 +22,7 @@ export {
   SearchMoreParameters,
   type SearchParametersSchema,
 } from "./tools/schemas.js";
-export { createSearchTool, createSearchTools } from "./tools/search-tool.js";
+export { createSearchTools } from "./tools/search-tool.js";
 export {
   createFinishOnlyBeforeToolCall,
   createToolProtocolBeforeToolCall,

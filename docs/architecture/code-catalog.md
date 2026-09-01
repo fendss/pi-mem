@@ -20,6 +20,12 @@ _No top-level functions, classes, or class methods._
 | `InteractiveMemoryAgentSession.constructor(private readonly options: InteractiveMemoryAgentOptions)` | Creates a interactive memory agent session instance. | method | public | [line 249](../../src/agent-runtime/interactive-memory-agent.ts#L249) |
 | `InteractiveMemoryAgentSession.toolResultMessages(results: readonly ExternalToolResult[]): ToolResultMessage[]` | Converts ol result messages. | method | private | [line 401](../../src/agent-runtime/interactive-memory-agent.ts#L401) |
 | `InteractiveMemoryAgentSession.turn(input: InteractiveAgentInput): Promise<InteractiveAgentOutput>` | Implements the turn operation. | method | public | [line 427](../../src/agent-runtime/interactive-memory-agent.ts#L427) |
+## `src/benchmark/adapters/pi/answer.ts`
+
+| Symbol | Purpose | Kind | Visibility | Source |
+|---|---|---|---|---|
+| `answerSystemPrompt(prompt: BenchmarkAnswerPrompt, executionChecklist?: string): string` | Runs benchmark-owned answer synthesis after PiMem has finished retrieval. | function | internal | [line 19](../../src/benchmark/adapters/pi/answer.ts#L19) |
+| `runBenchmarkAnswer(options: { modelRuntime: PiModelRuntime; prompt: BenchmarkAnswerPrompt; maxRunMs?: number; executionChecklist?: string; }): Promise<BenchmarkAnswerResult>` | Runs benchmark answer. | function | exported | [line 28](../../src/benchmark/adapters/pi/answer.ts#L28) |
 ## `src/benchmark/amabench/answer-contract.ts`
 
 | Symbol | Purpose | Kind | Visibility | Source |
@@ -68,13 +74,6 @@ _No top-level functions, classes, or class methods._
 | `bucket(results: readonly AmaBenchJudgeResult[]): AmaBenchJudgeBucket` | Implements the bucket operation. | function | internal | [line 214](../../src/benchmark/amabench/judge.ts#L214) |
 | `groupBy(results: readonly AmaBenchJudgeResult[], keyFor: (result: AmaBenchJudgeResult) => K): Partial<Record<K, AmaBenchJudgeBucket>>` | Implements the group by operation. | function | internal | [line 225](../../src/benchmark/amabench/judge.ts#L225) |
 | `aggregateAmaBenchJudgeResults(results: readonly AmaBenchJudgeResult[]): AmaBenchJudgeAggregate` | Implements the aggregate ama bench judge results operation. | function | exported | [line 246](../../src/benchmark/amabench/judge.ts#L246) |
-## `src/benchmark/answer-from-evidence.ts`
-
-| Symbol | Purpose | Kind | Visibility | Source |
-|---|---|---|---|---|
-| `returnedModelMatches(requested: string, returned: string): boolean` | Checks whether the provider's response model matches the requested model. | function | exported | [line 41](../../src/benchmark/answer-from-evidence.ts#L41) |
-| `answerSystemPrompt(prompt: BenchmarkAnswerPrompt, executionChecklist?: string): string` | Runs benchmark-owned answer synthesis after PiMem has finished retrieval. | function | internal | [line 46](../../src/benchmark/answer-from-evidence.ts#L46) |
-| `runBenchmarkAnswer(options: { modelRuntime: PiModelRuntime; prompt: BenchmarkAnswerPrompt; maxRunMs?: number; executionChecklist?: string; }): Promise<BenchmarkAnswerResult>` | Runs benchmark answer. | function | exported | [line 55](../../src/benchmark/answer-from-evidence.ts#L55) |
 ## `src/benchmark/composition/ingest-evidence-benchmark.ts`
 
 | Symbol | Purpose | Kind | Visibility | Source |
@@ -122,12 +121,6 @@ _No top-level functions, classes, or class methods._
 | `numericSessionIndex(key: string): number` | Implements the numeric session index operation. | function | internal | [line 239](../../src/benchmark/longmemeval/dataset-adapter.ts#L239) |
 | `adaptLongMemEvalS(raw: unknown): LongMemEvalAdapterResult` | Trusted benchmark boundary. | function | exported | [line 250](../../src/benchmark/longmemeval/dataset-adapter.ts#L250) |
 | `loadLongMemEvalS(path: string): Promise<LongMemEvalAdapterResult>` | Loads long mem eval s. | function | exported | [line 408](../../src/benchmark/longmemeval/dataset-adapter.ts#L408) |
-## `src/benchmark/longmemeval/private-question-store.ts`
-
-| Symbol | Purpose | Kind | Visibility | Source |
-|---|---|---|---|---|
-| `readPrivateQuestions(path: string): Promise<LongMemEvalPrivateQuestion[]>` | Reads private questions. | function | exported | [line 11](../../src/benchmark/longmemeval/private-question-store.ts#L11) |
-| `mergePrivateQuestions(path: string, incoming: readonly LongMemEvalPrivateQuestion[]): Promise<void>` | Merges private questions. | function | exported | [line 33](../../src/benchmark/longmemeval/private-question-store.ts#L33) |
 ## `src/benchmark/memoryagentbench/answer-contract.ts`
 
 | Symbol | Purpose | Kind | Visibility | Source |
@@ -277,6 +270,11 @@ _No top-level functions, classes, or class methods._
 | `MemoryArenaPublicMemoryBackend.audited(start: MemoryArenaOperationAuditStart, operation: () => Promise<{ result: T; audit: MemoryArenaOperationAuditSuccess; }>): Promise<T>` | Implements the audited operation. | method | private | [line 526](../../src/benchmark/memoryarena-public/use-cases/memory-backend.ts#L526) |
 | `MemoryArenaPublicMemoryBackend.assertSupportedSystem(memorySystemName: string): void` | Validates supported system and throws when invalid. | method | private | [line 579](../../src/benchmark/memoryarena-public/use-cases/memory-backend.ts#L579) |
 | `MemoryArenaPublicMemoryBackend.activeState(input: MemoryArenaInitializeInput): Promise<MemoryArenaGenerationState>` | Implements the active state operation. | method | private | [line 585](../../src/benchmark/memoryarena-public/use-cases/memory-backend.ts#L585) |
+## `src/benchmark/model/answer.ts`
+
+| Symbol | Purpose | Kind | Visibility | Source |
+|---|---|---|---|---|
+| `returnedModelMatches(requested: string, returned: string): boolean` | Checks whether the provider's response model matches the requested model. | function | exported | [line 31](../../src/benchmark/model/answer.ts#L31) |
 ## `src/benchmark/model/benchmark-query.ts`
 
 _No top-level functions, classes, or class methods._
@@ -286,12 +284,6 @@ _No top-level functions, classes, or class methods._
 ## `src/benchmark/model/evidence-benchmark-run.ts`
 
 _No top-level functions, classes, or class methods._
-## `src/benchmark/private-question-store.ts`
-
-| Symbol | Purpose | Kind | Visibility | Source |
-|---|---|---|---|---|
-| `readPrivateBenchmarkQuestions(path: string): Promise<T[]>` | Reads private benchmark questions. | function | exported | [line 14](../../src/benchmark/private-question-store.ts#L14) |
-| `mergePrivateBenchmarkQuestions(path: string, incoming: readonly T[]): Promise<void>` | Atomically merges private benchmark labels by question identity. | function | exported | [line 42](../../src/benchmark/private-question-store.ts#L42) |
 ## `src/benchmark/tau-knowledge/data-paths.ts`
 
 | Symbol | Purpose | Kind | Visibility | Source |
@@ -409,13 +401,13 @@ _No top-level functions, classes, or class methods._
 
 | Symbol | Purpose | Kind | Visibility | Source |
 |---|---|---|---|---|
-| `benchmarkFor(parsed: ParsedCommand): EvidenceBenchmarkId` | Implements the benchmark for operation. | function | internal | [line 49](../../src/entrypoints/cli/commands/ingest-benchmark.ts#L49) |
-| `selectCases(values: readonly T[], requestedIds: ReadonlySet<string>): T[]` | Implements the select cases operation. | function | internal | [line 57](../../src/entrypoints/cli/commands/ingest-benchmark.ts#L57) |
-| `loadAmaSelection(parsed: ParsedCommand, requestedIds: ReadonlySet<string>): Promise<AdaptedSelection>` | Loads ama selection. | function | internal | [line 73](../../src/entrypoints/cli/commands/ingest-benchmark.ts#L73) |
-| `writeDatasetManifest(options: { path: string; identity: DatasetIdentity; dataPaths: EvidenceBenchmarkDataPaths; retrieval: unknown; }): Promise<number>` | Writes dataset manifest. | function | internal | [line 99](../../src/entrypoints/cli/commands/ingest-benchmark.ts#L99) |
-| `assertDatasetIdentity(path: string, identity: DatasetIdentity): Promise<StoredDatasetManifest \| undefined>` | Validates dataset identity and throws when invalid. | function | internal | [line 117](../../src/entrypoints/cli/commands/ingest-benchmark.ts#L117) |
-| `withDataDirectoryLock(databasePath: string, action: () => Promise<T>): Promise<T>` | Implements the with data directory lock operation. | function | internal | [line 132](../../src/entrypoints/cli/commands/ingest-benchmark.ts#L132) |
-| `ingestBenchmark(parsed: ParsedCommand): Promise<void>` | Implements the ingest benchmark operation. | function | exported | [line 154](../../src/entrypoints/cli/commands/ingest-benchmark.ts#L154) |
+| `benchmarkFor(parsed: ParsedCommand): EvidenceBenchmarkId` | Implements the benchmark for operation. | function | internal | [line 47](../../src/entrypoints/cli/commands/ingest-benchmark.ts#L47) |
+| `selectCases(values: readonly T[], requestedIds: ReadonlySet<string>): T[]` | Implements the select cases operation. | function | internal | [line 55](../../src/entrypoints/cli/commands/ingest-benchmark.ts#L55) |
+| `loadAmaSelection(parsed: ParsedCommand, requestedIds: ReadonlySet<string>): Promise<AdaptedSelection>` | Loads ama selection. | function | internal | [line 71](../../src/entrypoints/cli/commands/ingest-benchmark.ts#L71) |
+| `writeDatasetManifest(options: { path: string; identity: DatasetIdentity; dataPaths: EvidenceBenchmarkDataPaths; retrieval: unknown; }): Promise<number>` | Writes dataset manifest. | function | internal | [line 97](../../src/entrypoints/cli/commands/ingest-benchmark.ts#L97) |
+| `assertDatasetIdentity(path: string, identity: DatasetIdentity): Promise<StoredDatasetManifest \| undefined>` | Validates dataset identity and throws when invalid. | function | internal | [line 115](../../src/entrypoints/cli/commands/ingest-benchmark.ts#L115) |
+| `withDataDirectoryLock(databasePath: string, action: () => Promise<T>): Promise<T>` | Implements the with data directory lock operation. | function | internal | [line 130](../../src/entrypoints/cli/commands/ingest-benchmark.ts#L130) |
+| `ingestBenchmark(parsed: ParsedCommand): Promise<void>` | Implements the ingest benchmark operation. | function | exported | [line 152](../../src/entrypoints/cli/commands/ingest-benchmark.ts#L152) |
 ## `src/entrypoints/cli/commands/ingest-longmemeval.ts`
 
 | Symbol | Purpose | Kind | Visibility | Source |
@@ -431,20 +423,20 @@ _No top-level functions, classes, or class methods._
 
 | Symbol | Purpose | Kind | Visibility | Source |
 |---|---|---|---|---|
-| `sleep(milliseconds: number): Promise<void>` | Implements the sleep operation. | function | internal | [line 39](../../src/entrypoints/cli/commands/longmemeval-suite.ts#L39) |
-| `jsonRecordCount(directory: string): Promise<number>` | Implements the json record count operation. | function | internal | [line 45](../../src/entrypoints/cli/commands/longmemeval-suite.ts#L45) |
-| `runLoggedChild(options: { file: string; args: string[]; environment: NodeJS.ProcessEnv; logPath: string; mirrorStderr?: boolean; }): Promise<number>` | Runs logged child. | function | internal | [line 61](../../src/entrypoints/cli/commands/longmemeval-suite.ts#L61) |
-| `unresolvedFailureMessages(outputDir: string): Promise<string[]>` | Implements the unresolved failure messages operation. | function | internal | [line 101](../../src/entrypoints/cli/commands/longmemeval-suite.ts#L101) |
-| `auditLongMemEvalSuite(outputDir: string, expected: number): Promise<Record<string, unknown>>` | Implements the audit long mem eval suite operation. | function | internal | [line 124](../../src/entrypoints/cli/commands/longmemeval-suite.ts#L124) |
-| `baselineScores(parsed: ParsedCommand): Array<{ name: string; accuracy: number; }>` | Implements the baseline scores operation. | function | internal | [line 214](../../src/entrypoints/cli/commands/longmemeval-suite.ts#L214) |
-| `packageEvaluationArtifacts(outputDir: string, archivePath: string): Promise<void>` | Packages evaluation artifacts. | function | internal | [line 232](../../src/entrypoints/cli/commands/longmemeval-suite.ts#L232) |
-| `roleFlag(parsed: ParsedCommand, role: SuiteModelRole, name: string): string \| undefined` | Implements the role flag operation. | function | internal | [line 307](../../src/entrypoints/cli/commands/longmemeval-suite.ts#L307) |
-| `requiredRoleFlag(parsed: ParsedCommand, role: SuiteModelRole, name: string): string` | Implements the required role flag operation. | function | internal | [line 315](../../src/entrypoints/cli/commands/longmemeval-suite.ts#L315) |
-| `modelRoleConfiguration(parsed: ParsedCommand, role: SuiteModelRole): SuiteModelRoleConfiguration` | Implements the model role configuration operation. | function | internal | [line 329](../../src/entrypoints/cli/commands/longmemeval-suite.ts#L329) |
-| `suiteModelConfigurationFor(parsed: ParsedCommand): SuiteModelConfiguration` | Implements the suite model configuration for operation. | function | exported | [line 358](../../src/entrypoints/cli/commands/longmemeval-suite.ts#L358) |
-| `suiteRoleRuntimeArguments(role: SuiteModelRole, configuration: SuiteModelRoleConfiguration, apiKeyEnvironment: string, baseUrlEnvironment: string): string[]` | Implements the suite role runtime arguments operation. | function | internal | [line 367](../../src/entrypoints/cli/commands/longmemeval-suite.ts#L367) |
-| `suiteBenchmarkEnvironment(options: { retrievalSource: NodeJS.ProcessEnv; answerSource: NodeJS.ProcessEnv; models: SuiteModelConfiguration; }): NodeJS.ProcessEnv` | Implements the suite benchmark environment operation. | function | exported | [line 406](../../src/entrypoints/cli/commands/longmemeval-suite.ts#L406) |
-| `longMemEvalSuite(parsed: ParsedCommand): Promise<void>` | Implements the long mem eval suite operation. | function | exported | [line 443](../../src/entrypoints/cli/commands/longmemeval-suite.ts#L443) |
+| `sleep(milliseconds: number): Promise<void>` | Implements the sleep operation. | function | internal | [line 40](../../src/entrypoints/cli/commands/longmemeval-suite.ts#L40) |
+| `jsonRecordCount(directory: string): Promise<number>` | Implements the json record count operation. | function | internal | [line 46](../../src/entrypoints/cli/commands/longmemeval-suite.ts#L46) |
+| `runLoggedChild(options: { file: string; args: string[]; environment: NodeJS.ProcessEnv; logPath: string; mirrorStderr?: boolean; }): Promise<number>` | Runs logged child. | function | internal | [line 62](../../src/entrypoints/cli/commands/longmemeval-suite.ts#L62) |
+| `unresolvedFailureMessages(outputDir: string): Promise<string[]>` | Implements the unresolved failure messages operation. | function | internal | [line 102](../../src/entrypoints/cli/commands/longmemeval-suite.ts#L102) |
+| `auditLongMemEvalSuite(outputDir: string, expected: number): Promise<Record<string, unknown>>` | Implements the audit long mem eval suite operation. | function | internal | [line 125](../../src/entrypoints/cli/commands/longmemeval-suite.ts#L125) |
+| `baselineScores(parsed: ParsedCommand): Array<{ name: string; accuracy: number; }>` | Implements the baseline scores operation. | function | internal | [line 215](../../src/entrypoints/cli/commands/longmemeval-suite.ts#L215) |
+| `packageEvaluationArtifacts(outputDir: string, archivePath: string): Promise<void>` | Packages evaluation artifacts. | function | internal | [line 233](../../src/entrypoints/cli/commands/longmemeval-suite.ts#L233) |
+| `roleFlag(parsed: ParsedCommand, role: SuiteModelRole, name: string): string \| undefined` | Implements the role flag operation. | function | internal | [line 308](../../src/entrypoints/cli/commands/longmemeval-suite.ts#L308) |
+| `requiredRoleFlag(parsed: ParsedCommand, role: SuiteModelRole, name: string): string` | Implements the required role flag operation. | function | internal | [line 316](../../src/entrypoints/cli/commands/longmemeval-suite.ts#L316) |
+| `modelRoleConfiguration(parsed: ParsedCommand, role: SuiteModelRole): SuiteModelRoleConfiguration` | Implements the model role configuration operation. | function | internal | [line 330](../../src/entrypoints/cli/commands/longmemeval-suite.ts#L330) |
+| `suiteModelConfigurationFor(parsed: ParsedCommand): SuiteModelConfiguration` | Implements the suite model configuration for operation. | function | exported | [line 359](../../src/entrypoints/cli/commands/longmemeval-suite.ts#L359) |
+| `suiteRoleRuntimeArguments(role: SuiteModelRole, configuration: SuiteModelRoleConfiguration, apiKeyEnvironment: string, baseUrlEnvironment: string): string[]` | Implements the suite role runtime arguments operation. | function | internal | [line 368](../../src/entrypoints/cli/commands/longmemeval-suite.ts#L368) |
+| `suiteBenchmarkEnvironment(options: { retrievalSource: NodeJS.ProcessEnv; answerSource: NodeJS.ProcessEnv; models: SuiteModelConfiguration; }): NodeJS.ProcessEnv` | Implements the suite benchmark environment operation. | function | exported | [line 407](../../src/entrypoints/cli/commands/longmemeval-suite.ts#L407) |
+| `longMemEvalSuite(parsed: ParsedCommand): Promise<void>` | Implements the long mem eval suite operation. | function | exported | [line 444](../../src/entrypoints/cli/commands/longmemeval-suite.ts#L444) |
 ## `src/entrypoints/cli/commands/package-benchmark.ts`
 
 | Symbol | Purpose | Kind | Visibility | Source |
@@ -460,7 +452,7 @@ _No top-level functions, classes, or class methods._
 
 | Symbol | Purpose | Kind | Visibility | Source |
 |---|---|---|---|---|
-| `runLongMemEval(parsed: ParsedCommand): Promise<void>` | Runs long mem eval. | function | exported | [line 20](../../src/entrypoints/cli/commands/run-longmemeval.ts#L20) |
+| `runLongMemEval(parsed: ParsedCommand): Promise<void>` | Runs long mem eval. | function | exported | [line 21](../../src/entrypoints/cli/commands/run-longmemeval.ts#L21) |
 ## `src/entrypoints/cli/commands/run-memory.ts`
 
 | Symbol | Purpose | Kind | Visibility | Source |
@@ -503,6 +495,14 @@ _No top-level functions, classes, or class methods._
 | `skillFor(parsed: ParsedCommand): PiMemSkill` | Implements the skill for operation. | function | exported | [line 177](../../src/entrypoints/cli/parse-command.ts#L177) |
 | `assertOnlyFlags(parsed: ParsedCommand, allowed: readonly string[]): void` | Validates only flags and throws when invalid. | function | exported | [line 189](../../src/entrypoints/cli/parse-command.ts#L189) |
 | `retrievalProfileFor(parsed: ParsedCommand): RetrievalProfile` | Implements the retrieval profile for operation. | function | exported | [line 199](../../src/entrypoints/cli/parse-command.ts#L199) |
+## `src/entrypoints/cli/private-records.ts`
+
+| Symbol | Purpose | Kind | Visibility | Source |
+|---|---|---|---|---|
+| `readQuestionRecords(path: string): Promise<T[]>` | Reads question records. | function | exported | [line 6](../../src/entrypoints/cli/private-records.ts#L6) |
+| `mergeQuestionRecords(path: string, records: readonly T[]): Promise<void>` | Merges question records. | function | exported | [line 12](../../src/entrypoints/cli/private-records.ts#L12) |
+| `readScopeRecords(path: string): Promise<T[]>` | Reads scope records. | function | exported | [line 22](../../src/entrypoints/cli/private-records.ts#L22) |
+| `mergeScopeRecords(path: string, records: readonly T[]): Promise<void>` | Merges scope records. | function | exported | [line 28](../../src/entrypoints/cli/private-records.ts#L28) |
 ## `src/entrypoints/cli/workflow-files.ts`
 
 | Symbol | Purpose | Kind | Visibility | Source |
@@ -689,8 +689,18 @@ _No top-level functions, classes, or class methods._
 
 | Symbol | Purpose | Kind | Visibility | Source |
 |---|---|---|---|---|
-| `activeSkillPrompt(skill: Exclude<PiMemSkill, "none">): string` | Implements the active skill prompt operation. | function | internal | [line 48](../../src/evidence-agent/adapters/pi/retrieval-prompt.ts#L48) |
-| `piMemSystemPrompt(skill: PiMemSkill = "pimem-v0", basePrompt?: string, operatorCatalog: readonly SearchOperatorCatalogEntry[] = []): string` | Implements the pi mem system prompt operation. | function | exported | [line 56](../../src/evidence-agent/adapters/pi/retrieval-prompt.ts#L56) |
+| `activeSkillPrompt(skill: Exclude<PiMemSkill, "none">): string` | Implements the active skill prompt operation. | function | internal | [line 45](../../src/evidence-agent/adapters/pi/retrieval-prompt.ts#L45) |
+| `piMemSystemPrompt(skill: PiMemSkill = "pimem-v0", basePrompt?: string, operatorCatalog: readonly SearchOperatorCatalogEntry[] = []): string` | Implements the pi mem system prompt operation. | function | exported | [line 53](../../src/evidence-agent/adapters/pi/retrieval-prompt.ts#L53) |
+## `src/evidence-agent/adapters/pi/run-agent.ts`
+
+| Symbol | Purpose | Kind | Visibility | Source |
+|---|---|---|---|---|
+| `PiMemRunError` | Implements pi mem run error. | class | exported | [line 104](../../src/evidence-agent/adapters/pi/run-agent.ts#L104) |
+| `PiMemRunError.constructor(message: string, diagnostics: PiMemFailureDiagnostics, code: PiMemFailureCode = "runtime_error")` | Creates a pi mem run error instance. | method | public | [line 108](../../src/evidence-agent/adapters/pi/run-agent.ts#L108) |
+| `providerFailureKind(message: string): PiMemProviderFailureKind` | Implements the provider failure kind operation. | function | internal | [line 122](../../src/evidence-agent/adapters/pi/run-agent.ts#L122) |
+| `providerResponseModel(message: string): string \| undefined` | Implements the provider response model operation. | function | internal | [line 142](../../src/evidence-agent/adapters/pi/run-agent.ts#L142) |
+| `questionPrompt(question: string, questionDate?: string): string` | Builds the user prompt from the question and optional question date. | function | internal | [line 148](../../src/evidence-agent/adapters/pi/run-agent.ts#L148) |
+| `runPiMem(options: RunPiMemOptions): Promise<PiMemResult>` | Runs one bounded evidence-agent session and returns its provenance-backed result. | function | exported | [line 170](../../src/evidence-agent/adapters/pi/run-agent.ts#L170) |
 ## `src/evidence-agent/adapters/pi/tools.ts`
 
 _No top-level functions, classes, or class methods._
@@ -759,7 +769,6 @@ _No top-level functions, classes, or class methods._
 | `nextContinuationDepth(depth: number, maxDepth: number): number \| undefined` | Implements the next continuation depth operation. | function | internal | [line 183](../../src/evidence-agent/adapters/pi/tools/search-tool.ts#L183) |
 | `pageOperatorResult(result: EvidenceOperatorResult \| undefined, hits: readonly RetrievalHit[], reservoirHits: readonly RetrievalHit[], ledger: MemoryLedger): EvidenceOperatorResult \| undefined` | Implements the page operator result operation. | function | internal | [line 194](../../src/evidence-agent/adapters/pi/tools/search-tool.ts#L194) |
 | `createSearchTools(options: CreatePiMemToolsOptions): Pick<PiMemTools, "search" \| "searchMore">` | Creates search tools. | function | exported | [line 236](../../src/evidence-agent/adapters/pi/tools/search-tool.ts#L236) |
-| `createSearchTool(options: CreatePiMemToolsOptions): PiMemTools["search"]` | Creates the Pi search tool that delegates retrieval and records returned candidates in the ledger. | function | exported | [line 592](../../src/evidence-agent/adapters/pi/tools/search-tool.ts#L592) |
 ## `src/evidence-agent/adapters/pi/tools/tool-protocol.ts`
 
 | Symbol | Purpose | Kind | Visibility | Source |
@@ -773,47 +782,31 @@ _No top-level functions, classes, or class methods._
 ## `src/evidence-agent/model/evidence.ts`
 
 _No top-level functions, classes, or class methods._
-## `src/evidence-agent/model/memory-evidence.ts`
+## `src/evidence-agent/model/ledger.ts`
 
 | Symbol | Purpose | Kind | Visibility | Source |
 |---|---|---|---|---|
-| `cloneMetadata(metadata: Record<string, unknown>): Record<string, unknown>` | Implements the clone metadata operation. | function | internal | [line 53](../../src/evidence-agent/model/memory-evidence.ts#L53) |
-| `asciiLower(value: string): string` | Implements the ascii lower operation. | function | internal | [line 57](../../src/evidence-agent/model/memory-evidence.ts#L57) |
-| `focusTerms(focus: readonly string[]): string[]` | Implements the focus terms operation. | function | internal | [line 61](../../src/evidence-agent/model/memory-evidence.ts#L61) |
-| `mergeSpans(spans: readonly { start: number; end: number }[]): Array<{ start: number; end: number }>` | Merges spans. | function | internal | [line 70](../../src/evidence-agent/model/memory-evidence.ts#L70) |
-| `focusedSpans(content: string, focus: readonly string[], budget: number): Array<{ start: number; end: number }>` | Implements the focused spans operation. | function | internal | [line 88](../../src/evidence-agent/model/memory-evidence.ts#L88) |
-| `renderEvidenceExcerpts(options: { sourceContentLength: number; excerpts: readonly EvidenceExcerpt[]; }): string` | Renders evidence excerpts. | function | exported | [line 160](../../src/evidence-agent/model/memory-evidence.ts#L160) |
-| `mergeEvidenceExcerpts(memoryId: string, sourceContentLength: number, excerpts: readonly EvidenceExcerpt[]): EvidenceExcerpt[]` | Merges evidence excerpts. | function | internal | [line 175](../../src/evidence-agent/model/memory-evidence.ts#L175) |
-| `mergeMemoryEvidence(existing: MemoryEvidence, incoming: MemoryEvidence): MemoryEvidence` | Accumulates independently inspected exact projections of one immutable source. | function | exported | [line 229](../../src/evidence-agent/model/memory-evidence.ts#L229) |
-| `projectMemoryEvidenceWithinBudget(record: MemoryRecord, focus: readonly string[], budget: number): MemoryEvidence` | Implements the project memory evidence within budget operation. | function | internal | [line 268](../../src/evidence-agent/model/memory-evidence.ts#L268) |
-| `projectMemoryEvidence(record: MemoryRecord, focus: readonly string[], maximumChars: number): MemoryEvidence` | Implements the project memory evidence operation. | function | exported | [line 298](../../src/evidence-agent/model/memory-evidence.ts#L298) |
-| `projectPassageEvidence(record: MemoryRecord, passage: MemoryPassage): MemoryEvidence` | Projects exactly the passage the Agent selected, bound to its parent hash. | function | exported | [line 311](../../src/evidence-agent/model/memory-evidence.ts#L311) |
-| `projectMemoryEvidenceBatch(records: readonly MemoryRecord[], focusFor: (record: MemoryRecord) => readonly string[]): MemoryEvidence[]` | Implements the project memory evidence batch operation. | function | exported | [line 342](../../src/evidence-agent/model/memory-evidence.ts#L342) |
-## `src/evidence-agent/model/memory-ledger.ts`
-
-| Symbol | Purpose | Kind | Visibility | Source |
-|---|---|---|---|---|
-| `cloneCandidate(candidate: MemoryCandidate): MemoryCandidate` | Implements the clone candidate operation. | function | internal | [line 21](../../src/evidence-agent/model/memory-ledger.ts#L21) |
-| `cloneEvidence(evidence: MemoryEvidence): MemoryEvidence` | Implements the clone evidence operation. | function | internal | [line 40](../../src/evidence-agent/model/memory-ledger.ts#L40) |
-| `cloneSelection(selection: PiMemSelection): PiMemSelection` | Implements the clone selection operation. | function | internal | [line 48](../../src/evidence-agent/model/memory-ledger.ts#L48) |
-| `MemoryLedger` | Per-question, in-memory provenance ledger. | class | exported | [line 74](../../src/evidence-agent/model/memory-ledger.ts#L74) |
-| `MemoryLedger.constructor(scopeId: string)` | Creates a memory ledger instance. | method | public | [line 86](../../src/evidence-agent/model/memory-ledger.ts#L86) |
-| `MemoryLedger.nextStep(): number` | Implements the next step operation. | method | public | [line 94](../../src/evidence-agent/model/memory-ledger.ts#L94) |
-| `MemoryLedger.hasInspected(memoryId: string): boolean` | Checks whether inspected. | method | public | [line 124](../../src/evidence-agent/model/memory-ledger.ts#L124) |
-| `MemoryLedger.candidateRef(candidateOrMemoryId: string): string \| undefined` | Checks whether didate ref. | method | public | [line 128](../../src/evidence-agent/model/memory-ledger.ts#L128) |
-| `MemoryLedger.candidateRefForQuote(memoryId: string, quote: string): string \| undefined` | Checks whether didate ref for quote. | method | public | [line 138](../../src/evidence-agent/model/memory-ledger.ts#L138) |
-| `MemoryLedger.evidenceRef(memoryId: string): string \| undefined` | Implements the evidence ref operation. | method | public | [line 154](../../src/evidence-agent/model/memory-ledger.ts#L154) |
-| `MemoryLedger.resolveCandidateRefs(refs: readonly string[]): string[]` | Resolves candidate refs. | method | public | [line 158](../../src/evidence-agent/model/memory-ledger.ts#L158) |
-| `MemoryLedger.resolveCandidates(refs: readonly string[]): MemoryCandidate[]` | Resolves candidates. | method | public | [line 162](../../src/evidence-agent/model/memory-ledger.ts#L162) |
-| `MemoryLedger.selectCandidates(candidateOrMemoryIds: readonly string[]): MemoryCandidate[]` | Implements the select candidates operation. | method | public | [line 178](../../src/evidence-agent/model/memory-ledger.ts#L178) |
-| `MemoryLedger.selectMemoryCandidates(memoryIds: readonly string[]): MemoryCandidate[]` | Returns every passage/legacy candidate belonging to the given parents. | method | public | [line 198](../../src/evidence-agent/model/memory-ledger.ts#L198) |
-| `MemoryLedger.recordSearchHits(hits: readonly RetrievalHit[], step = this.nextStep()): MemoryCandidate[]` | Registers retrieval hits as candidates while preserving first-seen provenance. | method | public | [line 209](../../src/evidence-agent/model/memory-ledger.ts#L209) |
-| `MemoryLedger.recordInspect(evidenceRecords: readonly MemoryEvidence[], step = this.nextStep(), inspectedCandidateIds: readonly string[] = []): MemoryEvidence[]` | Records bounded exact source excerpts returned by inspect. | method | public | [line 248](../../src/evidence-agent/model/memory-ledger.ts#L248) |
-| `MemoryLedger.recordBashDiscoveries(records: readonly MemoryRecord[], command: string, step = this.nextStep()): MemoryCandidate[]` | Implements the record bash discoveries operation. | method | public | [line 335](../../src/evidence-agent/model/memory-ledger.ts#L335) |
-| `MemoryLedger.acceptSelection(input: PiMemSelection): PiMemSelection` | Validates and stores the agent's final evidence selection. | method | public | [line 353](../../src/evidence-agent/model/memory-ledger.ts#L353) |
-| `MemoryLedger.assertInvariants(): void` | Verifies candidate, evidence, citation, and scope provenance invariants. | method | public | [line 449](../../src/evidence-agent/model/memory-ledger.ts#L449) |
-| `MemoryLedger.assertScope(record: Pick<MemoryRecord, "scopeId" \| "memoryId">): void` | Validates scope and throws when invalid. | method | private | [line 474](../../src/evidence-agent/model/memory-ledger.ts#L474) |
-| `MemoryLedger.upsertCandidate(candidateId: string, record: Pick< MemoryRecord, "memoryId" \| "scopeId" \| "sessionId" \| "turnIndex" \| "role" \| "timestamp" >, preview: string, discovery: MemoryCandidate["discoveries"][number], passage?: MemoryPassage): void` | Implements the upsert candidate operation. | method | private | [line 482](../../src/evidence-agent/model/memory-ledger.ts#L482) |
+| `cloneCandidate(candidate: MemoryCandidate): MemoryCandidate` | Implements the clone candidate operation. | function | internal | [line 21](../../src/evidence-agent/model/ledger.ts#L21) |
+| `cloneEvidence(evidence: MemoryEvidence): MemoryEvidence` | Implements the clone evidence operation. | function | internal | [line 40](../../src/evidence-agent/model/ledger.ts#L40) |
+| `cloneSelection(selection: PiMemSelection): PiMemSelection` | Implements the clone selection operation. | function | internal | [line 48](../../src/evidence-agent/model/ledger.ts#L48) |
+| `MemoryLedger` | Per-question, in-memory provenance ledger. | class | exported | [line 74](../../src/evidence-agent/model/ledger.ts#L74) |
+| `MemoryLedger.constructor(scopeId: string)` | Creates a memory ledger instance. | method | public | [line 86](../../src/evidence-agent/model/ledger.ts#L86) |
+| `MemoryLedger.nextStep(): number` | Implements the next step operation. | method | public | [line 94](../../src/evidence-agent/model/ledger.ts#L94) |
+| `MemoryLedger.hasInspected(memoryId: string): boolean` | Checks whether inspected. | method | public | [line 124](../../src/evidence-agent/model/ledger.ts#L124) |
+| `MemoryLedger.candidateRef(candidateOrMemoryId: string): string \| undefined` | Checks whether didate ref. | method | public | [line 128](../../src/evidence-agent/model/ledger.ts#L128) |
+| `MemoryLedger.candidateRefForQuote(memoryId: string, quote: string): string \| undefined` | Checks whether didate ref for quote. | method | public | [line 138](../../src/evidence-agent/model/ledger.ts#L138) |
+| `MemoryLedger.evidenceRef(memoryId: string): string \| undefined` | Implements the evidence ref operation. | method | public | [line 154](../../src/evidence-agent/model/ledger.ts#L154) |
+| `MemoryLedger.resolveCandidateRefs(refs: readonly string[]): string[]` | Resolves candidate refs. | method | public | [line 158](../../src/evidence-agent/model/ledger.ts#L158) |
+| `MemoryLedger.resolveCandidates(refs: readonly string[]): MemoryCandidate[]` | Resolves candidates. | method | public | [line 162](../../src/evidence-agent/model/ledger.ts#L162) |
+| `MemoryLedger.selectCandidates(candidateOrMemoryIds: readonly string[]): MemoryCandidate[]` | Implements the select candidates operation. | method | public | [line 178](../../src/evidence-agent/model/ledger.ts#L178) |
+| `MemoryLedger.selectMemoryCandidates(memoryIds: readonly string[]): MemoryCandidate[]` | Returns every passage/legacy candidate belonging to the given parents. | method | public | [line 198](../../src/evidence-agent/model/ledger.ts#L198) |
+| `MemoryLedger.recordSearchHits(hits: readonly RetrievalHit[], step = this.nextStep()): MemoryCandidate[]` | Registers retrieval hits as candidates while preserving first-seen provenance. | method | public | [line 209](../../src/evidence-agent/model/ledger.ts#L209) |
+| `MemoryLedger.recordInspect(evidenceRecords: readonly MemoryEvidence[], step = this.nextStep(), inspectedCandidateIds: readonly string[] = []): MemoryEvidence[]` | Records bounded exact source excerpts returned by inspect. | method | public | [line 248](../../src/evidence-agent/model/ledger.ts#L248) |
+| `MemoryLedger.recordBashDiscoveries(records: readonly MemoryRecord[], command: string, step = this.nextStep()): MemoryCandidate[]` | Implements the record bash discoveries operation. | method | public | [line 335](../../src/evidence-agent/model/ledger.ts#L335) |
+| `MemoryLedger.finish(input: PiMemSelection): PiMemSelection` | Validates and stores the agent's final evidence selection. | method | public | [line 353](../../src/evidence-agent/model/ledger.ts#L353) |
+| `MemoryLedger.assertInvariants(): void` | Verifies candidate, evidence, citation, and scope provenance invariants. | method | public | [line 449](../../src/evidence-agent/model/ledger.ts#L449) |
+| `MemoryLedger.assertScope(record: Pick<MemoryRecord, "scopeId" \| "memoryId">): void` | Validates scope and throws when invalid. | method | private | [line 474](../../src/evidence-agent/model/ledger.ts#L474) |
+| `MemoryLedger.upsertCandidate(candidateId: string, record: Pick< MemoryRecord, "memoryId" \| "scopeId" \| "sessionId" \| "turnIndex" \| "role" \| "timestamp" >, preview: string, discovery: MemoryCandidate["discoveries"][number], passage?: MemoryPassage): void` | Implements the upsert candidate operation. | method | private | [line 482](../../src/evidence-agent/model/ledger.ts#L482) |
 ## `src/evidence-agent/model/operator-evolution.ts`
 
 | Symbol | Purpose | Kind | Visibility | Source |
@@ -832,19 +825,25 @@ _No top-level functions, classes, or class methods._
 | `OperatorEvolutionCatalog.definitionsForNextQuestion(): SearchOperatorDefinition[]` | Implements the definitions for next question operation. | method | public | [line 222](../../src/evidence-agent/model/operator-evolution.ts#L222) |
 | `OperatorEvolutionCatalog.observe(questionId: string, result: PiMemResult): OperatorEvolutionObservation` | Implements the observe operation. | method | public | [line 246](../../src/evidence-agent/model/operator-evolution.ts#L246) |
 | `OperatorEvolutionCatalog.snapshot(): OperatorEvolutionSnapshot` | Implements the snapshot operation. | method | public | [line 375](../../src/evidence-agent/model/operator-evolution.ts#L375) |
-## `src/evidence-agent/ports/read-only-navigation.ts`
-
-_No top-level functions, classes, or class methods._
-## `src/evidence-agent/run-pimem.ts`
+## `src/evidence-agent/model/source-evidence.ts`
 
 | Symbol | Purpose | Kind | Visibility | Source |
 |---|---|---|---|---|
-| `PiMemRunError` | Implements pi mem run error. | class | exported | [line 104](../../src/evidence-agent/run-pimem.ts#L104) |
-| `PiMemRunError.constructor(message: string, diagnostics: PiMemFailureDiagnostics, code: PiMemFailureCode = "runtime_error")` | Creates a pi mem run error instance. | method | public | [line 108](../../src/evidence-agent/run-pimem.ts#L108) |
-| `providerFailureKind(message: string): PiMemProviderFailureKind` | Implements the provider failure kind operation. | function | internal | [line 122](../../src/evidence-agent/run-pimem.ts#L122) |
-| `providerResponseModel(message: string): string \| undefined` | Implements the provider response model operation. | function | internal | [line 142](../../src/evidence-agent/run-pimem.ts#L142) |
-| `questionPrompt(question: string, questionDate?: string): string` | Builds the user prompt from the question and optional question date. | function | internal | [line 148](../../src/evidence-agent/run-pimem.ts#L148) |
-| `runPiMem(options: RunPiMemOptions): Promise<PiMemResult>` | Runs one bounded evidence-agent session and returns its provenance-backed result. | function | exported | [line 170](../../src/evidence-agent/run-pimem.ts#L170) |
+| `cloneMetadata(metadata: Record<string, unknown>): Record<string, unknown>` | Implements the clone metadata operation. | function | internal | [line 50](../../src/evidence-agent/model/source-evidence.ts#L50) |
+| `asciiLower(value: string): string` | Implements the ascii lower operation. | function | internal | [line 54](../../src/evidence-agent/model/source-evidence.ts#L54) |
+| `focusTerms(focus: readonly string[]): string[]` | Implements the focus terms operation. | function | internal | [line 58](../../src/evidence-agent/model/source-evidence.ts#L58) |
+| `mergeSpans(spans: readonly { start: number; end: number }[]): Array<{ start: number; end: number }>` | Merges spans. | function | internal | [line 67](../../src/evidence-agent/model/source-evidence.ts#L67) |
+| `focusedSpans(content: string, focus: readonly string[], budget: number): Array<{ start: number; end: number }>` | Implements the focused spans operation. | function | internal | [line 85](../../src/evidence-agent/model/source-evidence.ts#L85) |
+| `renderEvidenceExcerpts(options: { sourceContentLength: number; excerpts: readonly EvidenceExcerpt[]; }): string` | Renders evidence excerpts. | function | exported | [line 157](../../src/evidence-agent/model/source-evidence.ts#L157) |
+| `mergeEvidenceExcerpts(memoryId: string, sourceContentLength: number, excerpts: readonly EvidenceExcerpt[]): EvidenceExcerpt[]` | Merges evidence excerpts. | function | internal | [line 172](../../src/evidence-agent/model/source-evidence.ts#L172) |
+| `mergeMemoryEvidence(existing: MemoryEvidence, incoming: MemoryEvidence): MemoryEvidence` | Accumulates independently inspected exact projections of one immutable source. | function | exported | [line 226](../../src/evidence-agent/model/source-evidence.ts#L226) |
+| `projectMemoryEvidenceWithinBudget(record: MemoryRecord, focus: readonly string[], budget: number): MemoryEvidence` | Implements the project memory evidence within budget operation. | function | internal | [line 265](../../src/evidence-agent/model/source-evidence.ts#L265) |
+| `projectMemoryEvidence(record: MemoryRecord, focus: readonly string[], maximumChars: number): MemoryEvidence` | Implements the project memory evidence operation. | function | exported | [line 295](../../src/evidence-agent/model/source-evidence.ts#L295) |
+| `projectPassageEvidence(record: MemoryRecord, passage: MemoryPassage): MemoryEvidence` | Projects exactly the passage the Agent selected, bound to its parent hash. | function | exported | [line 308](../../src/evidence-agent/model/source-evidence.ts#L308) |
+| `projectMemoryEvidenceBatch(records: readonly MemoryRecord[], focusFor: (record: MemoryRecord) => readonly string[]): MemoryEvidence[]` | Implements the project memory evidence batch operation. | function | exported | [line 339](../../src/evidence-agent/model/source-evidence.ts#L339) |
+## `src/evidence-agent/ports/read-only-navigation.ts`
+
+_No top-level functions, classes, or class methods._
 ## `src/memory/index.ts`
 
 _No top-level functions, classes, or class methods._
@@ -888,6 +887,12 @@ _No top-level functions, classes, or class methods._
 | `JsonlWriter` | Serializes large JSONL appends so concurrent workers cannot interleave lines. | class | exported | [line 4](../../src/platform/filesystem/jsonl-writer.ts#L4) |
 | `JsonlWriter.append(path: string, value: unknown): Promise<void>` | Implements the append operation. | method | public | [line 7](../../src/platform/filesystem/jsonl-writer.ts#L7) |
 | `JsonlWriter.flush(): Promise<void>` | Implements the flush operation. | method | public | [line 16](../../src/platform/filesystem/jsonl-writer.ts#L16) |
+## `src/platform/filesystem/private-jsonl.ts`
+
+| Symbol | Purpose | Kind | Visibility | Source |
+|---|---|---|---|---|
+| `readPrivateJsonl(path: string): Promise<T[]>` | Reads private jsonl. | function | exported | [line 9](../../src/platform/filesystem/private-jsonl.ts#L9) |
+| `mergePrivateJsonl(path: string, incoming: readonly T[], identity: PrivateJsonlIdentity<T>): Promise<void>` | Merges private jsonl. | function | exported | [line 25](../../src/platform/filesystem/private-jsonl.ts#L25) |
 ## `src/platform/pi/load-model-runtime.ts`
 
 | Symbol | Purpose | Kind | Visibility | Source |
@@ -1100,6 +1105,9 @@ _No top-level functions, classes, or class methods._
 ## `src/retrieval/model/embedding.ts`
 
 _No top-level functions, classes, or class methods._
+## `src/retrieval/model/operator.ts`
+
+_No top-level functions, classes, or class methods._
 ## `src/retrieval/model/passage.ts`
 
 | Symbol | Purpose | Kind | Visibility | Source |
@@ -1116,10 +1124,7 @@ _No top-level functions, classes, or class methods._
 | `retrievalHitIdentity(hit: RetrievalHit): string` | Implements the retrieval hit identity operation. | function | exported | [line 219](../../src/retrieval/model/passage.ts#L219) |
 | `projectSearchHitsToPassages(hits: readonly RetrievalHit[], limit: number, sourceQuotesByMemoryId: ReadonlyMap<string, readonly string[]> = new Map(), maxPerSession?: number): RetrievalHit[]` | Converts parent-level operator output into exact passage candidates. | function | exported | [line 228](../../src/retrieval/model/passage.ts#L228) |
 | `assertPassageMatchesRecord(passage: MemoryPassage, record: MemoryRecord): void` | Validates passage matches record and throws when invalid. | function | exported | [line 318](../../src/retrieval/model/passage.ts#L318) |
-## `src/retrieval/model/retrieval.ts`
-
-_No top-level functions, classes, or class methods._
-## `src/retrieval/model/search-operator.ts`
+## `src/retrieval/model/search.ts`
 
 _No top-level functions, classes, or class methods._
 ## `src/retrieval/operators/hybrid-search.ts`
@@ -1189,16 +1194,6 @@ _No top-level functions, classes, or class methods._
 | Symbol | Purpose | Kind | Visibility | Source |
 |---|---|---|---|---|
 | `parseRetrievalProfile(value: string \| undefined): RetrievalProfile` | Parses retrieval profile. | function | exported | [line 5](../../src/retrieval/retrieval-profile.ts#L5) |
-## `src/retrieval/search-memory.ts`
-
-| Symbol | Purpose | Kind | Visibility | Source |
-|---|---|---|---|---|
-| `normalizeStrings(values: readonly string[], label: string): string[]` | Validates, trims, and deduplicates a list of search values. | function | internal | [line 66](../../src/retrieval/search-memory.ts#L66) |
-| `searchQueryFingerprint(query: string): string` | Creates a canonical fingerprint used to detect repeated queries. | function | internal | [line 76](../../src/retrieval/search-memory.ts#L76) |
-| `operatorSourceQuotes(result: EvidenceOperatorResult \| undefined): Map<string, string[]>` | Implements the operator source quotes operation. | function | internal | [line 85](../../src/retrieval/search-memory.ts#L85) |
-| `inlineSearchDefinition(params: SearchMemoryParams, primaryOperator: string): SearchOperatorDefinition \| undefined` | Implements the inline search definition operation. | function | internal | [line 97](../../src/retrieval/search-memory.ts#L97) |
-| `assertHitsStayInScope(operator: string, scopeId: string, hits: readonly RetrievalHit[]): void` | Validates hits stay in scope and throws when invalid. | function | internal | [line 174](../../src/retrieval/search-memory.ts#L174) |
-| `createSearchMemory(options: SearchMemoryOptions): ( params: SearchMemoryParams, signal?: AbortSignal, ) => Promise<SearchMemoryResult>` | Creates the search orchestrator for normalization, routing, coverage, expansion, and hit merging. | function | exported | [line 188](../../src/retrieval/search-memory.ts#L188) |
 ## `src/retrieval/structured-query-constraints.ts`
 
 | Symbol | Purpose | Kind | Visibility | Source |
@@ -1212,29 +1207,29 @@ _No top-level functions, classes, or class methods._
 | `parseSourceTimestamp(value: string \| undefined): number \| undefined` | Parses source timestamp. | function | exported | [line 4](../../src/retrieval/temporal-annotation.ts#L4) |
 | `durationParts(milliseconds: number): string` | Implements the duration parts operation. | function | internal | [line 29](../../src/retrieval/temporal-annotation.ts#L29) |
 | `temporalAnnotation(memoryTimestamp: string \| undefined, questionDate: string \| undefined): string \| undefined` | Implements the temporal annotation operation. | function | exported | [line 43](../../src/retrieval/temporal-annotation.ts#L43) |
-## `src/retrieval/use-cases/build-declarative-operator.ts`
+## `src/retrieval/use-cases/compose-operator.ts`
 
 | Symbol | Purpose | Kind | Visibility | Source |
 |---|---|---|---|---|
-| `normalizedText(value: string, label: string, maxLength = 240): string` | Normalizes d text. | function | internal | [line 32](../../src/retrieval/use-cases/build-declarative-operator.ts#L32) |
-| `normalizedIdentifier(value: string, label: string): string` | Normalizes d identifier. | function | internal | [line 41](../../src/retrieval/use-cases/build-declarative-operator.ts#L41) |
-| `normalizedLimit(value: number \| undefined, label: string): number \| undefined` | Normalizes d limit. | function | internal | [line 51](../../src/retrieval/use-cases/build-declarative-operator.ts#L51) |
-| `normalizeDefinition(catalog: SearchOperatorCatalog, source: SearchOperatorDefinition): NormalizedDefinition` | Normalizes definition. | function | internal | [line 62](../../src/retrieval/use-cases/build-declarative-operator.ts#L62) |
-| `withRanks(hits: readonly RetrievalHit[], limit: number): RetrievalHit[]` | Implements the with ranks operation. | function | internal | [line 284](../../src/retrieval/use-cases/build-declarative-operator.ts#L284) |
-| `mergedMatchedQueries(left: RetrievalHit, right: RetrievalHit): string[]` | Merges d matched queries. | function | internal | [line 291](../../src/retrieval/use-cases/build-declarative-operator.ts#L291) |
-| `mergedMetadataFilters(left: RetrievalHit, right: RetrievalHit): RetrievalHit["matchedMetadataFilters"]` | Merges d metadata filters. | function | internal | [line 301](../../src/retrieval/use-cases/build-declarative-operator.ts#L301) |
-| `mergeHitProvenance(left: RetrievalHit, right: RetrievalHit): RetrievalHit` | Merges hit provenance. | function | internal | [line 316](../../src/retrieval/use-cases/build-declarative-operator.ts#L316) |
-| `unionCandidateSets(sets: readonly (readonly RetrievalHit[])[], limit: number): RetrievalHit[]` | Implements the union candidate sets operation. | function | internal | [line 329](../../src/retrieval/use-cases/build-declarative-operator.ts#L329) |
-| `rrfCandidateSets(sets: readonly (readonly RetrievalHit[])[], limit: number): RetrievalHit[]` | Implements the rrf candidate sets operation. | function | internal | [line 354](../../src/retrieval/use-cases/build-declarative-operator.ts#L354) |
-| `intersectCandidateSets(sets: readonly (readonly RetrievalHit[])[], limit: number): RetrievalHit[]` | Implements the intersect candidate sets operation. | function | internal | [line 387](../../src/retrieval/use-cases/build-declarative-operator.ts#L387) |
-| `sortCandidateSet(hits: readonly RetrievalHit[], order: "relevance" \| "chronological" \| "reverse-chronological"): RetrievalHit[]` | Implements the sort candidate set operation. | function | internal | [line 415](../../src/retrieval/use-cases/build-declarative-operator.ts#L415) |
-| `diversifyBySession(hits: readonly RetrievalHit[], maxPerGroup: number): RetrievalHit[]` | Implements the diversify by session operation. | function | internal | [line 436](../../src/retrieval/use-cases/build-declarative-operator.ts#L436) |
-| `dedupeByContent(hits: readonly RetrievalHit[]): RetrievalHit[]` | Implements the dedupe by content operation. | function | internal | [line 460](../../src/retrieval/use-cases/build-declarative-operator.ts#L460) |
-| `annotateCandidateSet(method: "temporal" \| "numeric", hits: readonly RetrievalHit[], question: string, questionDate: string \| undefined): EvidenceOperatorResult` | Implements the annotate candidate set operation. | function | internal | [line 474](../../src/retrieval/use-cases/build-declarative-operator.ts#L474) |
-| `requestFor(input: SearchOperatorInput): SearchRequest` | Implements the request for operation. | function | internal | [line 485](../../src/retrieval/use-cases/build-declarative-operator.ts#L485) |
-| `intersectRoles(left: SearchOperatorInput["roles"], right: SearchOperatorInput["roles"]): SearchOperatorInput["roles"]` | Implements the intersect roles operation. | function | internal | [line 508](../../src/retrieval/use-cases/build-declarative-operator.ts#L508) |
-| `sessionDiscoveryPolicies(steps: readonly SearchOperatorDefinitionStep[]): Map<string, SearchDiscoveryPolicy>` | Implements the session discovery policies operation. | function | internal | [line 518](../../src/retrieval/use-cases/build-declarative-operator.ts#L518) |
-| `buildDeclarativeSearchOperator(catalog: SearchOperatorCatalog, source: SearchOperatorDefinition, definitionRevision: number): BuiltDeclarativeSearchOperator` | Validates a bounded operator graph and builds a candidate-only executable operator. | function | exported | [line 570](../../src/retrieval/use-cases/build-declarative-operator.ts#L570) |
+| `normalizedText(value: string, label: string, maxLength = 240): string` | Normalizes d text. | function | internal | [line 32](../../src/retrieval/use-cases/compose-operator.ts#L32) |
+| `normalizedIdentifier(value: string, label: string): string` | Normalizes d identifier. | function | internal | [line 41](../../src/retrieval/use-cases/compose-operator.ts#L41) |
+| `normalizedLimit(value: number \| undefined, label: string): number \| undefined` | Normalizes d limit. | function | internal | [line 51](../../src/retrieval/use-cases/compose-operator.ts#L51) |
+| `normalizeDefinition(catalog: SearchOperatorCatalog, source: SearchOperatorDefinition): NormalizedDefinition` | Normalizes definition. | function | internal | [line 62](../../src/retrieval/use-cases/compose-operator.ts#L62) |
+| `withRanks(hits: readonly RetrievalHit[], limit: number): RetrievalHit[]` | Implements the with ranks operation. | function | internal | [line 284](../../src/retrieval/use-cases/compose-operator.ts#L284) |
+| `mergedMatchedQueries(left: RetrievalHit, right: RetrievalHit): string[]` | Merges d matched queries. | function | internal | [line 291](../../src/retrieval/use-cases/compose-operator.ts#L291) |
+| `mergedMetadataFilters(left: RetrievalHit, right: RetrievalHit): RetrievalHit["matchedMetadataFilters"]` | Merges d metadata filters. | function | internal | [line 301](../../src/retrieval/use-cases/compose-operator.ts#L301) |
+| `mergeHitProvenance(left: RetrievalHit, right: RetrievalHit): RetrievalHit` | Merges hit provenance. | function | internal | [line 316](../../src/retrieval/use-cases/compose-operator.ts#L316) |
+| `unionCandidateSets(sets: readonly (readonly RetrievalHit[])[], limit: number): RetrievalHit[]` | Implements the union candidate sets operation. | function | internal | [line 329](../../src/retrieval/use-cases/compose-operator.ts#L329) |
+| `rrfCandidateSets(sets: readonly (readonly RetrievalHit[])[], limit: number): RetrievalHit[]` | Implements the rrf candidate sets operation. | function | internal | [line 354](../../src/retrieval/use-cases/compose-operator.ts#L354) |
+| `intersectCandidateSets(sets: readonly (readonly RetrievalHit[])[], limit: number): RetrievalHit[]` | Implements the intersect candidate sets operation. | function | internal | [line 387](../../src/retrieval/use-cases/compose-operator.ts#L387) |
+| `sortCandidateSet(hits: readonly RetrievalHit[], order: "relevance" \| "chronological" \| "reverse-chronological"): RetrievalHit[]` | Implements the sort candidate set operation. | function | internal | [line 415](../../src/retrieval/use-cases/compose-operator.ts#L415) |
+| `diversifyBySession(hits: readonly RetrievalHit[], maxPerGroup: number): RetrievalHit[]` | Implements the diversify by session operation. | function | internal | [line 436](../../src/retrieval/use-cases/compose-operator.ts#L436) |
+| `dedupeByContent(hits: readonly RetrievalHit[]): RetrievalHit[]` | Implements the dedupe by content operation. | function | internal | [line 460](../../src/retrieval/use-cases/compose-operator.ts#L460) |
+| `annotateCandidateSet(method: "temporal" \| "numeric", hits: readonly RetrievalHit[], question: string, questionDate: string \| undefined): EvidenceOperatorResult` | Implements the annotate candidate set operation. | function | internal | [line 474](../../src/retrieval/use-cases/compose-operator.ts#L474) |
+| `requestFor(input: SearchOperatorInput): SearchRequest` | Implements the request for operation. | function | internal | [line 485](../../src/retrieval/use-cases/compose-operator.ts#L485) |
+| `intersectRoles(left: SearchOperatorInput["roles"], right: SearchOperatorInput["roles"]): SearchOperatorInput["roles"]` | Implements the intersect roles operation. | function | internal | [line 508](../../src/retrieval/use-cases/compose-operator.ts#L508) |
+| `sessionDiscoveryPolicies(steps: readonly SearchOperatorDefinitionStep[]): Map<string, SearchDiscoveryPolicy>` | Implements the session discovery policies operation. | function | internal | [line 518](../../src/retrieval/use-cases/compose-operator.ts#L518) |
+| `buildDeclarativeSearchOperator(catalog: SearchOperatorCatalog, source: SearchOperatorDefinition, definitionRevision: number): BuiltDeclarativeSearchOperator` | Validates a bounded operator graph and builds a candidate-only executable operator. | function | exported | [line 570](../../src/retrieval/use-cases/compose-operator.ts#L570) |
 ## `src/retrieval/use-cases/execute-operator.ts`
 
 | Symbol | Purpose | Kind | Visibility | Source |
@@ -1263,6 +1258,16 @@ _No top-level functions, classes, or class methods._
 | `RunSearchOperatorCatalog.snapshots(): SearchOperatorDefinitionSnapshot[]` | Returns detached normalized definitions for audit and later promotion. | method | public | [line 196](../../src/retrieval/use-cases/operator-registry.ts#L196) |
 | `RunSearchOperatorCatalog.remainingDefinitions(): number` | Reports the remaining bounded definition capacity for the current run. | method | public | [line 204](../../src/retrieval/use-cases/operator-registry.ts#L204) |
 | `renderSearchOperatorCatalog(entries: readonly SearchOperatorCatalogEntry[]): string` | Renders operator capabilities into the catalog shown to the agent. | function | exported | [line 209](../../src/retrieval/use-cases/operator-registry.ts#L209) |
+## `src/retrieval/use-cases/search.ts`
+
+| Symbol | Purpose | Kind | Visibility | Source |
+|---|---|---|---|---|
+| `normalizeStrings(values: readonly string[], label: string): string[]` | Validates, trims, and deduplicates a list of search values. | function | internal | [line 66](../../src/retrieval/use-cases/search.ts#L66) |
+| `searchQueryFingerprint(query: string): string` | Creates a canonical fingerprint used to detect repeated queries. | function | internal | [line 76](../../src/retrieval/use-cases/search.ts#L76) |
+| `operatorSourceQuotes(result: EvidenceOperatorResult \| undefined): Map<string, string[]>` | Implements the operator source quotes operation. | function | internal | [line 85](../../src/retrieval/use-cases/search.ts#L85) |
+| `inlineSearchDefinition(params: SearchMemoryParams, primaryOperator: string): SearchOperatorDefinition \| undefined` | Implements the inline search definition operation. | function | internal | [line 97](../../src/retrieval/use-cases/search.ts#L97) |
+| `assertHitsStayInScope(operator: string, scopeId: string, hits: readonly RetrievalHit[]): void` | Validates hits stay in scope and throws when invalid. | function | internal | [line 174](../../src/retrieval/use-cases/search.ts#L174) |
+| `createSearchMemory(options: SearchMemoryOptions): ( params: SearchMemoryParams, signal?: AbortSignal, ) => Promise<SearchMemoryResult>` | Creates the search orchestrator for normalization, routing, coverage, expansion, and hit merging. | function | exported | [line 188](../../src/retrieval/use-cases/search.ts#L188) |
 ## `src/tau-knowledge-bridge.ts`
 
 _No top-level functions, classes, or class methods._

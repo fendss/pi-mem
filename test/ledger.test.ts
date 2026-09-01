@@ -48,7 +48,7 @@ describe("MemoryLedger", () => {
 
     ledger.recordSearchHits([hit(first, 1), hit(searchOnly, 2)]);
     ledger.recordInspect(evidence([first, expanded]));
-    ledger.acceptSelection({
+    ledger.finish({
       status: "sufficient",
       citations: [
         { memoryId: first.memoryId, supports: "First source" },
@@ -99,9 +99,9 @@ describe("MemoryLedger", () => {
       evidenceSummary: "The source provides direct support.",
     };
 
-    expect(ledger.acceptSelection(selection)).toEqual(selection);
-    expect(ledger.acceptSelection(selection)).toEqual(selection);
-    expect(() => ledger.acceptSelection({
+    expect(ledger.finish(selection)).toEqual(selection);
+    expect(ledger.finish(selection)).toEqual(selection);
+    expect(() => ledger.finish({
       ...selection,
       evidenceSummary: "A different selection.",
     })).toThrow(/different evidence selection/u);
@@ -110,7 +110,7 @@ describe("MemoryLedger", () => {
   it("rejects sufficient selections without citations", () => {
     const ledger = new MemoryLedger("scope-1");
     expect(() =>
-      ledger.acceptSelection({
+      ledger.finish({
         status: "sufficient",
         citations: [],
         evidenceSummary: "No evidence.",
@@ -124,7 +124,7 @@ describe("MemoryLedger", () => {
     ledger.recordSearchHits([hit(candidate, 1)]);
 
     expect(() =>
-      ledger.acceptSelection({
+      ledger.finish({
         status: "sufficient",
         citations: [{ memoryId: "m1", supports: "Search preview" }],
         evidenceSummary: "Only a preview was seen.",
@@ -137,7 +137,7 @@ describe("MemoryLedger", () => {
     const candidate = record("m1", 0);
     ledger.recordInspect(evidence([candidate]));
 
-    expect(() => ledger.acceptSelection({
+    expect(() => ledger.finish({
       status: "sufficient",
       citations: [
         { memoryId: "m1", supports: "First statement." },
@@ -153,7 +153,7 @@ describe("MemoryLedger", () => {
     const second = record("m2", 1);
     ledger.recordInspect(evidence([first, second]));
 
-    expect(() => ledger.acceptSelection({
+    expect(() => ledger.finish({
       status: "sufficient",
       citations: [{ memoryId: "m1", supports: "First statement." }],
       evidenceSummary: "One read source was omitted.",
@@ -170,7 +170,7 @@ describe("MemoryLedger", () => {
       projectMemoryEvidence(source, ["x"], 8_192)
     ));
     expect(ledger.inspectedEvidence).toHaveLength(33);
-    expect(() => ledger.acceptSelection({
+    expect(() => ledger.finish({
       status: "sufficient",
       citations: sources.map((source) => ({
         memoryId: source.memoryId,
@@ -236,7 +236,7 @@ describe("MemoryLedger", () => {
   it("allows an insufficient selection with no citations", () => {
     const ledger = new MemoryLedger("scope-1");
     expect(
-      ledger.acceptSelection({
+      ledger.finish({
         status: "insufficient",
         citations: [],
         evidenceSummary: "No sufficient source memory was found.",
@@ -255,7 +255,7 @@ describe("MemoryLedger", () => {
     ledger.recordInspect(evidence([first, second]));
 
     expect(
-      ledger.acceptSelection({
+      ledger.finish({
         status: "sufficient",
         citations: [
           { memoryId: "m1", supports: "First item." },
@@ -283,7 +283,7 @@ describe("MemoryLedger", () => {
     ledger.recordInspect(evidence([first]));
 
     expect(() =>
-      ledger.acceptSelection({
+      ledger.finish({
         status: "sufficient",
         citations: [{ memoryId: "m1", supports: "First item." }],
         evidenceSummary: "An invalid inventory.",

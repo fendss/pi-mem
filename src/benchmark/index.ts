@@ -13,19 +13,15 @@ export type {
 } from "./model/evidence-benchmark-run.js";
 export {
   BENCHMARK_ANSWER_EXECUTION_CHECKLIST,
-  runBenchmarkAnswer,
+  returnedModelMatches,
   type BenchmarkAnswerPrompt,
   type BenchmarkAnswerResult,
-} from "./answer-from-evidence.js";
+} from "./model/answer.js";
+export { runBenchmarkAnswer } from "./adapters/pi/answer.js";
 export {
   evidenceBenchmarkDataPaths,
   type EvidenceBenchmarkDataPaths,
 } from "./data-paths.js";
-export {
-  mergePrivateBenchmarkQuestions,
-  readPrivateBenchmarkQuestions,
-  type PrivateBenchmarkQuestion,
-} from "./private-question-store.js";
 export { assertBenchmarkLabelFirewall } from "./label-firewall.js";
 export {
   TAU_KNOWLEDGE_IDENTITY,

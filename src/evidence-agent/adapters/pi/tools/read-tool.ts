@@ -6,7 +6,7 @@ import {
   projectMemoryEvidenceBatch,
   projectPassageEvidence,
   type MemoryEvidence,
-} from "../../../model/memory-evidence.js";
+} from "../../../model/source-evidence.js";
 import { ReadParameters } from "./schemas.js";
 import { candidateToolDetails } from "./candidate-details.js";
 

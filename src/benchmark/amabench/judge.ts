@@ -1,5 +1,5 @@
-import type { BenchmarkAnswerResult } from "../answer-from-evidence.js";
-import { runBenchmarkAnswer } from "../answer-from-evidence.js";
+import { runBenchmarkAnswer } from "../adapters/pi/answer.js";
+import type { BenchmarkAnswerResult } from "../model/answer.js";
 import type { PiModelRuntime } from "../../platform/pi/load-model-runtime.js";
 import type {
   AmaBenchCapability,

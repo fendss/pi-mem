@@ -1,6 +1,5 @@
 import { describe, expect, it } from "vitest";
 import {
-  PI_MEM_BASE_SYSTEM_PROMPT,
   PI_MEM_TOOL_SYSTEM_PROMPT,
   PIMEM_MINIMAL_SKILL_HASH,
   PIMEM_MINIMAL_SKILL_TEXT,
@@ -25,7 +24,7 @@ describe("runtime Skill experiment boundary", () => {
     expect(current).not.toMatch(
       /closed-slot|open-set|LongMemEval|benchmark|calendar-day/iu,
     );
-    expect(PI_MEM_BASE_SYSTEM_PROMPT).toBe(PI_MEM_TOOL_SYSTEM_PROMPT);
+    expect(none).toBe(PI_MEM_TOOL_SYSTEM_PROMPT);
     expect(PIMEM_SKILL_HASH).toMatch(/^[a-f0-9]{64}$/u);
     expect(PIMEM_MINIMAL_SKILL_HASH).toMatch(/^[a-f0-9]{64}$/u);
   });

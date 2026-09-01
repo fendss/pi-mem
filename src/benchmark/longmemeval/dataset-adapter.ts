@@ -1,5 +1,5 @@
 import { readFile } from "node:fs/promises";
-import type { BenchmarkAnswerPrompt } from "../answer-from-evidence.js";
+import type { BenchmarkAnswerPrompt } from "../model/answer.js";
 import type {
   MemoryRole,
   MemorySessionInput,

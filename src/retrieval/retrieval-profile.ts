@@ -1,4 +1,4 @@
-import type { RetrievalProfile } from "./model/retrieval.js";
+import type { RetrievalProfile } from "./model/search.js";
 
 export const DEFAULT_RETRIEVAL_PROFILE: RetrievalProfile = "fts5";
 

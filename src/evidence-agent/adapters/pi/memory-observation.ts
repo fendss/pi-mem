@@ -3,8 +3,8 @@ import {
   type SearchCoverageProgress,
 } from "../../../retrieval/index.js";
 import type { MemoryCandidate } from "../../model/evidence.js";
-import type { MemoryEvidence } from "../../model/memory-evidence.js";
-import type { MemoryLedger } from "../../model/memory-ledger.js";
+import type { MemoryEvidence } from "../../model/source-evidence.js";
+import type { MemoryLedger } from "../../model/ledger.js";
 import {
   compactPreview,
   queryCenteredEpisodicPreview,

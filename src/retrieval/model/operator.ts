@@ -3,7 +3,7 @@ import type {
   RetrievalHit,
   SearchOrder,
   SearchRequest,
-} from "./retrieval.js";
+} from "./search.js";
 import type { MemoryRole } from "../../memory/index.js";
 
 export type SearchOperatorCost = "low" | "medium" | "high";

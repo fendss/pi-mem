@@ -3,7 +3,7 @@ import type {
   EvidenceOperatorSearchContext,
   RetrievalHit,
   SearchRequest,
-} from "../model/retrieval.js";
+} from "../model/search.js";
 
 export interface SearchOperatorStore {
   search(

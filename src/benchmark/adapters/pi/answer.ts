@@ -1,46 +1,19 @@
 import { Agent } from "@earendil-works/pi-agent-core";
-import type { AssistantMessage } from "@earendil-works/pi-ai";
-import type { PiModelRuntime } from "../platform/pi/load-model-runtime.js";
+import type { PiModelRuntime } from "../../../platform/pi/load-model-runtime.js";
 import {
   assistantMessageText,
   lastAssistantMessage,
-  type ModelMetadata,
-} from "../evidence-agent/index.js";
+} from "../../../evidence-agent/index.js";
 import {
   assertNonEmpty,
   newRunId,
-  responseModelMatchesRequested,
   sha256,
-} from "../util.js";
-
-export interface BenchmarkAnswerPrompt {
-  adapterId: string;
-  promptVersion: string;
-  systemPrompt: string;
-  userPrompt: string;
-}
-
-export const BENCHMARK_ANSWER_EXECUTION_CHECKLIST = `<answer_execution>
-- Evaluate every requested item or answer option independently against the source memories before composing the final answer.
-- For lists and multi-select questions, include every supported item and no unsupported item.
-- For ordering questions, reconstruct local event transitions first, then obey the requested forward, backward, nearest-first, or farthest-first direction. Retrieval rank is not chronology.
-- Follow the caller's exact output syntax. Emit only the final answer and do not expose memory IDs, ranks, scores, or retrieval metadata.
-</answer_execution>`;
-
-export interface BenchmarkAnswerResult {
-  answer: string;
-  promptAdapter: string;
-  promptVersion: string;
-  promptHash: string;
-  model: ModelMetadata & {
-    responseModel: string;
-  };
-  usage: AssistantMessage["usage"];
-}
-
-export function returnedModelMatches(requested: string, returned: string): boolean {
-  return responseModelMatchesRequested(requested, returned);
-}
+} from "../../../util.js";
+import {
+  returnedModelMatches,
+  type BenchmarkAnswerPrompt,
+  type BenchmarkAnswerResult,
+} from "../../model/answer.js";
 
 /** Runs benchmark-owned answer synthesis after PiMem has finished retrieval. */
 function answerSystemPrompt(

@@ -7,7 +7,7 @@ import {
 import type {
   EvidenceOperatorSearchContext,
   SearchRequest,
-} from "../../model/retrieval.js";
+} from "../../model/search.js";
 import type { MemoryRecord } from "../../../memory/index.js";
 import { queryCenteredEpisodicPreview } from "../../../util.js";
 import {

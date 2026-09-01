@@ -7,7 +7,7 @@ import {
 import {
   returnedModelMatches,
   runBenchmarkAnswer,
-} from "../src/benchmark/answer-from-evidence.js";
+} from "../src/benchmark/index.js";
 import type { PiModelRuntime } from "../src/platform/pi/load-model-runtime.js";
 
 describe("benchmark answer boundary", () => {

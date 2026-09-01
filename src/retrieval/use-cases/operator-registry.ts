@@ -4,14 +4,14 @@ import type {
   SearchOperatorCatalogIdentity,
   SearchOperatorDefinition,
   SearchOperatorDefinitionSnapshot,
-} from "../model/search-operator.js";
+} from "../model/operator.js";
 import type {
   RuntimeSearchOperatorCatalog,
   SearchOperatorCatalog,
 } from "../ports/operator-catalog.js";
 import type { SearchOperator } from "../ports/search-operator.js";
 import { sha256 } from "../../util.js";
-import { buildDeclarativeSearchOperator } from "./build-declarative-operator.js";
+import { buildDeclarativeSearchOperator } from "./compose-operator.js";
 
 const OPERATOR_ID = /^[a-z][a-z0-9._-]{0,63}$/u;
 

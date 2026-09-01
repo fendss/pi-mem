@@ -3,7 +3,7 @@ import { join, resolve } from "node:path";
 import {
   runBenchmarkAnswer,
   type BenchmarkAnswerResult,
-} from "../../../benchmark/answer-from-evidence.js";
+} from "../../../benchmark/index.js";
 import type {
   BenchmarkFailureRecord,
   BenchmarkPrediction,
@@ -16,7 +16,7 @@ import {
   LONGMEMEVAL_ANSWER_PROMPT_VERSION,
   type LongMemEvalPrivateQuestion,
 } from "../../../benchmark/longmemeval/dataset-adapter.js";
-import { readPrivateQuestions } from "../../../benchmark/longmemeval/private-question-store.js";
+import { readScopeRecords } from "../private-records.js";
 import { createReadOnlyScopeNavigation } from "../../../composition/create-read-only-navigation.js";
 import { createRetrievalContext } from "../../../composition/create-retrieval-context.js";
 import {
@@ -25,8 +25,8 @@ import {
   PIMEM_SKILL_VERSION,
   MAX_EVIDENCE_CHARS_PER_MEMORY,
   MAX_READ_RESULT_CHARS,
-  MAX_SELECTED_EVIDENCE_COUNT,
-  MAX_SELECTED_EVIDENCE_CHARS,
+  MAX_INSPECTED_EVIDENCE_COUNT,
+  MAX_INSPECTED_EVIDENCE_CHARS,
   PiMemRunError,
   piMemSystemPrompt,
   runPiMem,
@@ -262,7 +262,9 @@ export async function benchmarkLongMemEval(
     : undefined;
   const skill = skillFor(parsed);
   const requestedIds = new Set(parsed.flags.get("question-id") ?? []);
-  const privateQuestions = await readPrivateQuestions(paths.privateQuestions);
+  const privateQuestions = await readScopeRecords<LongMemEvalPrivateQuestion>(
+    paths.privateQuestions,
+  );
   const selected =
     requestedIds.size === 0
       ? privateQuestions
@@ -374,8 +376,8 @@ export async function benchmarkLongMemEval(
       max_search_calls: maxSearchCalls ?? null,
       max_read_result_chars: MAX_READ_RESULT_CHARS,
       max_evidence_chars_per_memory: MAX_EVIDENCE_CHARS_PER_MEMORY,
-      max_selected_evidence_chars: MAX_SELECTED_EVIDENCE_CHARS,
-      max_citations: MAX_SELECTED_EVIDENCE_COUNT,
+      max_selected_evidence_chars: MAX_INSPECTED_EVIDENCE_CHARS,
+      max_citations: MAX_INSPECTED_EVIDENCE_COUNT,
     });
 
     const runOne = async (

@@ -13,7 +13,6 @@ import {
 } from "../../../benchmark/amabench/index.js";
 import {
   evidenceBenchmarkDataPaths,
-  readPrivateBenchmarkQuestions,
   type EvidenceBenchmarkId,
   type EvidenceBenchmarkPrediction,
   type EvidenceBenchmarkSuccessRecord,
@@ -39,6 +38,7 @@ import {
   writeAtomicJson,
   writeAtomicText,
 } from "../workflow-files.js";
+import { readQuestionRecords } from "../private-records.js";
 import { safePathSegment, sha256 } from "../../../util.js";
 
 const DEFAULT_STAGE_TIMEOUT_MS = 1_800_000;
@@ -307,10 +307,10 @@ export async function evaluateBenchmark(parsed: ParsedCommand): Promise<void> {
   }
 
   const [queries, labels] = await Promise.all([
-    readPrivateBenchmarkQuestions<AmaBenchPrivateQuery>(
+    readQuestionRecords<AmaBenchPrivateQuery>(
       dataPaths.privateQueries,
     ),
-    readPrivateBenchmarkQuestions<AmaBenchPrivateLabel>(
+    readQuestionRecords<AmaBenchPrivateLabel>(
       dataPaths.privateLabels,
     ),
   ]);

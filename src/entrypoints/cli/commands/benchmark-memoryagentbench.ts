@@ -9,7 +9,7 @@ import {
   readMemoryAgentBenchSessions,
   type MemoryAgentBenchQuestion,
 } from "../../../benchmark/memoryagentbench/dataset.js";
-import { runBenchmarkAnswer } from "../../../benchmark/answer-from-evidence.js";
+import { runBenchmarkAnswer } from "../../../benchmark/index.js";
 import { createRetrievalContext } from "../../../composition/create-retrieval-context.js";
 import { ingestMemorySessions } from "../../../memory/index.js";
 import {

@@ -237,7 +237,7 @@ describe("source-bound passage retrieval", () => {
     ledger.recordInspect([
       projectPassageEvidence(source, focusedCandidate!.passage!),
     ], undefined, [focusedCandidate!.candidateId]);
-    expect(() => ledger.acceptSelection({
+    expect(() => ledger.finish({
       status: "sufficient",
       citations: [{ memoryId: source.memoryId, supports: "answer topic" }],
       evidenceSummary: "The focused passage contains the answer topic.",

@@ -13,7 +13,7 @@ export type {
   SearchOrder,
   SearchQueryCoverageProgress,
   SearchRequest,
-} from "./model/retrieval.js";
+} from "./model/search.js";
 export {
   assertPassageMatchesRecord,
   memoryPassages,
@@ -52,7 +52,7 @@ export type {
   SearchOperatorGuide,
   SearchOperatorInput,
   SearchOperatorOutput,
-} from "./model/search-operator.js";
+} from "./model/operator.js";
 export type {
   EmbeddingIndexStatus,
   EmbeddingIndexStore,
@@ -70,7 +70,7 @@ export {
   type SearchMemoryBranch,
   type SearchMemoryParams,
   type SearchMemoryResult,
-} from "./search-memory.js";
+} from "./use-cases/search.js";
 export type {
   MemoryToolStore,
   SearchOperatorStore,
@@ -91,7 +91,7 @@ export {
 export {
   buildDeclarativeSearchOperator,
   type BuiltDeclarativeSearchOperator,
-} from "./use-cases/build-declarative-operator.js";
+} from "./use-cases/compose-operator.js";
 export {
   executeSearchOperator,
   type ExecutedSearchOperator,

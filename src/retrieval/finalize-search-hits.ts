@@ -1,4 +1,4 @@
-import type { RetrievalHit, SearchRequest } from "./model/retrieval.js";
+import type { RetrievalHit, SearchRequest } from "./model/search.js";
 
 function timestampValue(hit: RetrievalHit): string {
   return hit.record.timestamp ?? "9999-99-99T99:99:99";

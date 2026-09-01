@@ -1,7 +1,7 @@
 import type { MemoryRecord } from "../../memory/index.js";
 import { sha256 } from "../../util.js";
 import { tokenizeForPiMemHybrid } from "../ranking.js";
-import type { RetrievalHit } from "./retrieval.js";
+import type { RetrievalHit } from "./search.js";
 
 export const PASSAGE_VIEW_VERSION = "pimem-passage-v1";
 export const TARGET_PASSAGE_CHARS = 1_200;

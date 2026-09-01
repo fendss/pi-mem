@@ -1,10 +1,10 @@
-import type { MemoryEvidence } from "../../../model/memory-evidence.js";
+import type { MemoryEvidence } from "../../../model/source-evidence.js";
 import {
   temporalAnnotation,
   type EvidenceOperatorResult,
 } from "../../../../retrieval/index.js";
 import type { MemoryCandidate } from "../../../index.js";
-import type { MemoryLedger } from "../../../model/memory-ledger.js";
+import type { MemoryLedger } from "../../../model/ledger.js";
 
 function temporalSuffix(
   timestamp: string | undefined,

@@ -3,7 +3,7 @@ import {
   type AssistantMessage,
 } from "@earendil-works/pi-ai";
 import { describe, expect, it } from "vitest";
-import { runBenchmarkAnswer } from "../src/benchmark/answer-from-evidence.js";
+import { runBenchmarkAnswer } from "../src/benchmark/index.js";
 import { buildLongMemEvalAnswerPrompt } from "../src/benchmark/longmemeval/dataset-adapter.js";
 import { createSearchOperatorRegistry } from "../src/composition/create-search-operator-registry.js";
 import {

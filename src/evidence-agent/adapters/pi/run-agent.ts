@@ -1,28 +1,28 @@
 import { Agent } from "@earendil-works/pi-agent-core";
-import { createEphemeralMemoryContext } from "./adapters/pi/ephemeral-context.js";
+import { createEphemeralMemoryContext } from "./ephemeral-context.js";
 import {
   aggregateAssistantUsage,
   assistantMessageText,
   lastAssistantMessage,
   validateResponseModels,
-} from "./adapters/pi/assistant-messages.js";
+} from "./assistant-messages.js";
 import {
-  PI_MEM_BASE_SYSTEM_PROMPT,
+  PI_MEM_TOOL_SYSTEM_PROMPT,
   piMemSystemPrompt,
   type PiMemSkill,
-} from "./adapters/pi/retrieval-prompt.js";
-import { MemoryLedger } from "./model/memory-ledger.js";
-import type { PiModelRuntime } from "../platform/pi/load-model-runtime.js";
+} from "./retrieval-prompt.js";
+import { MemoryLedger } from "../../model/ledger.js";
+import type { PiModelRuntime } from "../../../platform/pi/load-model-runtime.js";
 import {
   createToolProtocolBeforeToolCall,
   createPiMemTools,
   type MemoryToolStore,
-} from "./adapters/pi/tools.js";
+} from "./tools.js";
 import type {
   ModelUsage,
   PiMemResult,
   ToolTraceEntry,
-} from "./model/evidence.js";
+} from "../../model/evidence.js";
 import type {
   RetrievalMetadata,
   RetrievalMetricsSnapshot,
@@ -30,10 +30,10 @@ import type {
   SearchOperatorDefinition,
   SearchOperatorDefinitionSnapshot,
   SearchOperatorRegistry,
-} from "../retrieval/index.js";
-import type { MemoryRecord } from "../memory/index.js";
-import { assertNonEmpty, newRunId } from "../util.js";
-import type { ReadOnlyNavigationBinding } from "./ports/read-only-navigation.js";
+} from "../../../retrieval/index.js";
+import type { MemoryRecord } from "../../../memory/index.js";
+import { assertNonEmpty, newRunId } from "../../../util.js";
+import type { ReadOnlyNavigationBinding } from "../../ports/read-only-navigation.js";
 
 export const PIMEM_HARNESS_VERSION = "pimem-evidence-transaction-v2";
 
@@ -242,7 +242,7 @@ export async function runPiMem(
     initialState: {
       systemPrompt: piMemSystemPrompt(
         options.skill ?? "pimem-v0",
-        options.systemPrompt ?? PI_MEM_BASE_SYSTEM_PROMPT,
+        options.systemPrompt ?? PI_MEM_TOOL_SYSTEM_PROMPT,
         operatorCatalog.list(),
       ),
       model: options.modelRuntime.model,

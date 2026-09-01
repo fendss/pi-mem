@@ -3,19 +3,19 @@ import type {
   RetrievalHit,
   SearchOrder,
   SearchRequest,
-} from "./model/retrieval.js";
+} from "../model/search.js";
 import type {
   SearchOperatorCombineMethod,
   SearchOperatorCompositionTrace,
   SearchOperatorDefinition,
   SearchOperatorInput,
-} from "./model/search-operator.js";
-import { projectSearchHitsToPassages } from "./model/passage.js";
-import type { MemoryRole } from "../memory/index.js";
-import { buildDeclarativeSearchOperator } from "./use-cases/build-declarative-operator.js";
-import { executeSearchOperator } from "./use-cases/execute-operator.js";
-import type { SearchOperatorCatalog } from "./ports/operator-catalog.js";
-import { queryCenteredEpisodicPreview } from "../util.js";
+} from "../model/operator.js";
+import { projectSearchHitsToPassages } from "../model/passage.js";
+import type { MemoryRole } from "../../memory/index.js";
+import { buildDeclarativeSearchOperator } from "./compose-operator.js";
+import { executeSearchOperator } from "./execute-operator.js";
+import type { SearchOperatorCatalog } from "../ports/operator-catalog.js";
+import { queryCenteredEpisodicPreview } from "../../util.js";
 
 export interface SearchMemoryBranch {
   operator: string;

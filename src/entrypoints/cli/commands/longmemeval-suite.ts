@@ -11,7 +11,8 @@ import {
 } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 import { dataPaths } from "../../../benchmark/longmemeval/data-paths.js";
-import { readPrivateQuestions } from "../../../benchmark/longmemeval/private-question-store.js";
+import type { LongMemEvalPrivateQuestion } from "../../../benchmark/longmemeval/dataset-adapter.js";
+import { readScopeRecords } from "../private-records.js";
 import type { BenchmarkSuccessRecord } from "../../../benchmark/model/benchmark-run.js";
 import { PIMEM_HARNESS_VERSION } from "../../../evidence-agent/index.js";
 import {
@@ -496,7 +497,7 @@ export async function longMemEvalSuite(parsed: ParsedCommand): Promise<void> {
   const judgeVariant =
     optionalFlag(parsed, "judge-variant") ?? `${PIMEM_HARNESS_VERSION}-full`;
   const configuredBaselines = baselineScores(parsed);
-  const questions = await readPrivateQuestions(
+  const questions = await readScopeRecords<LongMemEvalPrivateQuestion>(
     dataPaths(dataDir).privateQuestions,
   );
   const expected = questions.length;

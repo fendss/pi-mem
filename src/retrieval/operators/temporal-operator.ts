@@ -1,10 +1,10 @@
-import type { RetrievalHit } from "../model/retrieval.js";
+import type { RetrievalHit } from "../model/search.js";
 import { parseSourceTimestamp } from "../temporal-annotation.js";
 import type {
   EvidenceOperatorResult,
   EvidenceOperatorRow,
   SearchRequest,
-} from "../model/retrieval.js";
+} from "../model/search.js";
 
 const NUMBER_WORDS: Record<string, number> = {
   one: 1,

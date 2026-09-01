@@ -7,8 +7,8 @@ import type {
   RetrievalHit,
   SearchOrder,
   SearchRequest,
-} from "../../model/retrieval.js";
-import type { SearchOperatorInput } from "../../model/search-operator.js";
+} from "../../model/search.js";
+import type { SearchOperatorInput } from "../../model/operator.js";
 import type { SearchOperatorStore } from "../../ports/memory-tool-store.js";
 import type { SearchOperator } from "../../ports/search-operator.js";
 

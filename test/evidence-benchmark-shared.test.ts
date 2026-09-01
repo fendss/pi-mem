@@ -9,9 +9,11 @@ import { dirname, join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import {
   evidenceBenchmarkDataPaths,
-  mergePrivateBenchmarkQuestions,
-  readPrivateBenchmarkQuestions,
 } from "../src/benchmark/index.js";
+import {
+  mergeQuestionRecords,
+  readQuestionRecords,
+} from "../src/entrypoints/cli/private-records.js";
 import { ingestEvidenceBenchmark } from "../src/benchmark/composition/ingest-evidence-benchmark.js";
 import type { MemorySessionInput } from "../src/memory/index.js";
 import { MemoryStore } from "../src/platform/sqlite/pimem-store.js";
@@ -92,11 +94,11 @@ describe("shared private benchmark store", () => {
       question: "What happened first?",
     };
 
-    await mergePrivateBenchmarkQuestions(path, [first]);
-    await mergePrivateBenchmarkQuestions(path, [second, first]);
+    await mergeQuestionRecords(path, [first]);
+    await mergeQuestionRecords(path, [second, first]);
 
     expect(
-      await readPrivateBenchmarkQuestions<TestPrivateQuestion>(path),
+      await readQuestionRecords<TestPrivateQuestion>(path),
     ).toEqual([second, first]);
     const serialized = await readFile(path, "utf8");
     expect(serialized.trim().split("\n")).toHaveLength(2);
@@ -111,19 +113,19 @@ describe("shared private benchmark store", () => {
       scopeId: "scope-1",
       question: "Original private question",
     };
-    await mergePrivateBenchmarkQuestions(path, [original]);
+    await mergeQuestionRecords(path, [original]);
 
     const fileMode = (await stat(path)).mode & 0o777;
     const directoryMode = (await stat(dirname(path))).mode & 0o777;
     expect(fileMode).toBe(0o600);
     expect(directoryMode).toBe(0o700);
 
-    await expect(mergePrivateBenchmarkQuestions(path, [{
+    await expect(mergeQuestionRecords(path, [{
       ...original,
       question: "Mutated private question",
-    }])).rejects.toThrow(/changed for immutable ID question-1/u);
+    }])).rejects.toThrow(/changed for immutable question ID question-1/u);
     expect(
-      await readPrivateBenchmarkQuestions<TestPrivateQuestion>(path),
+      await readQuestionRecords<TestPrivateQuestion>(path),
     ).toEqual([original]);
     expect((await stat(path)).mode & 0o777).toBe(0o600);
   });

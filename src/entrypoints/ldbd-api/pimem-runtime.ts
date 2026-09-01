@@ -1,6 +1,6 @@
 import type { OnlineMemoryStore } from "../../memory/index.js";
 import { createRetrievalContext } from "../../composition/create-retrieval-context.js";
-import { runPiMem } from "../../evidence-agent/run-pimem.js";
+import { runPiMem } from "../../evidence-agent/index.js";
 import type { PiModelRuntime } from "../../platform/pi/load-model-runtime.js";
 import type { MemoryStore } from "../../platform/sqlite/pimem-store.js";
 import {

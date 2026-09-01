@@ -42,9 +42,6 @@ Tool contract:
 - finish reports status and a compact retrieval note. The harness automatically commits every exact source returned by read and generates citations, hashes, provenance, and answer-package formatting. Observe prior tool results, then call finish as the only tool call in that assistant turn.
 - The harness owns source identity, provenance, package limits, and formatting.`;
 
-/** Backward-compatible name for the shared mechanics-only system prompt. */
-export const PI_MEM_BASE_SYSTEM_PROMPT = PI_MEM_TOOL_SYSTEM_PROMPT;
-
 function activeSkillPrompt(skill: Exclude<PiMemSkill, "none">): string {
   const minimal = skill === "pimem-minimal";
   const name = minimal ? "pimem-retrieval-minimal" : "pimem-retrieval";

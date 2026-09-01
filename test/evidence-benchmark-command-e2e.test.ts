@@ -14,7 +14,6 @@ import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   evidenceBenchmarkDataPaths,
-  mergePrivateBenchmarkQuestions,
   type EvidenceBenchmarkPrediction,
 } from "../src/benchmark/index.js";
 import type {
@@ -25,6 +24,7 @@ import { ingestEvidenceBenchmark } from "../src/benchmark/composition/ingest-evi
 import { benchmarkEvidence } from "../src/entrypoints/cli/commands/benchmark-evidence.js";
 import { evaluateBenchmark } from "../src/entrypoints/cli/commands/evaluate-benchmark.js";
 import { parseCommand } from "../src/entrypoints/cli/parse-command.js";
+import { mergeQuestionRecords } from "../src/entrypoints/cli/private-records.js";
 import { safePathSegment } from "../src/util.js";
 
 type JsonObject = Record<string, unknown>;
@@ -368,7 +368,7 @@ describe("evidence benchmark command offline workflow", () => {
         }],
       }],
     });
-    await mergePrivateBenchmarkQuestions(paths.privateQueries, [query]);
+    await mergeQuestionRecords(paths.privateQueries, [query]);
     await writeFile(paths.datasetManifest, `${JSON.stringify({
       schema_version: 1,
       identity: {
@@ -499,7 +499,7 @@ describe("evidence benchmark command offline workflow", () => {
       expect(manifest.config.query_set_hash).toMatch(/^[a-f0-9]{64}$/u);
       expect(manifest.config.corpus_hash).toMatch(/^[a-f0-9]{64}$/u);
 
-      await mergePrivateBenchmarkQuestions(paths.privateLabels, [label]);
+      await mergeQuestionRecords(paths.privateLabels, [label]);
       await evaluateBenchmark(parseCommand([
         "evaluate-benchmark",
         "--benchmark", "ama-bench",

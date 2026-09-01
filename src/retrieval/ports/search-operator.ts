@@ -3,7 +3,7 @@ import type {
   SearchOperatorGuide,
   SearchOperatorInput,
   SearchOperatorOutput,
-} from "../model/search-operator.js";
+} from "../model/operator.js";
 
 /**
  * Stable search-operator SPI.

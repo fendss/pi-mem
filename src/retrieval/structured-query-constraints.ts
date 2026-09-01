@@ -1,4 +1,4 @@
-import type { RetrievalMetadataFilter } from "./model/retrieval.js";
+import type { RetrievalMetadataFilter } from "./model/search.js";
 
 const STRUCTURED_DATE = /(?<!\d)(\d{4})[-/](\d{1,2})[-/](\d{1,2})(?!\d)/gu;
 

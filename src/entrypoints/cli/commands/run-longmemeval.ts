@@ -1,7 +1,8 @@
-import { runBenchmarkAnswer } from "../../../benchmark/answer-from-evidence.js";
+import { runBenchmarkAnswer } from "../../../benchmark/index.js";
 import { dataPaths } from "../../../benchmark/longmemeval/data-paths.js";
 import { buildLongMemEvalAnswerPrompt } from "../../../benchmark/longmemeval/dataset-adapter.js";
-import { readPrivateQuestions } from "../../../benchmark/longmemeval/private-question-store.js";
+import type { LongMemEvalPrivateQuestion } from "../../../benchmark/longmemeval/dataset-adapter.js";
+import { readScopeRecords } from "../private-records.js";
 import { createReadOnlyScopeNavigation } from "../../../composition/create-read-only-navigation.js";
 import { runPiMem } from "../../../evidence-agent/index.js";
 import { createRetrievalContext } from "../../../composition/create-retrieval-context.js";
@@ -27,7 +28,9 @@ export async function runLongMemEval(parsed: ParsedCommand): Promise<void> {
   ]);
   const paths = dataPaths(requiredFlag(parsed, "data-dir"));
   const questionId = requiredFlag(parsed, "question-id");
-  const questions = await readPrivateQuestions(paths.privateQuestions);
+  const questions = await readScopeRecords<LongMemEvalPrivateQuestion>(
+    paths.privateQuestions,
+  );
   const question = questions.find((item) => item.questionId === questionId);
   if (!question) {
     throw new Error("Question is not present in the private runner map");

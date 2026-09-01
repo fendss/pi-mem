@@ -33,7 +33,7 @@ export function createFinishTool(
         evidenceSummary: params.evidenceSummary,
       };
       await options.beforeFinish?.(submitted);
-      const selection = options.ledger.acceptSelection(submitted);
+      const selection = options.ledger.finish(submitted);
       const details: FinishToolDetails = {
         kind: "finish",
         committedEvidenceRefs: evidence.map((source) =>

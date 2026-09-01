@@ -9,7 +9,7 @@ import {
   type SearchOperatorCompositionTrace,
 } from "../../../../retrieval/index.js";
 import type { MemoryCandidate } from "../../../index.js";
-import type { MemoryLedger } from "../../../model/memory-ledger.js";
+import type { MemoryLedger } from "../../../model/ledger.js";
 import type { CreatePiMemToolsOptions, PiMemTools, SearchToolDetails } from "./contracts.js";
 import { renderCandidates, renderEvidenceOperator } from "./render-tool-result.js";
 import { createSearchParameters, SearchMoreParameters } from "./schemas.js";
@@ -586,11 +586,4 @@ export function createSearchTools(
   };
 
   return { search, searchMore };
-}
-
-/** Backward-compatible constructor for callers that only expose initial search. */
-export function createSearchTool(
-  options: CreatePiMemToolsOptions,
-): PiMemTools["search"] {
-  return createSearchTools(options).search;
 }

@@ -1,5 +1,5 @@
 import type { MemoryRecord } from "../../memory/index.js";
-import type { SearchRequest } from "./retrieval.js";
+import type { SearchRequest } from "./search.js";
 
 export interface EmbeddingProfile {
   profileId: string;

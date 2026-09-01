@@ -2,7 +2,7 @@ import type {
   SearchOperatorExecutionContext,
   SearchOperatorInput,
   SearchOperatorOutput,
-} from "../model/search-operator.js";
+} from "../model/operator.js";
 import type { SearchOperatorCatalog } from "../ports/operator-catalog.js";
 
 export interface ExecutedSearchOperator extends SearchOperatorOutput {

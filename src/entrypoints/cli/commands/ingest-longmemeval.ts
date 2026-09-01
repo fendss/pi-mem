@@ -2,7 +2,7 @@ import { resolve } from "node:path";
 import { assertBenchmarkLabelFirewall } from "../../../benchmark/index.js";
 import { loadLongMemEvalS } from "../../../benchmark/longmemeval/dataset-adapter.js";
 import { dataPaths } from "../../../benchmark/longmemeval/data-paths.js";
-import { mergePrivateQuestions } from "../../../benchmark/longmemeval/private-question-store.js";
+import { mergeScopeRecords } from "../private-records.js";
 import { ingestMemorySessions } from "../../../memory/ingest-memory-sessions.js";
 import { runAsyncPool } from "../../../platform/concurrency/async-pool.js";
 import { AsyncRequestGate } from "../../../platform/concurrency/request-gate.js";
@@ -133,7 +133,7 @@ export async function ingestLongMemEval(parsed: ParsedCommand): Promise<void> {
         (index): index is EmbeddingIndexResult => index !== undefined,
       );
     }
-    await mergePrivateQuestions(paths.privateQuestions, selectedQuestions);
+    await mergeScopeRecords(paths.privateQuestions, selectedQuestions);
     process.stdout.write(
       `${JSON.stringify({
         command: "ingest-longmemeval",

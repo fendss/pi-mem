@@ -1,5 +1,5 @@
 import type { PiMemResult } from "../../evidence-agent/index.js";
-import type { BenchmarkAnswerPrompt } from "../answer-from-evidence.js";
+import type { BenchmarkAnswerPrompt } from "../model/answer.js";
 import type { MemoryAgentBenchQuestion, MemoryAgentBenchTask } from "./dataset.js";
 
 export const MEMORY_AGENT_BENCH_ANSWER_PROMPT_VERSION =

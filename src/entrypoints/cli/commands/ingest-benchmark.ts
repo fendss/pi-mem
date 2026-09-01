@@ -8,11 +8,8 @@ import {
 } from "../../../benchmark/amabench/index.js";
 import {
   evidenceBenchmarkDataPaths,
-  mergePrivateBenchmarkQuestions,
-  readPrivateBenchmarkQuestions,
   type EvidenceBenchmarkDataPaths,
   type EvidenceBenchmarkId,
-  type PrivateBenchmarkQuestion,
 } from "../../../benchmark/index.js";
 import { ingestEvidenceBenchmark } from "../../../benchmark/composition/ingest-evidence-benchmark.js";
 import type { MemorySessionInput } from "../../../memory/index.js";
@@ -25,6 +22,7 @@ import {
   type ParsedCommand,
 } from "../parse-command.js";
 import { readJsonFileIfPresent, writeAtomicJson } from "../workflow-files.js";
+import { mergeQuestionRecords, readQuestionRecords } from "../private-records.js";
 
 interface DatasetIdentity {
   benchmark: EvidenceBenchmarkId;
@@ -54,7 +52,7 @@ function benchmarkFor(parsed: ParsedCommand): EvidenceBenchmarkId {
   return benchmark;
 }
 
-function selectCases<T extends PrivateBenchmarkQuestion>(
+function selectCases<T extends { questionId: string }>(
   values: readonly T[],
   requestedIds: ReadonlySet<string>,
 ): T[] {
@@ -102,7 +100,7 @@ async function writeDatasetManifest(options: {
   dataPaths: EvidenceBenchmarkDataPaths;
   retrieval: unknown;
 }): Promise<number> {
-  const queries = await readPrivateBenchmarkQuestions(
+  const queries = await readQuestionRecords(
     options.dataPaths.privateQueries,
   );
   await writeAtomicJson(options.path, {
@@ -223,11 +221,11 @@ export async function ingestBenchmark(parsed: ParsedCommand): Promise<void> {
         );
       }
       await Promise.all([
-        mergePrivateBenchmarkQuestions(
+        mergeQuestionRecords(
           dataPaths.privateQueries,
           selection.queries,
         ),
-        mergePrivateBenchmarkQuestions(
+        mergeQuestionRecords(
           dataPaths.privateLabels,
           selection.labels,
         ),

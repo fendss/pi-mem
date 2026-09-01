@@ -1,9 +1,9 @@
-import type { RetrievalHit } from "../model/retrieval.js";
+import type { RetrievalHit } from "../model/search.js";
 import type {
   EvidenceOperatorResult,
   EvidenceOperatorRow,
   NumericValueKind,
-} from "../model/retrieval.js";
+} from "../model/search.js";
 
 export interface NumericFact {
   raw: string;

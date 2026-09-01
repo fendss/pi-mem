@@ -4,7 +4,6 @@ import { dirname, join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import {
   evidenceBenchmarkDataPaths,
-  mergePrivateBenchmarkQuestions,
   type EvidenceBenchmarkPrediction,
 } from "../src/benchmark/index.js";
 import type {
@@ -14,6 +13,7 @@ import type {
 import { evaluateBenchmark } from "../src/entrypoints/cli/commands/evaluate-benchmark.js";
 import { benchmarkQuerySetHash } from "../src/entrypoints/cli/evidence-benchmark-runtime.js";
 import { parseCommand } from "../src/entrypoints/cli/parse-command.js";
+import { mergeQuestionRecords } from "../src/entrypoints/cli/private-records.js";
 import { safePathSegment } from "../src/util.js";
 
 const temporaryDirectories: string[] = [];
@@ -165,8 +165,8 @@ async function provenanceFixture(
     : ANSWER_IDENTITY;
 
   await Promise.all([
-    mergePrivateBenchmarkQuestions(paths.privateQueries, [QUERY]),
-    mergePrivateBenchmarkQuestions(paths.privateLabels, [LABEL]),
+    mergeQuestionRecords(paths.privateQueries, [QUERY]),
+    mergeQuestionRecords(paths.privateLabels, [LABEL]),
     writeJson(paths.datasetManifest, {
       schema_version: 1,
       identity: DATASET_IDENTITY,

@@ -1,5 +1,5 @@
 import type { MemoryRole } from "../../memory/index.js";
-import type { MemoryEvidence } from "./memory-evidence.js";
+import type { MemoryEvidence } from "./source-evidence.js";
 import type { MemoryPassage } from "../../retrieval/index.js";
 import type {
   RetrievalMetadata,

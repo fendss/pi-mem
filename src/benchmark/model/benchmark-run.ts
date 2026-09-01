@@ -1,5 +1,5 @@
 import type { PiMemResult, PiMemRunError } from "../../evidence-agent/index.js";
-import type { BenchmarkAnswerResult } from "../answer-from-evidence.js";
+import type { BenchmarkAnswerResult } from "./answer.js";
 
 export interface BenchmarkPrediction {
   question_id: string;

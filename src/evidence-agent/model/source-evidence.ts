@@ -9,9 +9,6 @@ export const MAX_READ_RESULT_CHARS = 64 * 1024;
 export const MAX_EVIDENCE_CHARS_PER_MEMORY = 8 * 1024;
 export const MAX_INSPECTED_EVIDENCE_COUNT = 128;
 export const MAX_INSPECTED_EVIDENCE_CHARS = 1024 * 1024;
-/** Backward-compatible names for the automatically committed read-ledger bounds. */
-export const MAX_SELECTED_EVIDENCE_COUNT = MAX_INSPECTED_EVIDENCE_COUNT;
-export const MAX_SELECTED_EVIDENCE_CHARS = MAX_INSPECTED_EVIDENCE_CHARS;
 
 export interface EvidenceExcerpt {
   /** UTF-16 offsets into the immutable source MemoryRecord content. */

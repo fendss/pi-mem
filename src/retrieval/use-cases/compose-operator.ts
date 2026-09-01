@@ -2,7 +2,7 @@ import type {
   EvidenceOperatorResult,
   RetrievalHit,
   SearchRequest,
-} from "../model/retrieval.js";
+} from "../model/search.js";
 import type {
   CandidateSet,
   SearchOperatorCompositionStepTrace,
@@ -10,7 +10,7 @@ import type {
   SearchOperatorDefinitionStep,
   SearchOperatorInput,
   SearchOperatorOutput,
-} from "../model/search-operator.js";
+} from "../model/operator.js";
 import type { SearchOperator } from "../ports/search-operator.js";
 import { sha256 } from "../../util.js";
 import type { SearchOperatorCatalog } from "../ports/operator-catalog.js";

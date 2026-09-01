@@ -9,7 +9,7 @@ import type {
   RetrievalMetadata,
   RetrievalMetricsSnapshot,
   SearchRequest,
-} from "../model/retrieval.js";
+} from "../model/search.js";
 import type {
   EmbeddingIndexStore,
   StoredEmbeddingRecord,

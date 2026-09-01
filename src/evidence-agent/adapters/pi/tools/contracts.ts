@@ -18,7 +18,7 @@ import type {
   MemoryEvidence,
   PiMemSelection,
 } from "../../../index.js";
-import type { MemoryLedger } from "../../../model/memory-ledger.js";
+import type { MemoryLedger } from "../../../model/ledger.js";
 import type { MemoryObservation } from "../memory-observation.js";
 import {
   BashRoParameters,

@@ -8,7 +8,6 @@ import {
 } from "../../../benchmark/amabench/index.js";
 import {
   evidenceBenchmarkDataPaths,
-  readPrivateBenchmarkQuestions,
   runBenchmarkAnswer,
   type EvidenceBenchmarkFailureRecord,
   type EvidenceBenchmarkId,
@@ -23,8 +22,8 @@ import {
   PIMEM_SKILL_VERSION,
   MAX_EVIDENCE_CHARS_PER_MEMORY,
   MAX_READ_RESULT_CHARS,
-  MAX_SELECTED_EVIDENCE_COUNT,
-  MAX_SELECTED_EVIDENCE_CHARS,
+  MAX_INSPECTED_EVIDENCE_COUNT,
+  MAX_INSPECTED_EVIDENCE_CHARS,
   PiMemRunError,
   piMemSystemPrompt,
   runPiMem,
@@ -60,6 +59,7 @@ import {
   readJsonFileIfPresent,
   writeAtomicJson,
 } from "../workflow-files.js";
+import { readQuestionRecords } from "../private-records.js";
 
 const DEFAULT_STAGE_TIMEOUT_MS = 1_800_000;
 const MAX_STAGE_TIMEOUT_MS = 21_600_000;
@@ -288,7 +288,7 @@ export async function benchmarkEvidence(parsed: ParsedCommand): Promise<void> {
   if (dataset.identity.benchmark !== benchmark) {
     throw new Error("Data directory benchmark does not match --benchmark");
   }
-  const storedQueries = await readPrivateBenchmarkQuestions<AmaBenchPrivateQuery>(
+  const storedQueries = await readQuestionRecords<AmaBenchPrivateQuery>(
     dataPaths.privateQueries,
   );
   const selected = selectQueries(
@@ -420,8 +420,8 @@ export async function benchmarkEvidence(parsed: ParsedCommand): Promise<void> {
         max_tool_calls: MAX_TOOL_CALLS,
         max_read_result_chars: MAX_READ_RESULT_CHARS,
         max_evidence_chars_per_memory: MAX_EVIDENCE_CHARS_PER_MEMORY,
-        max_selected_evidence_chars: MAX_SELECTED_EVIDENCE_CHARS,
-        max_citations: MAX_SELECTED_EVIDENCE_COUNT,
+        max_selected_evidence_chars: MAX_INSPECTED_EVIDENCE_CHARS,
+        max_citations: MAX_INSPECTED_EVIDENCE_COUNT,
       },
       harness_version: PIMEM_HARNESS_VERSION,
       search_operator_catalog: {

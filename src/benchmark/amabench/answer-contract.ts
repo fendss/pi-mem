@@ -1,5 +1,5 @@
 import type { PiMemResult } from "../../evidence-agent/index.js";
-import type { BenchmarkAnswerPrompt } from "../answer-from-evidence.js";
+import type { BenchmarkAnswerPrompt } from "../model/answer.js";
 import type { AmaBenchPrivateQuery } from "./dataset-adapter.js";
 
 export const AMA_BENCH_ANSWER_PROMPT_VERSION =

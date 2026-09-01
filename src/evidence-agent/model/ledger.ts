@@ -15,7 +15,7 @@ import {
   MAX_INSPECTED_EVIDENCE_CHARS,
   mergeMemoryEvidence,
   type MemoryEvidence,
-} from "./memory-evidence.js";
+} from "./source-evidence.js";
 import { compactPreview } from "../../util.js";
 
 function cloneCandidate(candidate: MemoryCandidate): MemoryCandidate {
@@ -350,7 +350,7 @@ export class MemoryLedger {
     return this.selectCandidates(records.map((record) => record.memoryId));
   }
 
-  acceptSelection(input: PiMemSelection): PiMemSelection {
+  finish(input: PiMemSelection): PiMemSelection {
     const evidenceSummary = input.evidenceSummary.trim();
     if (input.status === "sufficient" && input.citations.length === 0) {
       throw new Error("A sufficient selection must cite at least one memory");

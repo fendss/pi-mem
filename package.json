@@ -1,6 +1,6 @@
 {
   "name": "pi-mem",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "private": true,
   "description": "A minimal, source-grounded memory agent runtime built on Pi.",
   "repository": {
@@ -22,8 +22,9 @@
     "docs:catalog:check": "node scripts/generate-code-catalog.mjs --check",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
+    "test:python:memoryagentbench": "python3 -B -m unittest discover -s integrations/memoryagentbench/tests -p 'test_*.py'",
     "test:python:memoryarena-public": "python3 -B -m unittest discover -s integrations/memoryarena-public/tests -p 'test_*.py'",
-    "test:python": "python3 -m unittest scripts/test_longmemeval_frozen_eval.py scripts/test_tau_knowledge_provider_health.py scripts/test_tau_knowledge_result_integrity.py && npm run test:python:memoryarena-public && python3 -m py_compile integrations/tau-knowledge/pimem_tau_agent.py integrations/tau-knowledge/provider_health.py integrations/tau-knowledge/result_integrity.py integrations/tau-knowledge/run_tau_knowledge.py integrations/memoryarena-public/bootstrap.py && python3 -m compileall -q integrations/memoryarena-public/runtime integrations/memoryarena-public/upstream",
+    "test:python": "python3 -m unittest scripts/test_longmemeval_frozen_eval.py scripts/test_tau_knowledge_provider_health.py scripts/test_tau_knowledge_result_integrity.py && npm run test:python:memoryagentbench && npm run test:python:memoryarena-public && python3 -m py_compile integrations/tau-knowledge/pimem_tau_agent.py integrations/tau-knowledge/provider_health.py integrations/tau-knowledge/result_integrity.py integrations/tau-knowledge/run_tau_knowledge.py integrations/memoryarena-public/bootstrap.py && python3 -m compileall -q integrations/memoryagentbench integrations/memoryarena-public/runtime integrations/memoryarena-public/upstream",
     "check": "npm run docs:catalog:check && npm run typecheck && npm test -- --maxWorkers=4 && npm run test:python && npm run build",
     "cli": "node --disable-warning=ExperimentalWarning dist/cli.js",
     "serve:ldbd": "node --disable-warning=ExperimentalWarning dist/entrypoints/ldbd-api/main.js",
