@@ -1142,9 +1142,9 @@ _No top-level functions, classes, or class methods._
 | `QdrantClient.getCollection(name: string, signal?: AbortSignal): Promise<QdrantCollectionInfo \| undefined>` | Returns collection. | method | public | [line 295](../../src/retrieval/adapters/qdrant/client.ts#L295) |
 | `QdrantClient.ensurePayloadIndex(collection: string, fieldName: string, fieldSchema: Record<string, unknown>, signal?: AbortSignal): Promise<void>` | Implements the ensure payload index operation. | method | private | [line 310](../../src/retrieval/adapters/qdrant/client.ts#L310) |
 | `QdrantClient.ensureCollection(spec: QdrantCollectionSpec, signal?: AbortSignal): Promise<void>` | Implements the ensure collection operation. | method | public | [line 326](../../src/retrieval/adapters/qdrant/client.ts#L326) |
-| `QdrantClient.upsert(collection: string, dimensions: number, points: readonly QdrantVectorPoint[], signal?: AbortSignal): Promise<void>` | Implements the upsert operation. | method | public | [line 379](../../src/retrieval/adapters/qdrant/client.ts#L379) |
-| `QdrantClient.count(request: QdrantCountRequest): Promise<number>` | Implements the count operation. | method | public | [line 418](../../src/retrieval/adapters/qdrant/client.ts#L418) |
-| `QdrantClient.search(request: QdrantSearchRequest): Promise<QdrantSearchHit[]>` | Performs a search. | method | public | [line 442](../../src/retrieval/adapters/qdrant/client.ts#L442) |
+| `QdrantClient.upsert(collection: string, dimensions: number, points: readonly QdrantVectorPoint[], signal?: AbortSignal): Promise<void>` | Implements the upsert operation. | method | public | [line 387](../../src/retrieval/adapters/qdrant/client.ts#L387) |
+| `QdrantClient.count(request: QdrantCountRequest): Promise<number>` | Implements the count operation. | method | public | [line 426](../../src/retrieval/adapters/qdrant/client.ts#L426) |
+| `QdrantClient.search(request: QdrantSearchRequest): Promise<QdrantSearchHit[]>` | Performs a search. | method | public | [line 450](../../src/retrieval/adapters/qdrant/client.ts#L450) |
 ## `src/retrieval/adapters/qdrant/dense-retriever.ts`
 
 | Symbol | Purpose | Kind | Visibility | Source |

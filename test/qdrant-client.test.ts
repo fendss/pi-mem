@@ -77,6 +77,51 @@ describe("Qdrant HTTP adapter", () => {
     });
   });
 
+  it("treats a concurrent collection-create conflict as an idempotent race", async () => {
+    let collectionReads = 0;
+    const fetchImpl = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
+      const path = new URL(String(input)).pathname + new URL(String(input)).search;
+      if (path === "/collections/pimem_vectors_v1" && init?.method === "GET") {
+        collectionReads += 1;
+        if (collectionReads === 1) return response(404, { status: "not found" });
+        return response(200, {
+          result: {
+            status: "green",
+            optimizer_status: "ok",
+            segments_count: 0,
+            points_count: 0,
+            indexed_vectors_count: 0,
+            config: {
+              params: { vectors: { size: 2, distance: "Cosine" } },
+              hnsw_config: {
+                m: 32,
+                ef_construct: 200,
+                full_scan_threshold: 1_000,
+              },
+              optimizer_config: { indexing_threshold: 10_000 },
+            },
+          },
+        });
+      }
+      if (path === "/collections/pimem_vectors_v1" && init?.method === "PUT") {
+        return response(409, { status: { error: "collection already exists" } });
+      }
+      return response(200, { status: "ok", result: true });
+    });
+    const client = new QdrantClient({
+      baseUrl: "http://qdrant.internal:6333",
+      fetchImpl,
+    });
+
+    await expect(client.ensureCollection({
+      name: "pimem_vectors_v1",
+      dimensions: 2,
+      indexingThresholdKb: 10_000,
+      hnsw: { m: 32, efConstruct: 200, fullScanThresholdKb: 1_000 },
+    })).resolves.toBeUndefined();
+    expect(collectionReads).toBe(2);
+  });
+
   it("sends mandatory generation, scope, profile, and metadata filters", async () => {
     const fetchImpl = vi.fn(async (_url: string | URL | Request, init?: RequestInit) => {
       expect(new Headers(init?.headers).get("api-key")).toBe("secret-a");

@@ -335,19 +335,27 @@ export class QdrantClient {
     positiveInteger(spec.hnsw.fullScanThresholdKb, "Qdrant HNSW full_scan_threshold");
     let info = await this.getCollection(spec.name, signal);
     if (info === undefined) {
-      await this.request("PUT", `/collections/${encodeURIComponent(spec.name)}`, {
-        body: {
-          vectors: { size: spec.dimensions, distance: "Cosine" },
-          hnsw_config: {
-            m: spec.hnsw.m,
-            ef_construct: spec.hnsw.efConstruct,
-            full_scan_threshold: spec.hnsw.fullScanThresholdKb,
+      try {
+        await this.request("PUT", `/collections/${encodeURIComponent(spec.name)}`, {
+          body: {
+            vectors: { size: spec.dimensions, distance: "Cosine" },
+            hnsw_config: {
+              m: spec.hnsw.m,
+              ef_construct: spec.hnsw.efConstruct,
+              full_scan_threshold: spec.hnsw.fullScanThresholdKb,
+            },
+            optimizers_config: { indexing_threshold: spec.indexingThresholdKb },
+            on_disk_payload: false,
           },
-          optimizers_config: { indexing_threshold: spec.indexingThresholdKb },
-          on_disk_payload: false,
-        },
-        ...(signal === undefined ? {} : { signal }),
-      });
+          ...(signal === undefined ? {} : { signal }),
+        });
+      } catch (error) {
+        // Another publisher can win the create race. The schema check below
+        // still fails closed if that collection is not the one we requested.
+        if (!(error instanceof QdrantHttpError) || error.status !== 409) {
+          throw error;
+        }
+      }
       info = await this.getCollection(spec.name, signal);
     }
     if (info === undefined) {
