@@ -8,7 +8,11 @@ import type {
   EmbeddingRequestOptions,
   DenseRetriever,
 } from "../src/retrieval/index.js";
-import { embeddingProfile } from "../src/retrieval/index.js";
+import {
+  embeddingProfile,
+  FailOpenDenseRetriever,
+  SqliteExactDenseRetriever,
+} from "../src/retrieval/index.js";
 import { HybridMemoryStore } from "../src/retrieval/operators/hybrid-search.js";
 import { ingestMemorySessions } from "../src/memory/index.js";
 import { MemoryStore } from "../src/platform/sqlite/pimem-store.js";
@@ -173,7 +177,7 @@ afterEach(async () => {
 });
 
 describe("PiMem hybrid search", () => {
-  it("accepts a Qdrant dense adapter without changing the Agent hit schema", async () => {
+  it("fuses SQLite exact and Qdrant expansion without changing the Agent hit schema", async () => {
     const { raw, embedder } = await createStore();
     try {
       const record = raw.getRecords("scope-1", ["m4"])[0]!;
@@ -183,7 +187,17 @@ describe("PiMem hybrid search", () => {
         vectorCollection: "pimem_vectors_v1",
         search: () => Promise.resolve([[{ record, score: 0.99, rank: 1 }]]),
       };
-      const hybrid = new HybridMemoryStore(raw, embedder, dense);
+      const exact: DenseRetriever = {
+        retrievalProfile: "pimem-hybrid",
+        search: () => Promise.resolve([[
+          {
+            record: raw.getRecords("scope-1", ["m1"])[0]!,
+            score: 1,
+            rank: 1,
+          },
+        ]]),
+      };
+      const hybrid = new HybridMemoryStore(raw, embedder, [exact, dense]);
       expect(hybrid.getRetrievalMetadata()).toMatchObject({
         retrievalProfile: "pimem-hybrid-qdrant-hnsw-v1",
         vectorGenerationId: "generation-a",
@@ -191,12 +205,36 @@ describe("PiMem hybrid search", () => {
       });
       const hits = await hybrid.search("scope-1", {
         queries: ["no lexical match"],
-        limit: 1,
+        limit: 2,
       });
-      expect(hits[0]).toMatchObject({
-        retriever: "pimem-hybrid",
-        record: { memoryId: "m4" },
+      expect(hits.map((hit) => hit.record.memoryId)).toEqual(["m1", "m4"]);
+      expect(hits.every((hit) => hit.retriever === "pimem-hybrid")).toBe(true);
+    } finally {
+      raw.close();
+    }
+  });
+
+  it("preserves SQLite hybrid results when Qdrant expansion fails", async () => {
+    const { raw, embedder } = await createStore();
+    try {
+      const baseline = new HybridMemoryStore(raw, embedder);
+      const unavailable = new FailOpenDenseRetriever({
+        retrievalProfile: "pimem-hybrid-qdrant-hnsw-v1",
+        vectorGenerationId: "generation-a",
+        vectorCollection: "pimem_vectors_v1",
+        search: () => Promise.reject(new Error("Qdrant unavailable")),
       });
+      const fusion = new HybridMemoryStore(raw, embedder, [
+        new SqliteExactDenseRetriever(raw),
+        unavailable,
+      ]);
+      const request = { queries: ["needle"], limit: 4 };
+
+      const [baselineHits, fusionHits] = await Promise.all([
+        baseline.search("scope-1", request),
+        fusion.search("scope-1", request),
+      ]);
+      expect(fusionHits).toEqual(baselineHits);
     } finally {
       raw.close();
     }

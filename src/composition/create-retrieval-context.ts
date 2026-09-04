@@ -10,6 +10,10 @@ import type { PiMemRuntimeStore } from "../evidence-agent/index.js";
 import type { MemoryStore } from "../platform/sqlite/pimem-store.js";
 import { createSearchOperatorRegistry } from "./create-search-operator-registry.js";
 import { createQdrantDenseRetriever } from "./qdrant-retrieval.js";
+import {
+  FailOpenDenseRetriever,
+  SqliteExactDenseRetriever,
+} from "../retrieval/index.js";
 
 export interface RetrievalContext {
   store: PiMemRuntimeStore;
@@ -33,10 +37,16 @@ export function createRetrievalContext(
   }
   const selectedEmbedder =
     embedder ?? OpenAICompatibleEmbedder.fromEnvironment(environment);
-  const denseRetriever = profile === "pimem-hybrid-qdrant-hnsw-v1"
+  const qdrant = profile === "pimem-hybrid-qdrant-hnsw-v1"
     ? createQdrantDenseRetriever(rawStore, selectedEmbedder, environment)
     : undefined;
-  const store = new HybridMemoryStore(rawStore, selectedEmbedder, denseRetriever);
+  const denseRetrievers = qdrant === undefined
+    ? undefined
+    : [
+        new SqliteExactDenseRetriever(rawStore),
+        new FailOpenDenseRetriever(qdrant),
+      ];
+  const store = new HybridMemoryStore(rawStore, selectedEmbedder, denseRetrievers);
   return {
     store,
     metadata: store.getRetrievalMetadata(),

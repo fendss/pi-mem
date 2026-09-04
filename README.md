@@ -108,10 +108,11 @@ pimem-hybrid:
   -> RRF(dense, FTS5, k=60) -> candidates
 
 pimem-hybrid-qdrant-hnsw-v1:
-  query embedding -> generation/scope/session/role/time-filtered Qdrant HNSW
-  -> hydrate and revalidate immutable provenance in SQLite
+  query embedding -> SQLite exact dense baseline
+  + generation/scope/session/role/time-filtered Qdrant HNSW expansion
   + SQLite FTS5 candidates
-  -> RRF(dense, FTS5, k=60) -> candidates
+  -> hydrate and revalidate immutable provenance in SQLite
+  -> RRF(exact dense, HNSW dense, FTS5, k=60) -> candidates
 ```
 
 The Agent routes one `search` call with only `operator`, `queries`, and optional
@@ -228,7 +229,9 @@ upserts bounded concurrent batches, verifies total and per-scope counts, and
 only then marks the generation ready. Search refuses incomplete generations;
 every Qdrant result is hydrated from SQLite and checked for point identity,
 scope, content hash, session, role, and timestamp before it can become a
-Candidate. A generation is immutable after sealing; use a new
+Candidate. Qdrant is a fail-open expansion lane: if it is unavailable, SQLite
+exact dense and FTS5 retain their original behavior. A generation is immutable
+after sealing; use a new
 `PIMEM_VECTOR_GENERATION_ID` when the corpus or embedding profile changes.
 Indexes produced by the earlier experimental Qdrant branch use a different
 point-identity schema and must likewise be republished under a new generation.

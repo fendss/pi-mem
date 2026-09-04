@@ -5,6 +5,8 @@
 - Added the `pimem-hybrid-qdrant-hnsw-v1` retrieval profile behind the existing
   dense-retriever port while retaining SQLite exact dense search as the
   regression baseline.
+- Qdrant contributes a fail-open expansion lane to three-way RRF with SQLite
+  exact dense and FTS5 instead of replacing the exact dense lane.
 - Added resumable, fingerprinted vector generations with a durable SQLite
   outbox, bounded concurrent Qdrant synchronization, index/count verification,
   and fail-closed scope coverage checks.

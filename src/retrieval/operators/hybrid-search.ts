@@ -13,7 +13,10 @@ import type {
 import type {
   EmbeddingIndexStore,
 } from "../model/embedding.js";
-import type { DenseRetriever } from "../ports/dense-retriever.js";
+import type {
+  DenseRetriever,
+  DenseSearchHit,
+} from "../ports/dense-retriever.js";
 import { SqliteExactDenseRetriever } from "../adapters/sqlite/exact-dense-retriever.js";
 import type { MemoryRecord } from "../../memory/index.js";
 import { queryCenteredEpisodicPreview } from "../../util.js";
@@ -108,6 +111,7 @@ export class HybridMemoryStore {
   readonly rawStore: HybridSearchStore;
   readonly embedder: Embedder;
   readonly denseRetriever: DenseRetriever;
+  readonly denseRetrievers: readonly DenseRetriever[];
 
   private denseCandidateCount = 0;
   private rerankCandidateCount = 0;
@@ -115,11 +119,19 @@ export class HybridMemoryStore {
   constructor(
     rawStore: HybridSearchStore,
     embedder: Embedder,
-    denseRetriever?: DenseRetriever,
+    denseRetriever?: DenseRetriever | readonly DenseRetriever[],
   ) {
     this.rawStore = rawStore;
     this.embedder = embedder;
-    this.denseRetriever = denseRetriever ?? new SqliteExactDenseRetriever(rawStore);
+    this.denseRetrievers = denseRetriever === undefined
+      ? [new SqliteExactDenseRetriever(rawStore)]
+      : Array.isArray(denseRetriever)
+      ? [...denseRetriever]
+      : [denseRetriever];
+    if (this.denseRetrievers.length === 0) {
+      throw new Error("Hybrid search requires at least one dense retriever");
+    }
+    this.denseRetriever = this.denseRetrievers[this.denseRetrievers.length - 1]!;
   }
 
   getRetrievalMetadata(): RetrievalMetadata {
@@ -181,7 +193,7 @@ export class HybridMemoryStore {
     const merged = new Map<string, AggregatedHybridHit>();
     const queryRankings: RankedHybridHit[][] = [];
     const metadataRouteRankings: RankedHybridHit[][] = [];
-    const baseDenseRankings = this.denseRetriever.search({
+    const denseRequest = {
       scopeId,
       profile,
       queryVectors,
@@ -195,12 +207,16 @@ export class HybridMemoryStore {
         ...(request.before === undefined ? {} : { before: request.before }),
       },
       ...(signal === undefined ? {} : { signal }),
-    }).then((rankings) => {
-      if (rankings.length !== request.queries.length) {
-        throw new Error("Dense ranking count does not match query count");
-      }
-      return rankings;
-    });
+    };
+    const baseDenseRankings = Promise.all(this.denseRetrievers.map(
+      async (retriever) => {
+        const rankings = await retriever.search(denseRequest);
+        if (rankings.length !== request.queries.length) {
+          throw new Error("Dense ranking count does not match query count");
+        }
+        return rankings;
+      },
+    ));
     const rankedQueries = await Promise.all(request.queries.map(async (
       query,
       queryIndex,
@@ -213,20 +229,23 @@ export class HybridMemoryStore {
       } = request;
       const rankRoute = async (
         routeRequest: SearchRequest,
-        denseCandidatesPromise: Promise<
-          Awaited<ReturnType<DenseRetriever["search"]>>[number]
-        >,
+        denseCandidatesPromise: Promise<readonly DenseSearchHit[][]>,
         metadataFilter?: RetrievalMetadataFilter,
       ): Promise<RankedHybridHit[]> => {
-        const [denseCandidates, lexicalHits] = await Promise.all([
+        const [denseCandidateGroups, lexicalHits] = await Promise.all([
           denseCandidatesPromise,
           Promise.resolve(this.rawStore.search(scopeId, routeRequest)),
         ]);
-        this.denseCandidateCount += denseCandidates.length;
+        this.denseCandidateCount += denseCandidateGroups.reduce(
+          (count, candidates) => count + candidates.length,
+          0,
+        );
 
         const union = new Map<string, { record: MemoryRecord }>();
-        for (const candidate of denseCandidates) {
-          union.set(candidate.record.memoryId, { record: candidate.record });
+        for (const candidates of denseCandidateGroups) {
+          for (const candidate of candidates) {
+            union.set(candidate.record.memoryId, { record: candidate.record });
+          }
         }
         for (const hit of lexicalHits) {
           if (!union.has(hit.record.memoryId)) {
@@ -238,20 +257,29 @@ export class HybridMemoryStore {
         const indexes = new Map(
           candidates.map((candidate, index) => [candidate.record.memoryId, index]),
         );
-        const denseRanking = denseCandidates.map((candidate) =>
-          indexes.get(candidate.record.memoryId)!
+        const denseRankings = denseCandidateGroups.map((candidates) =>
+          candidates.map((candidate) => indexes.get(candidate.record.memoryId)!)
         );
         const lexicalRanking = lexicalHits.map((hit) =>
           indexes.get(hit.record.memoryId)!
         );
         const fused = reciprocalRankFusion(
-          [denseRanking, lexicalRanking],
+          [...denseRankings, lexicalRanking],
           60,
           candidates.length,
         );
-        const denseRanks = new Map(
-          denseRanking.map((candidateIndex, index) => [candidateIndex, index + 1]),
-        );
+        const denseRanks = new Map<number, number>();
+        for (const ranking of denseRankings) {
+          ranking.forEach((candidateIndex, index) => {
+            denseRanks.set(
+              candidateIndex,
+              Math.min(
+                denseRanks.get(candidateIndex) ?? Number.MAX_SAFE_INTEGER,
+                index + 1,
+              ),
+            );
+          });
+        }
         const lexicalRanks = new Map(
           lexicalRanking.map((candidateIndex, index) => [candidateIndex, index + 1]),
         );
@@ -282,7 +310,9 @@ export class HybridMemoryStore {
           limit: Math.min(100, headroom),
           order: "relevance",
         },
-        baseDenseRankings.then((rankings) => rankings[queryIndex]!),
+        baseDenseRankings.then((rankings) =>
+          rankings.map((ranking) => ranking[queryIndex]!)
+        ),
       );
       const dateFilter = request.after === undefined && request.before === undefined
         ? explicitQueryDateFilter(query)
@@ -298,23 +328,26 @@ export class HybridMemoryStore {
               after: dateFilter.after,
               before: dateFilter.before,
             },
-            this.denseRetriever.search({
-              scopeId,
-              profile,
-              queryVectors: [queryVector],
-              limit: headroom,
-              filters: {
-                ...(request.sessionIds === undefined
-                  ? {}
-                  : { sessionIds: request.sessionIds }),
-                ...(request.roles === undefined
-                  ? {}
-                  : { roles: request.roles }),
-                after: dateFilter.after,
-                before: dateFilter.before,
-              },
-              ...(signal === undefined ? {} : { signal }),
-            }).then((rankings) => rankings[0] ?? []),
+            Promise.all(this.denseRetrievers.map(async (retriever) => {
+              const rankings = await retriever.search({
+                scopeId,
+                profile,
+                queryVectors: [queryVector],
+                limit: headroom,
+                filters: {
+                  ...(request.sessionIds === undefined
+                    ? {}
+                    : { sessionIds: request.sessionIds }),
+                  ...(request.roles === undefined
+                    ? {}
+                    : { roles: request.roles }),
+                  after: dateFilter.after,
+                  before: dateFilter.before,
+                },
+                ...(signal === undefined ? {} : { signal }),
+              });
+              return rankings[0] ?? [];
+            })),
             dateFilter,
           );
       const [baseRanking, dateRanking] = await Promise.all([
