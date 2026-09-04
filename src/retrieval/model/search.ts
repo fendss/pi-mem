@@ -144,13 +144,18 @@ export interface SearchCoverageProgress {
   queries: SearchQueryCoverageProgress[];
 }
 
-export type RetrievalProfile = "fts5" | "pimem-hybrid";
+export type RetrievalProfile =
+  | "fts5"
+  | "pimem-hybrid"
+  | "pimem-hybrid-qdrant-hnsw-v1";
 
 export interface RetrievalMetadata {
   retrievalProfile: RetrievalProfile;
   embeddingProfileId?: string;
   embeddingModel?: string;
   embeddingDimensions?: number;
+  vectorGenerationId?: string;
+  vectorCollection?: string;
 }
 
 export interface RetrievalMetricsSnapshot {

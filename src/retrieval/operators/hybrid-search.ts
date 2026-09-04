@@ -12,8 +12,9 @@ import type {
 } from "../model/search.js";
 import type {
   EmbeddingIndexStore,
-  StoredEmbeddingRecord,
 } from "../model/embedding.js";
+import type { DenseRetriever } from "../ports/dense-retriever.js";
+import { SqliteExactDenseRetriever } from "../adapters/sqlite/exact-dense-retriever.js";
 import type { MemoryRecord } from "../../memory/index.js";
 import { queryCenteredEpisodicPreview } from "../../util.js";
 import { explicitQueryDateFilter } from "../structured-query-constraints.js";
@@ -75,27 +76,6 @@ function reserveMetadataRoutes<T extends RetrievalHit>(
   return reserved;
 }
 
-function cosineSimilarity(left: ArrayLike<number>, right: ArrayLike<number>): number {
-  if (left.length !== right.length) {
-    throw new Error("Cosine vectors must have the same dimensions");
-  }
-  let dot = 0;
-  let leftNorm = 0;
-  let rightNorm = 0;
-  for (let index = 0; index < left.length; index += 1) {
-    const leftValue = left[index]!;
-    const rightValue = right[index]!;
-    if (!Number.isFinite(leftValue) || !Number.isFinite(rightValue)) {
-      throw new Error("Cosine vectors must contain only finite values");
-    }
-    dot += leftValue * rightValue;
-    leftNorm += leftValue * leftValue;
-    rightNorm += rightValue * rightValue;
-  }
-  if (leftNorm === 0 || rightNorm === 0) return 0;
-  return dot / (Math.sqrt(leftNorm) * Math.sqrt(rightNorm));
-}
-
 function compareFinal(left: RankedHybridHit, right: RankedHybridHit): number {
   const score = right.score - left.score;
   if (score !== 0) return score;
@@ -127,21 +107,33 @@ export interface HybridSearchStore extends EmbeddingIndexStore {
 export class HybridMemoryStore {
   readonly rawStore: HybridSearchStore;
   readonly embedder: Embedder;
+  readonly denseRetriever: DenseRetriever;
 
   private denseCandidateCount = 0;
   private rerankCandidateCount = 0;
 
-  constructor(rawStore: HybridSearchStore, embedder: Embedder) {
+  constructor(
+    rawStore: HybridSearchStore,
+    embedder: Embedder,
+    denseRetriever?: DenseRetriever,
+  ) {
     this.rawStore = rawStore;
     this.embedder = embedder;
+    this.denseRetriever = denseRetriever ?? new SqliteExactDenseRetriever(rawStore);
   }
 
   getRetrievalMetadata(): RetrievalMetadata {
     return {
-      retrievalProfile: "pimem-hybrid",
+      retrievalProfile: this.denseRetriever.retrievalProfile,
       embeddingProfileId: this.embedder.profileId,
       embeddingModel: this.embedder.model,
       embeddingDimensions: this.embedder.dimensions,
+      ...(this.denseRetriever.vectorGenerationId === undefined
+        ? {}
+        : { vectorGenerationId: this.denseRetriever.vectorGenerationId }),
+      ...(this.denseRetriever.vectorCollection === undefined
+        ? {}
+        : { vectorCollection: this.denseRetriever.vectorCollection }),
     };
   }
 
@@ -180,21 +172,6 @@ export class HybridMemoryStore {
     if (queryVectors.length !== request.queries.length) {
       throw new Error("Query embedding count does not match query count");
     }
-    const embeddingFilters = {
-      ...(request.sessionIds === undefined
-        ? {}
-        : { sessionIds: request.sessionIds }),
-      ...(request.roles === undefined ? {} : { roles: request.roles }),
-      ...(request.after === undefined ? {} : { after: request.after }),
-      ...(request.before === undefined ? {} : { before: request.before }),
-    };
-    const records = this.rawStore.listStoredEmbeddings(
-      scopeId,
-      profile,
-      embeddingFilters,
-    );
-    if (records.length === 0) return [];
-
     // Physical ranking must not depend on the visible page size: otherwise a
     // continuation reorders candidates that were already shown.
     const headroom = QUERY_LOCAL_RESERVOIR_LIMIT;
@@ -204,38 +181,52 @@ export class HybridMemoryStore {
     const merged = new Map<string, AggregatedHybridHit>();
     const queryRankings: RankedHybridHit[][] = [];
     const metadataRouteRankings: RankedHybridHit[][] = [];
-    request.queries.forEach((query, queryIndex) => {
+    const baseDenseRankings = this.denseRetriever.search({
+      scopeId,
+      profile,
+      queryVectors,
+      limit: headroom,
+      filters: {
+        ...(request.sessionIds === undefined
+          ? {}
+          : { sessionIds: request.sessionIds }),
+        ...(request.roles === undefined ? {} : { roles: request.roles }),
+        ...(request.after === undefined ? {} : { after: request.after }),
+        ...(request.before === undefined ? {} : { before: request.before }),
+      },
+      ...(signal === undefined ? {} : { signal }),
+    }).then((rankings) => {
+      if (rankings.length !== request.queries.length) {
+        throw new Error("Dense ranking count does not match query count");
+      }
+      return rankings;
+    });
+    const rankedQueries = await Promise.all(request.queries.map(async (
+      query,
+      queryIndex,
+    ) => {
       const queryVector = queryVectors[queryIndex]!;
       const {
         maxPerSession: _ignoredMaxPerSession,
         order: _ignoredOrder,
         ...lexicalBase
       } = request;
-      const rankRoute = (
-        routeRecords: readonly StoredEmbeddingRecord[],
+      const rankRoute = async (
         routeRequest: SearchRequest,
+        denseCandidatesPromise: Promise<
+          Awaited<ReturnType<DenseRetriever["search"]>>[number]
+        >,
         metadataFilter?: RetrievalMetadataFilter,
-      ): RankedHybridHit[] => {
-        const denseCandidates = routeRecords
-          .map((candidate) => ({
-            candidate,
-            cosine: cosineSimilarity(queryVector, candidate.vector),
-          }))
-          .sort((left, right) => {
-            const score = right.cosine - left.cosine;
-            return score !== 0
-              ? score
-              : left.candidate.record.memoryId.localeCompare(
-                  right.candidate.record.memoryId,
-                );
-          })
-          .slice(0, headroom);
-        const lexicalHits = this.rawStore.search(scopeId, routeRequest);
+      ): Promise<RankedHybridHit[]> => {
+        const [denseCandidates, lexicalHits] = await Promise.all([
+          denseCandidatesPromise,
+          Promise.resolve(this.rawStore.search(scopeId, routeRequest)),
+        ]);
         this.denseCandidateCount += denseCandidates.length;
 
-        const union = new Map<string, Pick<StoredEmbeddingRecord, "record">>();
-        for (const { candidate } of denseCandidates) {
-          union.set(candidate.record.memoryId, candidate);
+        const union = new Map<string, { record: MemoryRecord }>();
+        for (const candidate of denseCandidates) {
+          union.set(candidate.record.memoryId, { record: candidate.record });
         }
         for (const hit of lexicalHits) {
           if (!union.has(hit.record.memoryId)) {
@@ -247,7 +238,7 @@ export class HybridMemoryStore {
         const indexes = new Map(
           candidates.map((candidate, index) => [candidate.record.memoryId, index]),
         );
-        const denseRanking = denseCandidates.map(({ candidate }) =>
+        const denseRanking = denseCandidates.map((candidate) =>
           indexes.get(candidate.record.memoryId)!
         );
         const lexicalRanking = lexicalHits.map((hit) =>
@@ -284,23 +275,21 @@ export class HybridMemoryStore {
           .map((hit, index) => ({ ...hit, rank: index + 1 }));
       };
 
-      const baseRanking = rankRoute(records, {
-        ...lexicalBase,
-        queries: [query],
-        limit: Math.min(100, headroom),
-        order: "relevance",
-      });
+      const baseRankingPromise = rankRoute(
+        {
+          ...lexicalBase,
+          queries: [query],
+          limit: Math.min(100, headroom),
+          order: "relevance",
+        },
+        baseDenseRankings.then((rankings) => rankings[queryIndex]!),
+      );
       const dateFilter = request.after === undefined && request.before === undefined
         ? explicitQueryDateFilter(query)
         : undefined;
-      const dateRanking = dateFilter === undefined
-        ? undefined
+      const dateRankingPromise = dateFilter === undefined
+        ? Promise.resolve<RankedHybridHit[] | undefined>(undefined)
         : rankRoute(
-            this.rawStore.listStoredEmbeddings(scopeId, profile, {
-              ...embeddingFilters,
-              after: dateFilter.after,
-              before: dateFilter.before,
-            }),
             {
               ...lexicalBase,
               queries: [query],
@@ -309,15 +298,38 @@ export class HybridMemoryStore {
               after: dateFilter.after,
               before: dateFilter.before,
             },
+            this.denseRetriever.search({
+              scopeId,
+              profile,
+              queryVectors: [queryVector],
+              limit: headroom,
+              filters: {
+                ...(request.sessionIds === undefined
+                  ? {}
+                  : { sessionIds: request.sessionIds }),
+                ...(request.roles === undefined
+                  ? {}
+                  : { roles: request.roles }),
+                after: dateFilter.after,
+                before: dateFilter.before,
+              },
+              ...(signal === undefined ? {} : { signal }),
+            }).then((rankings) => rankings[0] ?? []),
             dateFilter,
           );
+      const [baseRanking, dateRanking] = await Promise.all([
+        baseRankingPromise,
+        dateRankingPromise,
+      ]);
+      // The constrained route only receives explicit reservation slots below.
+      // Base scores and ordering remain byte-for-byte independent of it.
+      return { queryIndex, queryHits: baseRanking.slice(0, perQueryLimit), dateRanking };
+    }));
+
+    for (const { queryIndex, queryHits, dateRanking } of rankedQueries) {
       if (dateRanking !== undefined && dateRanking.length > 0) {
         metadataRouteRankings.push(dateRanking);
       }
-      // The constrained route only receives explicit reservation slots below.
-      // Base scores and ordering remain byte-for-byte independent of it.
-      const queryHits = baseRanking.slice(0, perQueryLimit);
-
       queryRankings.push(queryHits);
       for (const hit of queryHits) {
         const existing = merged.get(hit.record.memoryId);
@@ -358,7 +370,7 @@ export class HybridMemoryStore {
           };
         }
       }
-    });
+    }
 
     const aggregated = [...merged.values()]
       .map((entry) => ({

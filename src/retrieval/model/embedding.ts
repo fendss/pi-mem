@@ -25,6 +25,45 @@ export interface StoreEmbeddingBatchResult {
   unchanged: number;
 }
 
+export type VectorIndexGenerationState =
+  | "ingesting"
+  | "draining"
+  | "verifying"
+  | "ready"
+  | "failed";
+
+export interface VectorIndexGenerationConfig {
+  generationId: string;
+  collectionName: string;
+  profile: EmbeddingProfile;
+}
+
+export interface VectorIndexGenerationStatus
+  extends VectorIndexGenerationConfig {
+  state: VectorIndexGenerationState;
+  sourceFingerprint?: string;
+  expectedVectorCount: number;
+  syncedVectorCount: number;
+  pendingVectorCount: number;
+  inflightVectorCount: number;
+  highWaterSequence: number;
+  lastError?: string;
+}
+
+export interface VectorSyncClaim {
+  sequenceId: number;
+  generationId: string;
+  scopeId: string;
+  memoryId: string;
+  sessionId: string;
+  role: MemoryRecord["role"];
+  timestamp?: string;
+  profileId: string;
+  contentHash: string;
+  vector: Float32Array;
+  attempts: number;
+}
+
 export interface EmbeddingIndexStore {
   getEmbeddingIndexStatus(
     scopeId: string,

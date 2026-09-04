@@ -6,6 +6,7 @@ import type {
   Embedder,
   EmbeddingMetrics,
   EmbeddingRequestOptions,
+  DenseRetriever,
 } from "../src/retrieval/index.js";
 import { embeddingProfile } from "../src/retrieval/index.js";
 import { HybridMemoryStore } from "../src/retrieval/operators/hybrid-search.js";
@@ -172,6 +173,35 @@ afterEach(async () => {
 });
 
 describe("PiMem hybrid search", () => {
+  it("accepts a Qdrant dense adapter without changing the Agent hit schema", async () => {
+    const { raw, embedder } = await createStore();
+    try {
+      const record = raw.getRecords("scope-1", ["m4"])[0]!;
+      const dense: DenseRetriever = {
+        retrievalProfile: "pimem-hybrid-qdrant-hnsw-v1",
+        vectorGenerationId: "generation-a",
+        vectorCollection: "pimem_vectors_v1",
+        search: () => Promise.resolve([[{ record, score: 0.99, rank: 1 }]]),
+      };
+      const hybrid = new HybridMemoryStore(raw, embedder, dense);
+      expect(hybrid.getRetrievalMetadata()).toMatchObject({
+        retrievalProfile: "pimem-hybrid-qdrant-hnsw-v1",
+        vectorGenerationId: "generation-a",
+        vectorCollection: "pimem_vectors_v1",
+      });
+      const hits = await hybrid.search("scope-1", {
+        queries: ["no lexical match"],
+        limit: 1,
+      });
+      expect(hits[0]).toMatchObject({
+        retriever: "pimem-hybrid",
+        record: { memoryId: "m4" },
+      });
+    } finally {
+      raw.close();
+    }
+  });
+
   it("treats a known empty scope as a valid search with no hits", async () => {
     const root = await mkdtemp(join(tmpdir(), "pi-mem-hybrid-empty-"));
     temporaryPaths.push(root);

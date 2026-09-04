@@ -14,7 +14,9 @@ describe("retrieval profile selection", () => {
   it("accepts only explicit stable profile IDs", () => {
     expect(parseRetrievalProfile("pimem-hybrid"))
       .toBe("pimem-hybrid");
+    expect(parseRetrievalProfile("pimem-hybrid-qdrant-hnsw-v1"))
+      .toBe("pimem-hybrid-qdrant-hnsw-v1");
     expect(() => parseRetrievalProfile("hybrid"))
-      .toThrow(/expected fts5 or pimem-hybrid/u);
+      .toThrow(/pimem-hybrid-qdrant-hnsw-v1/u);
   });
 });

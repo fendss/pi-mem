@@ -1,5 +1,23 @@
 # Changelog
 
+## Unreleased
+
+- Added the `pimem-hybrid-qdrant-hnsw-v1` retrieval profile behind the existing
+  dense-retriever port while retaining SQLite exact dense search as the
+  regression baseline.
+- Added resumable, fingerprinted vector generations with a durable SQLite
+  outbox, bounded concurrent Qdrant synchronization, index/count verification,
+  and fail-closed scope coverage checks.
+- Revalidate every Qdrant result against immutable SQLite scope, content hash,
+  session, role, timestamp, and deterministic point identity before it enters
+  the Candidate pipeline.
+- Versioned Qdrant payloads and point identities include the generation, so
+  multiple immutable generations can coexist in one collection without
+  overwriting each other.
+- LDBD service composition can select the same Qdrant profile; sealed online
+  scopes derive corpus-fingerprinted generations while the Agent tool protocol
+  remains unchanged.
+
 ## 1.2.0
 
 - Organized the runtime as explicit `memory`, `retrieval`, `evidence-agent`,

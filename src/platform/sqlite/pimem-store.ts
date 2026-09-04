@@ -21,6 +21,10 @@ import type {
   EmbeddingProfile,
   StoredEmbeddingRecord,
   StoreEmbeddingBatchResult,
+  VectorIndexGenerationConfig,
+  VectorIndexGenerationState,
+  VectorIndexGenerationStatus,
+  VectorSyncClaim,
 } from "../../retrieval/model/embedding.js";
 import { finalizeSearchHits } from "../../retrieval/finalize-search-hits.js";
 import { tokenizeForPiMemHybrid } from "../../retrieval/ranking.js";
@@ -34,6 +38,12 @@ import {
   type MemoryRow,
   memoryRowToRecord,
 } from "./memory-row.js";
+import {
+  decodeFloat32Vector,
+  encodeFloat32Vector,
+  equalBytes,
+} from "./float32-vector.js";
+import { SqliteVectorIndexStateStore } from "./vector-index-state-store.js";
 
 interface SearchRow extends MemoryRow {
   rank: number;
@@ -65,6 +75,10 @@ export type {
   EmbeddingProfile,
   StoredEmbeddingRecord,
   StoreEmbeddingBatchResult,
+  VectorIndexGenerationConfig,
+  VectorIndexGenerationState,
+  VectorIndexGenerationStatus,
+  VectorSyncClaim,
 };
 export type StoreSearchHit = RetrievalHit;
 
@@ -168,54 +182,11 @@ function validateEmbeddingProfile(profile: EmbeddingProfile): void {
   }
 }
 
-function encodeVector(vector: readonly number[], dimensions: number): Buffer {
-  if (vector.length !== dimensions) {
-    throw new Error(`Embedding vector must have ${dimensions} dimensions`);
-  }
-  const encoded = Buffer.allocUnsafe(dimensions * Float32Array.BYTES_PER_ELEMENT);
-  vector.forEach((value, index) => {
-    if (!Number.isFinite(value)) {
-      throw new Error("Embedding vector contains a non-finite value");
-    }
-    encoded.writeFloatLE(value, index * Float32Array.BYTES_PER_ELEMENT);
-  });
-  return encoded;
-}
-
-function decodeVector(value: Uint8Array, dimensions: number): Float32Array {
-  const expectedBytes = dimensions * Float32Array.BYTES_PER_ELEMENT;
-  if (value.byteLength !== expectedBytes) {
-    throw new Error(
-      `Stored embedding vector has ${value.byteLength} bytes, expected ${expectedBytes}`,
-    );
-  }
-  const view = new DataView(value.buffer, value.byteOffset, value.byteLength);
-  const decoded = new Float32Array(dimensions);
-  for (let index = 0; index < dimensions; index += 1) {
-    const item = view.getFloat32(
-      index * Float32Array.BYTES_PER_ELEMENT,
-      true,
-    );
-    if (!Number.isFinite(item)) {
-      throw new Error("Stored embedding vector contains a non-finite value");
-    }
-    decoded[index] = item;
-  }
-  return decoded;
-}
-
-function sameBytes(left: Uint8Array, right: Uint8Array): boolean {
-  if (left.byteLength !== right.byteLength) return false;
-  for (let index = 0; index < left.byteLength; index += 1) {
-    if (left[index] !== right[index]) return false;
-  }
-  return true;
-}
-
 export class MemoryStore {
   readonly databasePath: string;
   private readonly db: DatabaseSync;
   private readonly evidenceOperators: DatabaseEvidenceOperators;
+  private readonly vectorIndex: SqliteVectorIndexStateStore;
   private readonly validatedEmbeddingProfiles = new Map<string, string>();
   private readonly completeEmbeddingStatuses = new Map<
     string,
@@ -291,6 +262,10 @@ export class MemoryStore {
         ON memory_append_requests(scope_id, request_id);
     `);
     this.evidenceOperators = new DatabaseEvidenceOperators(this.db);
+    this.vectorIndex = new SqliteVectorIndexStateStore(
+      this.db,
+      (scopeId, profile) => this.getEmbeddingIndexStatus(scopeId, profile),
+    );
   }
 
   close(): void {
@@ -838,6 +813,13 @@ export class MemoryStore {
     return rows.map(memoryRowToRecord);
   }
 
+  listScopeIds(): string[] {
+    const rows = this.db.prepare(`
+      SELECT DISTINCT scope_id FROM memories ORDER BY scope_id ASC
+    `).all() as unknown as Array<{ scope_id: string }>;
+    return rows.map((row) => row.scope_id);
+  }
+
   private assertEmbeddingProfileConsistent(profile: EmbeddingProfile): void {
     validateEmbeddingProfile(profile);
     const signature = JSON.stringify([profile.model, profile.dimensions]);
@@ -970,7 +952,7 @@ export class MemoryStore {
       if (raw.content_hash !== record.contentHash) {
         throw new Error(`Embedding content hash mismatch: ${record.memoryId}`);
       }
-      return encodeVector(vectors[index]!, profile.dimensions);
+      return encodeFloat32Vector(vectors[index]!, profile.dimensions);
     });
 
     const getExisting = this.db.prepare(`
@@ -998,7 +980,7 @@ export class MemoryStore {
             existing.model !== profile.model ||
             existing.dimensions !== profile.dimensions ||
             existing.content_hash !== record.contentHash ||
-            !sameBytes(existing.vector, vector)
+            !equalBytes(existing.vector, vector)
           ) {
             throw new Error(
               `Derived embedding conflict for immutable memory: ${record.memoryId}`,
@@ -1023,6 +1005,107 @@ export class MemoryStore {
       throw error;
     }
     return { inserted, unchanged };
+  }
+
+  beginVectorIndexGeneration(
+    config: VectorIndexGenerationConfig,
+  ): VectorIndexGenerationStatus {
+    return this.vectorIndex.beginVectorIndexGeneration(config);
+  }
+
+  enqueueStoredScopeEmbeddingsForVectorGeneration(
+    generationId: string,
+    scopeId: string,
+    profile: EmbeddingProfile,
+  ): number {
+    return this.vectorIndex.enqueueStoredScopeEmbeddingsForVectorGeneration(
+      generationId,
+      scopeId,
+      profile,
+    );
+  }
+
+  getVectorIndexGeneration(
+    generationId: string,
+  ): VectorIndexGenerationStatus {
+    return this.vectorIndex.getVectorIndexGeneration(generationId);
+  }
+
+  sealVectorIndexGeneration(
+    generationId: string,
+  ): VectorIndexGenerationStatus {
+    return this.vectorIndex.sealVectorIndexGeneration(generationId);
+  }
+
+  claimVectorSyncBatch(
+    generationId: string,
+    limit: number,
+    leaseMs: number,
+    nowMs = Date.now(),
+  ): VectorSyncClaim[] {
+    return this.vectorIndex.claimVectorSyncBatch(
+      generationId,
+      limit,
+      leaseMs,
+      nowMs,
+    );
+  }
+
+  completeVectorSyncBatch(
+    generationId: string,
+    sequenceIds: readonly number[],
+  ): void {
+    this.vectorIndex.completeVectorSyncBatch(generationId, sequenceIds);
+  }
+
+  releaseVectorSyncBatch(
+    generationId: string,
+    sequenceIds: readonly number[],
+    error: unknown,
+  ): void {
+    this.vectorIndex.releaseVectorSyncBatch(generationId, sequenceIds, error);
+  }
+
+  beginVectorIndexVerification(
+    generationId: string,
+  ): VectorIndexGenerationStatus {
+    return this.vectorIndex.beginVectorIndexVerification(generationId);
+  }
+
+  markVectorIndexGenerationReady(
+    generationId: string,
+    observedVectorCount: number,
+  ): VectorIndexGenerationStatus {
+    return this.vectorIndex.markVectorIndexGenerationReady(
+      generationId,
+      observedVectorCount,
+    );
+  }
+
+  failVectorIndexGeneration(generationId: string, error: unknown): void {
+    this.vectorIndex.failVectorIndexGeneration(generationId, error);
+  }
+
+  assertVectorIndexGenerationReady(
+    generationId: string,
+  ): VectorIndexGenerationStatus {
+    return this.vectorIndex.assertVectorIndexGenerationReady(generationId);
+  }
+
+  listVectorGenerationScopeCounts(
+    generationId: string,
+  ): Array<{ scopeId: string; count: number }> {
+    return this.vectorIndex.listVectorGenerationScopeCounts(generationId);
+  }
+
+  getVectorGenerationScopeCount(
+    generationId: string,
+    scopeId: string,
+  ): number {
+    return this.vectorIndex.getVectorGenerationScopeCount(
+      generationId,
+      scopeId,
+    );
   }
 
   listStoredEmbeddings(
@@ -1073,7 +1156,7 @@ export class MemoryStore {
     `).all(...params) as unknown as EmbeddingRow[];
     return rows.map((row) => ({
       record: memoryRowToRecord(row),
-      vector: decodeVector(row.vector, profile.dimensions),
+      vector: decodeFloat32Vector(row.vector, profile.dimensions),
     }));
   }
 

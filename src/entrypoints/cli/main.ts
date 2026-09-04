@@ -17,18 +17,18 @@ function printHelp(): void {
   process.stdout.write(`PiMem \u2014 minimal source-grounded memory agent
 
 Commands:
-  ingest-benchmark --benchmark ama-bench --source FILE --data-dir DIR [--case-id ID ...] [--retrieval-profile fts5|pimem-hybrid]
-  benchmark        --benchmark ama-bench --data-dir DIR --output-dir DIR [--case-id ID ...] [--retrieval-profile fts5|pimem-hybrid] [--skill none|pimem-v0] [--model-adapter ID] [--model ID] [--slots N] [--stage-timeout-ms N] [--resume-infrastructure-only true]
+  ingest-benchmark --benchmark ama-bench --source FILE --data-dir DIR [--case-id ID ...] [--retrieval-profile fts5|pimem-hybrid|pimem-hybrid-qdrant-hnsw-v1]
+  benchmark        --benchmark ama-bench --data-dir DIR --output-dir DIR [--case-id ID ...] [--retrieval-profile fts5|pimem-hybrid|pimem-hybrid-qdrant-hnsw-v1] [--skill none|pimem-v0] [--model-adapter ID] [--model ID] [--slots N] [--stage-timeout-ms N] [--resume-infrastructure-only true]
   evaluate-benchmark --benchmark ama-bench --data-dir DIR --predictions FILE --output FILE [--judge-model ID] [--slots N] [--stage-timeout-ms N]
-  ingest-longmemeval --source FILE --data-dir DIR [--question-id ID ...] [--retrieval-profile fts5|pimem-hybrid] [--embedding-slots N] [--embedding-rps N]
-  ingest-tau-knowledge --tau-root DIR --data-dir DIR [--retrieval-profile fts5|pimem-hybrid] [--embedding-slots N] [--embedding-rps N]
-  run-longmemeval    --data-dir DIR --question-id ID [--retrieval-profile fts5|pimem-hybrid] [--model ID] [--skill none|pimem-v0]
-  benchmark-longmemeval --data-dir DIR --output-dir DIR [--question-id ID ...] [--retrieval-profile fts5|pimem-hybrid] [--model ID] [--skill none|pimem-v0] [--slots N]
-  benchmark-memoryagentbench --input-dir DIR --output-dir DIR --subset ID [--evolution static|ephemeral|cumulative] [--question-limit N] [--max-search-calls N] [--retrieval-profile fts5|pimem-hybrid] [--model ID]
-  longmemeval-suite --source FILE --data-dir DIR --output-dir DIR --embedding-env FILE --answer-env FILE --judge-env FILE --retrieval-agent-dir DIR --retrieval-provider ID --retrieval-model ID --answer-agent-dir DIR --answer-provider ID --answer-model ID --archive FILE.tar.gz --evaluation-archive FILE.tar.gz [--retrieval-env FILE] [--skill none|pimem-v0] [--slots N] [--frozen-slots N] [--judge-slots N]
+  ingest-longmemeval --source FILE --data-dir DIR [--question-id ID ...] [--retrieval-profile fts5|pimem-hybrid|pimem-hybrid-qdrant-hnsw-v1] [--embedding-slots N] [--embedding-rps N]
+  ingest-tau-knowledge --tau-root DIR --data-dir DIR [--retrieval-profile fts5|pimem-hybrid|pimem-hybrid-qdrant-hnsw-v1] [--embedding-slots N] [--embedding-rps N]
+  run-longmemeval    --data-dir DIR --question-id ID [--retrieval-profile fts5|pimem-hybrid|pimem-hybrid-qdrant-hnsw-v1] [--model ID] [--skill none|pimem-v0]
+  benchmark-longmemeval --data-dir DIR --output-dir DIR [--question-id ID ...] [--retrieval-profile fts5|pimem-hybrid|pimem-hybrid-qdrant-hnsw-v1] [--model ID] [--skill none|pimem-v0] [--slots N]
+  benchmark-memoryagentbench --input-dir DIR --output-dir DIR --subset ID [--evolution static|ephemeral|cumulative] [--question-limit N] [--max-search-calls N] [--retrieval-profile fts5|pimem-hybrid|pimem-hybrid-qdrant-hnsw-v1] [--model ID]
+  longmemeval-suite --source FILE --data-dir DIR --output-dir DIR --embedding-env FILE --answer-env FILE --judge-env FILE --retrieval-agent-dir DIR --retrieval-provider ID --retrieval-model ID --answer-agent-dir DIR --answer-provider ID --answer-model ID --archive FILE.tar.gz --evaluation-archive FILE.tar.gz [--retrieval-env FILE] [--retrieval-profile fts5|pimem-hybrid|pimem-hybrid-qdrant-hnsw-v1] [--skill none|pimem-v0] [--slots N] [--frozen-slots N] [--judge-slots N]
   prepare-longmemeval-eval --source FILE --predictions FILE --output FILE
   package-benchmark   --output-dir DIR --archive FILE.tar.gz
-  run                 --data-dir DIR --scope ID --question TEXT [--question-date TEXT] [--retrieval-profile fts5|pimem-hybrid] [--model ID] [--skill none|pimem-v0]
+  run                 --data-dir DIR --scope ID --question TEXT [--question-date TEXT] [--retrieval-profile fts5|pimem-hybrid|pimem-hybrid-qdrant-hnsw-v1] [--model ID] [--skill none|pimem-v0]
 `);
 }
 

@@ -11,7 +11,10 @@ import {
   LdbdApiService,
   onlineScopeId,
 } from "../src/entrypoints/ldbd-api/service.js";
+import { PiMemLdbdApplication } from "../src/entrypoints/ldbd-api/pimem-runtime.js";
+import type { PiModelRuntime } from "../src/platform/pi/load-model-runtime.js";
 import { MemoryStore } from "../src/platform/sqlite/pimem-store.js";
+import type { Embedder } from "../src/retrieval/index.js";
 import { sha256 } from "../src/util.js";
 
 const temporaryDirectories: string[] = [];
@@ -141,5 +144,43 @@ describe("LDBD service", () => {
     })).resolves.toMatchObject({ success: true, status: "inserted" });
     await expect(service.search({ query: "question", user_id: "user-1", top_k: 100 }))
       .resolves.toEqual({ data: [{ id: "memory-1", content: "evidence" }] });
+  });
+
+  it("selects retrieval infrastructure without changing the Add contract", async () => {
+    const store = await memoryStore();
+    const embedDocuments = vi.fn(async (texts: readonly string[]) =>
+      texts.map(() => [1, 0])
+    );
+    const embedder: Embedder = {
+      profileId: "profile-a",
+      model: "embedding-a",
+      dimensions: 2,
+      maxInputLength: 2_048,
+      batchSize: 32,
+      embedDocuments,
+      embedQueries: async (texts) => texts.map(() => [1, 0]),
+      snapshotMetrics: () => ({ calls: 0, latencyMs: 0 }),
+    };
+    const modelRuntime = {} as PiModelRuntime;
+    try {
+      const fts = new PiMemLdbdApplication(store, embedder, modelRuntime, {
+        retrievalProfile: "fts5",
+        environment: {},
+      });
+      await expect(fts.add({
+        requestId: "request-fts",
+        userId: "user-fts",
+        sessionId: "session-fts",
+        messages: [{ role: "user", content: "exact memory" }],
+      })).resolves.toBe("inserted");
+      expect(embedDocuments).not.toHaveBeenCalled();
+
+      expect(() => new PiMemLdbdApplication(store, embedder, modelRuntime, {
+        retrievalProfile: "pimem-hybrid-qdrant-hnsw-v1",
+        environment: { PIMEM_VECTOR_GENERATION_ID: "run-a" },
+      })).toThrow(/PIMEM_QDRANT_URL/u);
+    } finally {
+      store.close();
+    }
   });
 });

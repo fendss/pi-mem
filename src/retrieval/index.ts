@@ -59,6 +59,10 @@ export type {
   EmbeddingProfile,
   StoredEmbeddingRecord,
   StoreEmbeddingBatchResult,
+  VectorIndexGenerationConfig,
+  VectorIndexGenerationState,
+  VectorIndexGenerationStatus,
+  VectorSyncClaim,
 } from "./model/embedding.js";
 export type {
   Embedder,
@@ -76,6 +80,37 @@ export type {
   SearchOperatorStore,
 } from "./ports/memory-tool-store.js";
 export type { SearchOperator } from "./ports/search-operator.js";
+export type {
+  DenseRetriever,
+  DenseSearchBatchRequest,
+  DenseSearchHit,
+} from "./ports/dense-retriever.js";
+export type { VectorIndexStateStore } from "./ports/vector-index-state-store.js";
+export { SqliteExactDenseRetriever } from "./adapters/sqlite/exact-dense-retriever.js";
+export {
+  QdrantClient,
+  QdrantHttpError,
+  type QdrantCollectionInfo,
+  type QdrantCollectionSpec,
+  type QdrantCountRequest,
+  type QdrantHnswConfig,
+  type QdrantSearchHit,
+  type QdrantSearchRequest,
+  type QdrantVectorPoint,
+} from "./adapters/qdrant/client.js";
+export {
+  QdrantDenseRetriever,
+  type QdrantDenseMetadataStore,
+  type QdrantDenseRetrieverOptions,
+  type QdrantDenseSearchClient,
+} from "./adapters/qdrant/dense-retriever.js";
+export {
+  deterministicQdrantPointId,
+  qdrantCollectionIndexReady,
+  QdrantVectorSynchronizer,
+  type QdrantVectorIndexClient,
+  type QdrantVectorSynchronizerOptions,
+} from "./adapters/qdrant/vector-synchronizer.js";
 export type {
   RuntimeSearchOperatorCatalog,
   SearchOperatorCatalog,
@@ -102,6 +137,10 @@ export {
   indexScopeEmbeddings,
   type EmbeddingIndexResult,
 } from "./index-scope-embeddings.js";
+export {
+  DEFAULT_RETRIEVAL_PROFILE,
+  parseRetrievalProfile,
+} from "./retrieval-profile.js";
 export {
   parseSourceTimestamp,
   temporalAnnotation,

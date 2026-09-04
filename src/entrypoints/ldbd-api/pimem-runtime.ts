@@ -1,5 +1,6 @@
 import type { OnlineMemoryStore } from "../../memory/index.js";
 import { createRetrievalContext } from "../../composition/create-retrieval-context.js";
+import { ScopedQdrantRetrieval } from "../../composition/scoped-qdrant-retrieval.js";
 import { runPiMem } from "../../evidence-agent/index.js";
 import type { PiModelRuntime } from "../../platform/pi/load-model-runtime.js";
 import type { MemoryStore } from "../../platform/sqlite/pimem-store.js";
@@ -7,6 +8,7 @@ import {
   embeddingProfile,
   indexScopeEmbeddings,
   type Embedder,
+  type RetrievalProfile,
 } from "../../retrieval/index.js";
 import { sha256 } from "../../util.js";
 import {
@@ -57,12 +59,25 @@ function timestamp(value: number | undefined): string | undefined {
 
 export class PiMemLdbdApplication implements LdbdMemoryApplication {
   private readonly serial = new KeyedSerialExecutor();
+  private readonly retrievalProfile: RetrievalProfile;
+  private readonly environment: NodeJS.ProcessEnv;
+  private readonly scopedQdrant: ScopedQdrantRetrieval | undefined;
 
   constructor(
     private readonly store: MemoryStore & OnlineMemoryStore,
     private readonly embedder: Embedder,
     private readonly modelRuntime: PiModelRuntime,
-  ) {}
+    options: {
+      retrievalProfile?: RetrievalProfile;
+      environment?: NodeJS.ProcessEnv;
+    } = {},
+  ) {
+    this.retrievalProfile = options.retrievalProfile ?? "pimem-hybrid";
+    this.environment = options.environment ?? process.env;
+    this.scopedQdrant = this.retrievalProfile === "pimem-hybrid-qdrant-hnsw-v1"
+      ? new ScopedQdrantRetrieval(this.store, this.embedder, this.environment)
+      : undefined;
+  }
 
   async add(request: LdbdAddRequest): Promise<"inserted" | "unchanged"> {
     const scopeId = onlineScopeId(request.userId);
@@ -90,11 +105,14 @@ export class PiMemLdbdApplication implements LdbdMemoryApplication {
       }
       if (appended.status === "complete") return "unchanged";
 
-      const indexed = await indexScopeEmbeddings(this.store, scopeId, this.embedder);
-      if (indexed.missing !== 0) {
-        throw new LdbdUnavailableError(
-          `Embedding index is incomplete for scope ${scopeId}: ${indexed.indexed}/${indexed.total}`,
-        );
+      if (this.retrievalProfile !== "fts5") {
+        const indexed = await indexScopeEmbeddings(this.store, scopeId, this.embedder);
+        if (indexed.missing !== 0) {
+          throw new LdbdUnavailableError(
+            `Embedding index is incomplete for scope ${scopeId}: ` +
+              `${indexed.indexed}/${indexed.total}`,
+          );
+        }
       }
       this.store.markAppendRequestComplete(request.requestId, hash);
       return "inserted";
@@ -112,18 +130,28 @@ export class PiMemLdbdApplication implements LdbdMemoryApplication {
         if (/incomplete/iu.test(message)) throw new LdbdUnavailableError(message);
         throw error;
       }
-      const status = this.store.getEmbeddingIndexStatus(
-        scopeId,
-        embeddingProfile(this.embedder),
-      );
-      if (status.total === 0 || status.missing !== 0) {
-        throw new LdbdUnavailableError(
-          `Embedding index is incomplete for scope ${scopeId}: ${status.indexed}/${status.total}`,
+      if (this.retrievalProfile !== "fts5") {
+        const status = this.store.getEmbeddingIndexStatus(
+          scopeId,
+          embeddingProfile(this.embedder),
         );
+        if (status.total === 0 || status.missing !== 0) {
+          throw new LdbdUnavailableError(
+            `Embedding index is incomplete for scope ${scopeId}: ` +
+              `${status.indexed}/${status.total}`,
+          );
+        }
       }
     });
 
-    const retrieval = createRetrievalContext(this.store, "pimem-hybrid", this.embedder);
+    const retrieval = this.scopedQdrant === undefined
+      ? createRetrievalContext(
+          this.store,
+          this.retrievalProfile,
+          this.embedder,
+          this.environment,
+        )
+      : await this.scopedQdrant.context(scopeId);
     const result = await runPiMem({
       store: retrieval.store,
       operatorRegistry: retrieval.operatorRegistry,

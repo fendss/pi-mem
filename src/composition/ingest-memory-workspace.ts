@@ -10,6 +10,7 @@ import {
   type EmbeddingIndexResult,
 } from "../retrieval/index-scope-embeddings.js";
 import type { RetrievalMetadata, RetrievalProfile } from "../retrieval/index.js";
+import { publishQdrantGeneration } from "./qdrant-retrieval.js";
 
 export interface IngestMemoryWorkspaceOptions {
   paths: { database: string; sanitized: string };
@@ -65,12 +66,6 @@ export async function ingestMemoryWorkspace(
       ),
     );
     const profile = embeddingProfile(embedders[0]!);
-    const retrieval: RetrievalMetadata = {
-      retrievalProfile: "pimem-hybrid",
-      embeddingProfileId: profile.profileId,
-      embeddingModel: profile.model,
-      embeddingDimensions: profile.dimensions,
-    };
     let firstError: unknown;
     let halted = false;
     let settled = 0;
@@ -101,6 +96,26 @@ export async function ingestMemoryWorkspace(
       },
     );
     if (firstError !== undefined) throw firstError;
+    const qdrant = options.retrievalProfile === "pimem-hybrid-qdrant-hnsw-v1"
+      ? await publishQdrantGeneration(
+          store,
+          embedders[0]!,
+          scopes.map((scope) => scope.scopeId),
+          options.environment ?? process.env,
+        )
+      : undefined;
+    const retrieval: RetrievalMetadata = {
+      retrievalProfile: options.retrievalProfile,
+      embeddingProfileId: profile.profileId,
+      embeddingModel: profile.model,
+      embeddingDimensions: profile.dimensions,
+      ...(qdrant === undefined
+        ? {}
+        : {
+            vectorGenerationId: qdrant.generationId,
+            vectorCollection: qdrant.collectionName,
+          }),
+    };
     return {
       scopes,
       retrieval,

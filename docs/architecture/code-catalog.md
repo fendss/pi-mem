@@ -317,7 +317,7 @@ _No top-level functions, classes, or class methods._
 
 | Symbol | Purpose | Kind | Visibility | Source |
 |---|---|---|---|---|
-| `createRetrievalContext(rawStore: MemoryStore, profile: RetrievalProfile, embedder?: Embedder): RetrievalContext` | Creates retrieval context. | function | exported | [line 20](../../src/composition/create-retrieval-context.ts#L20) |
+| `createRetrievalContext(rawStore: MemoryStore, profile: RetrievalProfile, embedder?: Embedder, environment: NodeJS.ProcessEnv = process.env): RetrievalContext` | Creates retrieval context. | function | exported | [line 21](../../src/composition/create-retrieval-context.ts#L21) |
 ## `src/composition/create-search-operator-registry.ts`
 
 | Symbol | Purpose | Kind | Visibility | Source |
@@ -328,33 +328,51 @@ _No top-level functions, classes, or class methods._
 
 | Symbol | Purpose | Kind | Visibility | Source |
 |---|---|---|---|---|
-| `ingestMemoryWorkspace(options: IngestMemoryWorkspaceOptions): Promise<IngestMemoryWorkspaceResult>` | Wires immutable session ingest to SQLite and optional embeddings. | function | exported | [line 36](../../src/composition/ingest-memory-workspace.ts#L36) |
+| `ingestMemoryWorkspace(options: IngestMemoryWorkspaceOptions): Promise<IngestMemoryWorkspaceResult>` | Wires immutable session ingest to SQLite and optional embeddings. | function | exported | [line 37](../../src/composition/ingest-memory-workspace.ts#L37) |
 ## `src/composition/load-search-operator-plugins.ts`
 
 | Symbol | Purpose | Kind | Visibility | Source |
 |---|---|---|---|---|
 | `pluginModule(value: unknown, path: string): SearchOperatorPluginModule` | Implements the plugin module operation. | function | internal | [line 20](../../src/composition/load-search-operator-plugins.ts#L20) |
 | `loadSearchOperatorPlugins(paths: readonly string[], store: SearchOperatorStore): Promise<LoadedSearchOperatorPlugins>` | Loads trusted local modules once at composition time and fingerprints them. | function | exported | [line 34](../../src/composition/load-search-operator-plugins.ts#L34) |
+## `src/composition/qdrant-retrieval.ts`
+
+| Symbol | Purpose | Kind | Visibility | Source |
+|---|---|---|---|---|
+| `environmentInteger(environment: NodeJS.ProcessEnv, name: string, fallback: number, maximum: number): number` | Implements the environment integer operation. | function | internal | [line 13](../../src/composition/qdrant-retrieval.ts#L13) |
+| `qdrantRetrievalConfiguration(embedder: Embedder, environment: NodeJS.ProcessEnv = process.env): QdrantRetrievalConfiguration` | Resolves one pinned Qdrant generation without leaking environment into domains. | function | exported | [line 40](../../src/composition/qdrant-retrieval.ts#L40) |
+| `createQdrantDenseRetriever(store: MemoryStore, embedder: Embedder, environment: NodeJS.ProcessEnv = process.env): QdrantDenseRetriever` | Creates qdrant dense retriever. | function | exported | [line 115](../../src/composition/qdrant-retrieval.ts#L115) |
+| `publishQdrantGeneration(store: MemoryStore, embedder: Embedder, scopeIds: readonly string[], environment: NodeJS.ProcessEnv = process.env): Promise<VectorIndexGenerationStatus>` | Enqueues existing SQLite embeddings and atomically publishes a generation. | function | exported | [line 131](../../src/composition/qdrant-retrieval.ts#L131) |
 ## `src/composition/run-question.ts`
 
 | Symbol | Purpose | Kind | Visibility | Source |
 |---|---|---|---|---|
 | `runQuestion(paths: PiMemWorkspacePaths, retrievalProfile: RetrievalProfile, scopeId: string, question: string, questionDate: string \| undefined, modelOptions: LoadPiModelRuntimeOptions, skill: PiMemSkill = "pimem-v0"): Promise<PiMemResult>` | Runs question. | function | exported | [line 20](../../src/composition/run-question.ts#L20) |
+## `src/composition/scoped-qdrant-retrieval.ts`
+
+| Symbol | Purpose | Kind | Visibility | Source |
+|---|---|---|---|---|
+| `corpusFingerprint(records: readonly MemoryRecord[]): string` | Implements the corpus fingerprint operation. | function | internal | [line 14](../../src/composition/scoped-qdrant-retrieval.ts#L14) |
+| `scopedQdrantGenerationId(baseGenerationId: string, scopeId: string, records: readonly MemoryRecord[]): string` | Implements the scoped qdrant generation id operation. | function | exported | [line 20](../../src/composition/scoped-qdrant-retrieval.ts#L20) |
+| `ScopedQdrantRetrieval` | Publishes and reuses the immutable Qdrant generation for a scope version. | class | exported | [line 39](../../src/composition/scoped-qdrant-retrieval.ts#L39) |
+| `ScopedQdrantRetrieval.constructor(private readonly store: MemoryStore, private readonly embedder: Embedder, private readonly environment: NodeJS.ProcessEnv = process.env)` | Creates a scoped qdrant retrieval instance. | method | public | [line 43](../../src/composition/scoped-qdrant-retrieval.ts#L43) |
+| `ScopedQdrantRetrieval.generationEnvironment(scopeId: string): { environment: NodeJS.ProcessEnv; generationId: string; }` | Implements the generation environment operation. | method | private | [line 54](../../src/composition/scoped-qdrant-retrieval.ts#L54) |
+| `ScopedQdrantRetrieval.context(scopeId: string): Promise<RetrievalContext>` | Implements the context operation. | method | public | [line 73](../../src/composition/scoped-qdrant-retrieval.ts#L73) |
 ## `src/entrypoints/cli/commands/benchmark-evidence.ts`
 
 | Symbol | Purpose | Kind | Visibility | Source |
 |---|---|---|---|---|
-| `datasetRetrievalProfile(manifest: DatasetManifest): "fts5" \| "pimem-hybrid"` | Implements the dataset retrieval profile operation. | function | internal | [line 83](../../src/entrypoints/cli/commands/benchmark-evidence.ts#L83) |
-| `benchmarkFor(parsed: ParsedCommand): EvidenceBenchmarkId` | Implements the benchmark for operation. | function | internal | [line 100](../../src/entrypoints/cli/commands/benchmark-evidence.ts#L100) |
-| `selectQueries(queries: readonly RunnableQuery[], requestedIds: ReadonlySet<string>): RunnableQuery[]` | Implements the select queries operation. | function | internal | [line 108](../../src/entrypoints/cli/commands/benchmark-evidence.ts#L108) |
-| `recordPath(directory: string, caseId: string): string` | Implements the record path operation. | function | internal | [line 126](../../src/entrypoints/cli/commands/benchmark-evidence.ts#L126) |
-| `directoryHasRecords(directory: string): Promise<boolean>` | Implements the directory has records operation. | function | internal | [line 130](../../src/entrypoints/cli/commands/benchmark-evidence.ts#L130) |
-| `loadSuccessRecordIds(directory: string, benchmark: EvidenceBenchmarkId, queries: readonly RunnableQuery[]): Promise<Set<string>>` | Loads success record ids. | function | internal | [line 141](../../src/entrypoints/cli/commands/benchmark-evidence.ts#L141) |
-| `materializeArtifacts(options: { outputDir: string; benchmark: EvidenceBenchmarkId; queries: readonly RunnableQuery[]; }): Promise<{ succeeded: number; failed: number }>` | Materializes artifacts. | function | internal | [line 163](../../src/entrypoints/cli/commands/benchmark-evidence.ts#L163) |
-| `predictionFor(options: { benchmark: EvidenceBenchmarkId; query: RunnableQuery; retrieval: PiMemResult; answer: Awaited<ReturnType<typeof runBenchmarkAnswer>>; }): EvidenceBenchmarkPrediction` | Implements the prediction for operation. | function | internal | [line 223](../../src/entrypoints/cli/commands/benchmark-evidence.ts#L223) |
-| `answerPromptFor(_benchmark: EvidenceBenchmarkId, query: RunnableQuery, retrieval: PiMemResult)` | Implements the answer prompt for operation. | function | internal | [line 249](../../src/entrypoints/cli/commands/benchmark-evidence.ts#L249) |
-| `modelFlagsForRun(): string[]` | Implements the model flags for run operation. | function | internal | [line 257](../../src/entrypoints/cli/commands/benchmark-evidence.ts#L257) |
-| `benchmarkEvidence(parsed: ParsedCommand): Promise<void>` | Implements the benchmark evidence operation. | function | exported | [line 266](../../src/entrypoints/cli/commands/benchmark-evidence.ts#L266) |
+| `datasetRetrievalProfile(manifest: DatasetManifest): RetrievalProfile` | Implements the dataset retrieval profile operation. | function | internal | [line 86](../../src/entrypoints/cli/commands/benchmark-evidence.ts#L86) |
+| `benchmarkFor(parsed: ParsedCommand): EvidenceBenchmarkId` | Implements the benchmark for operation. | function | internal | [line 107](../../src/entrypoints/cli/commands/benchmark-evidence.ts#L107) |
+| `selectQueries(queries: readonly RunnableQuery[], requestedIds: ReadonlySet<string>): RunnableQuery[]` | Implements the select queries operation. | function | internal | [line 115](../../src/entrypoints/cli/commands/benchmark-evidence.ts#L115) |
+| `recordPath(directory: string, caseId: string): string` | Implements the record path operation. | function | internal | [line 133](../../src/entrypoints/cli/commands/benchmark-evidence.ts#L133) |
+| `directoryHasRecords(directory: string): Promise<boolean>` | Implements the directory has records operation. | function | internal | [line 137](../../src/entrypoints/cli/commands/benchmark-evidence.ts#L137) |
+| `loadSuccessRecordIds(directory: string, benchmark: EvidenceBenchmarkId, queries: readonly RunnableQuery[]): Promise<Set<string>>` | Loads success record ids. | function | internal | [line 148](../../src/entrypoints/cli/commands/benchmark-evidence.ts#L148) |
+| `materializeArtifacts(options: { outputDir: string; benchmark: EvidenceBenchmarkId; queries: readonly RunnableQuery[]; }): Promise<{ succeeded: number; failed: number }>` | Materializes artifacts. | function | internal | [line 170](../../src/entrypoints/cli/commands/benchmark-evidence.ts#L170) |
+| `predictionFor(options: { benchmark: EvidenceBenchmarkId; query: RunnableQuery; retrieval: PiMemResult; answer: Awaited<ReturnType<typeof runBenchmarkAnswer>>; }): EvidenceBenchmarkPrediction` | Implements the prediction for operation. | function | internal | [line 230](../../src/entrypoints/cli/commands/benchmark-evidence.ts#L230) |
+| `answerPromptFor(_benchmark: EvidenceBenchmarkId, query: RunnableQuery, retrieval: PiMemResult)` | Implements the answer prompt for operation. | function | internal | [line 256](../../src/entrypoints/cli/commands/benchmark-evidence.ts#L256) |
+| `modelFlagsForRun(): string[]` | Implements the model flags for run operation. | function | internal | [line 264](../../src/entrypoints/cli/commands/benchmark-evidence.ts#L264) |
+| `benchmarkEvidence(parsed: ParsedCommand): Promise<void>` | Implements the benchmark evidence operation. | function | exported | [line 273](../../src/entrypoints/cli/commands/benchmark-evidence.ts#L273) |
 ## `src/entrypoints/cli/commands/benchmark-longmemeval.ts`
 
 | Symbol | Purpose | Kind | Visibility | Source |
@@ -372,16 +390,16 @@ _No top-level functions, classes, or class methods._
 
 | Symbol | Purpose | Kind | Visibility | Source |
 |---|---|---|---|---|
-| `evolutionMode(parsed: ParsedCommand): MemoryAgentBenchEvolutionMode` | Implements the evolution mode operation. | function | internal | [line 75](../../src/entrypoints/cli/commands/benchmark-memoryagentbench.ts#L75) |
-| `optionalQuestionLimit(parsed: ParsedCommand): number \| undefined` | Implements the optional question limit operation. | function | internal | [line 83](../../src/entrypoints/cli/commands/benchmark-memoryagentbench.ts#L83) |
-| `zeroTemperature(runtime: PiModelRuntime): PiModelRuntime` | Implements the zero temperature operation. | function | internal | [line 93](../../src/entrypoints/cli/commands/benchmark-memoryagentbench.ts#L93) |
-| `groupByContext(questions: readonly MemoryAgentBenchQuestion[]): Map<string, MemoryAgentBenchQuestion[]>` | Implements the group by context operation. | function | internal | [line 101](../../src/entrypoints/cli/commands/benchmark-memoryagentbench.ts#L101) |
-| `checkpointPath(output: string, questionId: string): string` | Implements the checkpoint path operation. | function | internal | [line 116](../../src/entrypoints/cli/commands/benchmark-memoryagentbench.ts#L116) |
-| `completedPath(output: string, questionId: string): string` | Implements the completed path operation. | function | internal | [line 120](../../src/entrypoints/cli/commands/benchmark-memoryagentbench.ts#L120) |
-| `evolutionPath(output: string, contextId: string): string` | Implements the evolution path operation. | function | internal | [line 124](../../src/entrypoints/cli/commands/benchmark-memoryagentbench.ts#L124) |
-| `writePredictions(output: string, questions: readonly MemoryAgentBenchQuestion[]): Promise<number>` | Writes predictions. | function | internal | [line 128](../../src/entrypoints/cli/commands/benchmark-memoryagentbench.ts#L128) |
-| `ensureManifest(path: string, expected: unknown): Promise<void>` | Implements the ensure manifest operation. | function | internal | [line 157](../../src/entrypoints/cli/commands/benchmark-memoryagentbench.ts#L157) |
-| `benchmarkMemoryAgentBench(parsed: ParsedCommand): Promise<void>` | Implements the benchmark memory agent bench operation. | function | exported | [line 165](../../src/entrypoints/cli/commands/benchmark-memoryagentbench.ts#L165) |
+| `evolutionMode(parsed: ParsedCommand): MemoryAgentBenchEvolutionMode` | Implements the evolution mode operation. | function | internal | [line 76](../../src/entrypoints/cli/commands/benchmark-memoryagentbench.ts#L76) |
+| `optionalQuestionLimit(parsed: ParsedCommand): number \| undefined` | Implements the optional question limit operation. | function | internal | [line 84](../../src/entrypoints/cli/commands/benchmark-memoryagentbench.ts#L84) |
+| `zeroTemperature(runtime: PiModelRuntime): PiModelRuntime` | Implements the zero temperature operation. | function | internal | [line 94](../../src/entrypoints/cli/commands/benchmark-memoryagentbench.ts#L94) |
+| `groupByContext(questions: readonly MemoryAgentBenchQuestion[]): Map<string, MemoryAgentBenchQuestion[]>` | Implements the group by context operation. | function | internal | [line 102](../../src/entrypoints/cli/commands/benchmark-memoryagentbench.ts#L102) |
+| `checkpointPath(output: string, questionId: string): string` | Implements the checkpoint path operation. | function | internal | [line 117](../../src/entrypoints/cli/commands/benchmark-memoryagentbench.ts#L117) |
+| `completedPath(output: string, questionId: string): string` | Implements the completed path operation. | function | internal | [line 121](../../src/entrypoints/cli/commands/benchmark-memoryagentbench.ts#L121) |
+| `evolutionPath(output: string, contextId: string): string` | Implements the evolution path operation. | function | internal | [line 125](../../src/entrypoints/cli/commands/benchmark-memoryagentbench.ts#L125) |
+| `writePredictions(output: string, questions: readonly MemoryAgentBenchQuestion[]): Promise<number>` | Writes predictions. | function | internal | [line 129](../../src/entrypoints/cli/commands/benchmark-memoryagentbench.ts#L129) |
+| `ensureManifest(path: string, expected: unknown): Promise<void>` | Implements the ensure manifest operation. | function | internal | [line 158](../../src/entrypoints/cli/commands/benchmark-memoryagentbench.ts#L158) |
+| `benchmarkMemoryAgentBench(parsed: ParsedCommand): Promise<void>` | Implements the benchmark memory agent bench operation. | function | exported | [line 166](../../src/entrypoints/cli/commands/benchmark-memoryagentbench.ts#L166) |
 ## `src/entrypoints/cli/commands/evaluate-benchmark.ts`
 
 | Symbol | Purpose | Kind | Visibility | Source |
@@ -412,7 +430,7 @@ _No top-level functions, classes, or class methods._
 
 | Symbol | Purpose | Kind | Visibility | Source |
 |---|---|---|---|---|
-| `ingestLongMemEval(parsed: ParsedCommand): Promise<void>` | Implements the ingest long mem eval operation. | function | exported | [line 26](../../src/entrypoints/cli/commands/ingest-longmemeval.ts#L26) |
+| `ingestLongMemEval(parsed: ParsedCommand): Promise<void>` | Implements the ingest long mem eval operation. | function | exported | [line 27](../../src/entrypoints/cli/commands/ingest-longmemeval.ts#L27) |
 ## `src/entrypoints/cli/commands/ingest-tau-knowledge.ts`
 
 | Symbol | Purpose | Kind | Visibility | Source |
@@ -529,25 +547,25 @@ _No top-level functions, classes, or class methods._
 
 | Symbol | Purpose | Kind | Visibility | Source |
 |---|---|---|---|---|
-| `requiredEnvironment(name: string): string` | Implements the required environment operation. | function | internal | [line 19](../../src/entrypoints/ldbd-api/main.ts#L19) |
-| `integerEnvironment(name: string, fallback: number): number` | Implements the integer environment operation. | function | internal | [line 25](../../src/entrypoints/ldbd-api/main.ts#L25) |
-| `tokenDigest(value: string): Buffer` | Converts ken digest. | function | internal | [line 35](../../src/entrypoints/ldbd-api/main.ts#L35) |
-| `authorized(request: IncomingMessage, expectedToken: string \| undefined): boolean` | Implements the authorized operation. | function | internal | [line 39](../../src/entrypoints/ldbd-api/main.ts#L39) |
-| `jsonBody(request: IncomingMessage): Promise<unknown>` | Implements the json body operation. | function | internal | [line 48](../../src/entrypoints/ldbd-api/main.ts#L48) |
-| `respond(response: ServerResponse, status: number, body: unknown): void` | Implements the respond operation. | function | internal | [line 65](../../src/entrypoints/ldbd-api/main.ts#L65) |
-| `shutdown(): void` | Implements the shutdown operation. | function | internal | [line 130](../../src/entrypoints/ldbd-api/main.ts#L130) |
+| `requiredEnvironment(name: string): string` | Implements the required environment operation. | function | internal | [line 20](../../src/entrypoints/ldbd-api/main.ts#L20) |
+| `integerEnvironment(name: string, fallback: number): number` | Implements the integer environment operation. | function | internal | [line 26](../../src/entrypoints/ldbd-api/main.ts#L26) |
+| `tokenDigest(value: string): Buffer` | Converts ken digest. | function | internal | [line 36](../../src/entrypoints/ldbd-api/main.ts#L36) |
+| `authorized(request: IncomingMessage, expectedToken: string \| undefined): boolean` | Implements the authorized operation. | function | internal | [line 40](../../src/entrypoints/ldbd-api/main.ts#L40) |
+| `jsonBody(request: IncomingMessage): Promise<unknown>` | Implements the json body operation. | function | internal | [line 49](../../src/entrypoints/ldbd-api/main.ts#L49) |
+| `respond(response: ServerResponse, status: number, body: unknown): void` | Implements the respond operation. | function | internal | [line 66](../../src/entrypoints/ldbd-api/main.ts#L66) |
+| `shutdown(): void` | Implements the shutdown operation. | function | internal | [line 135](../../src/entrypoints/ldbd-api/main.ts#L135) |
 ## `src/entrypoints/ldbd-api/pimem-runtime.ts`
 
 | Symbol | Purpose | Kind | Visibility | Source |
 |---|---|---|---|---|
-| `KeyedSerialExecutor` | Implements keyed serial executor. | class | internal | [line 26](../../src/entrypoints/ldbd-api/pimem-runtime.ts#L26) |
-| `KeyedSerialExecutor.run(key: string, operation: () => Promise<T>): Promise<T>` | Runs the operation. | method | public | [line 29](../../src/entrypoints/ldbd-api/pimem-runtime.ts#L29) |
-| `requestHash(request: LdbdAddRequest): string` | Implements the request hash operation. | function | internal | [line 45](../../src/entrypoints/ldbd-api/pimem-runtime.ts#L45) |
-| `timestamp(value: number \| undefined): string \| undefined` | Implements the timestamp operation. | function | internal | [line 49](../../src/entrypoints/ldbd-api/pimem-runtime.ts#L49) |
-| `PiMemLdbdApplication` | Implements pi mem ldbd application. | class | exported | [line 58](../../src/entrypoints/ldbd-api/pimem-runtime.ts#L58) |
-| `PiMemLdbdApplication.constructor(private readonly store: MemoryStore & OnlineMemoryStore, private readonly embedder: Embedder, private readonly modelRuntime: PiModelRuntime)` | Creates a pi mem ldbd application instance. | method | public | [line 61](../../src/entrypoints/ldbd-api/pimem-runtime.ts#L61) |
-| `PiMemLdbdApplication.add(request: LdbdAddRequest): Promise<"inserted" \| "unchanged">` | Implements the add operation. | method | public | [line 67](../../src/entrypoints/ldbd-api/pimem-runtime.ts#L67) |
-| `PiMemLdbdApplication.search(request: LdbdSearchRequest, _signal?: AbortSignal): Promise<LdbdSearchItem[]>` | Performs a search. | method | public | [line 104](../../src/entrypoints/ldbd-api/pimem-runtime.ts#L104) |
+| `KeyedSerialExecutor` | Implements keyed serial executor. | class | internal | [line 28](../../src/entrypoints/ldbd-api/pimem-runtime.ts#L28) |
+| `KeyedSerialExecutor.run(key: string, operation: () => Promise<T>): Promise<T>` | Runs the operation. | method | public | [line 31](../../src/entrypoints/ldbd-api/pimem-runtime.ts#L31) |
+| `requestHash(request: LdbdAddRequest): string` | Implements the request hash operation. | function | internal | [line 47](../../src/entrypoints/ldbd-api/pimem-runtime.ts#L47) |
+| `timestamp(value: number \| undefined): string \| undefined` | Implements the timestamp operation. | function | internal | [line 51](../../src/entrypoints/ldbd-api/pimem-runtime.ts#L51) |
+| `PiMemLdbdApplication` | Implements pi mem ldbd application. | class | exported | [line 60](../../src/entrypoints/ldbd-api/pimem-runtime.ts#L60) |
+| `PiMemLdbdApplication.constructor(private readonly store: MemoryStore & OnlineMemoryStore, private readonly embedder: Embedder, private readonly modelRuntime: PiModelRuntime, options: { retrievalProfile?: RetrievalProfile; environment?: NodeJS.ProcessEnv; } = {})` | Creates a pi mem ldbd application instance. | method | public | [line 66](../../src/entrypoints/ldbd-api/pimem-runtime.ts#L66) |
+| `PiMemLdbdApplication.add(request: LdbdAddRequest): Promise<"inserted" \| "unchanged">` | Implements the add operation. | method | public | [line 82](../../src/entrypoints/ldbd-api/pimem-runtime.ts#L82) |
+| `PiMemLdbdApplication.search(request: LdbdSearchRequest, _signal?: AbortSignal): Promise<LdbdSearchItem[]>` | Performs a search. | method | public | [line 122](../../src/entrypoints/ldbd-api/pimem-runtime.ts#L122) |
 ## `src/entrypoints/ldbd-api/service.ts`
 
 | Symbol | Purpose | Kind | Visibility | Source |
@@ -962,6 +980,13 @@ _No top-level functions, classes, or class methods._
 | `sourceFiles(paths: readonly string[], environment: NodeJS.ProcessEnv): Promise<NodeJS.ProcessEnv>` | Implements the source files operation. | function | internal | [line 4](../../src/platform/security/protected-environment.ts#L4) |
 | `loadProtectedEnvironment(paths: readonly string[], baseEnvironment: NodeJS.ProcessEnv = process.env): Promise<NodeJS.ProcessEnv>` | Loads protected environment. | function | exported | [line 41](../../src/platform/security/protected-environment.ts#L41) |
 | `requireEnvironmentVariable(environment: NodeJS.ProcessEnv, name: string): string` | Implements the require environment variable operation. | function | exported | [line 61](../../src/platform/security/protected-environment.ts#L61) |
+## `src/platform/sqlite/float32-vector.ts`
+
+| Symbol | Purpose | Kind | Visibility | Source |
+|---|---|---|---|---|
+| `encodeFloat32Vector(vector: readonly number[], dimensions: number): Buffer` | Implements the encode float32 vector operation. | function | exported | [line 1](../../src/platform/sqlite/float32-vector.ts#L1) |
+| `decodeFloat32Vector(value: Uint8Array, dimensions: number): Float32Array` | Implements the decode float32 vector operation. | function | exported | [line 20](../../src/platform/sqlite/float32-vector.ts#L20) |
+| `equalBytes(left: Uint8Array, right: Uint8Array): boolean` | Implements the equal bytes operation. | function | exported | [line 45](../../src/platform/sqlite/float32-vector.ts#L45) |
 ## `src/platform/sqlite/memory-row.ts`
 
 | Symbol | Purpose | Kind | Visibility | Source |
@@ -971,41 +996,77 @@ _No top-level functions, classes, or class methods._
 
 | Symbol | Purpose | Kind | Visibility | Source |
 |---|---|---|---|---|
-| `quoteFtsToken(token: string): string` | Implements the quote fts token operation. | function | internal | [line 81](../../src/platform/sqlite/pimem-store.ts#L81) |
-| `rawFtsTokens(text: string): string[]` | Implements the raw fts tokens operation. | function | internal | [line 85](../../src/platform/sqlite/pimem-store.ts#L85) |
-| `ftsQueryPlans(text: string): FtsQueryPlan[]` | Builds strict-to-broad FTS plans from query text alone. | function | internal | [line 96](../../src/platform/sqlite/pimem-store.ts#L96) |
-| `compareRecords(a: MemoryRecord, b: MemoryRecord): number` | Compares records. | function | internal | [line 130](../../src/platform/sqlite/pimem-store.ts#L130) |
-| `recordFingerprint(record: MemoryRecord): string` | Implements the record fingerprint operation. | function | internal | [line 141](../../src/platform/sqlite/pimem-store.ts#L141) |
-| `isExistingTargetError(error: unknown): boolean` | Checks whether existing target error. | function | internal | [line 155](../../src/platform/sqlite/pimem-store.ts#L155) |
-| `validateEmbeddingProfile(profile: EmbeddingProfile): void` | Validates embedding profile. | function | internal | [line 163](../../src/platform/sqlite/pimem-store.ts#L163) |
-| `encodeVector(vector: readonly number[], dimensions: number): Buffer` | Implements the encode vector operation. | function | internal | [line 171](../../src/platform/sqlite/pimem-store.ts#L171) |
-| `decodeVector(value: Uint8Array, dimensions: number): Float32Array` | Implements the decode vector operation. | function | internal | [line 185](../../src/platform/sqlite/pimem-store.ts#L185) |
-| `sameBytes(left: Uint8Array, right: Uint8Array): boolean` | Implements the same bytes operation. | function | internal | [line 207](../../src/platform/sqlite/pimem-store.ts#L207) |
-| `MemoryStore` | Implements memory store. | class | exported | [line 215](../../src/platform/sqlite/pimem-store.ts#L215) |
-| `MemoryStore.constructor(databasePath: string)` | Creates a memory store instance. | method | public | [line 225](../../src/platform/sqlite/pimem-store.ts#L225) |
-| `MemoryStore.close(): void` | Closes owned resources. | method | public | [line 296](../../src/platform/sqlite/pimem-store.ts#L296) |
-| `MemoryStore.ingestScope(scopeId: string, records: MemoryRecord[]): ScopeIngestStatus` | Atomically persists one immutable memory scope and reports whether it was inserted or reused. | method | public | [line 307](../../src/platform/sqlite/pimem-store.ts#L307) |
-| `MemoryStore.appendMemoryRequest(request: AppendMemoryRequest): AppendMemoryResult` | Appends immutable source messages while the online scope is ingesting. | method | public | [line 378](../../src/platform/sqlite/pimem-store.ts#L378) |
-| `MemoryStore.hasPendingAppendRequests(scopeId: string): boolean` | Checks whether pending append requests. | method | public | [line 520](../../src/platform/sqlite/pimem-store.ts#L520) |
-| `MemoryStore.markAppendRequestComplete(requestId: string, requestHash: string): void` | Implements the mark append request complete operation. | method | public | [line 527](../../src/platform/sqlite/pimem-store.ts#L527) |
-| `MemoryStore.getOnlineScopeState(scopeId: string): OnlineScopeState \| undefined` | Returns online scope state. | method | public | [line 537](../../src/platform/sqlite/pimem-store.ts#L537) |
-| `MemoryStore.sealOnlineScope(scopeId: string): OnlineScopeState` | Implements the seal online scope operation. | method | public | [line 544](../../src/platform/sqlite/pimem-store.ts#L544) |
-| `MemoryStore.recordsInTurnRange(scopeId: string, sessionId: string, startTurnIndex: number, count: number): MemoryRecord[]` | Implements the records in turn range operation. | method | private | [line 579](../../src/platform/sqlite/pimem-store.ts#L579) |
-| `MemoryStore.ensureEvidenceFactIndex(scopeId: string): EvidenceFactIndexStatus` | Builds or validates the deterministic sidecar index for one scope. | method | public | [line 605](../../src/platform/sqlite/pimem-store.ts#L605) |
-| `MemoryStore.expandEvidenceOperator(scopeId: string, request: SearchRequest, context: EvidenceOperatorSearchContext, seedHits: readonly StoreSearchHit[]): StoreSearchHit[]` | Expands hybrid/FTS seeds through the versioned database fact index. | method | public | [line 610](../../src/platform/sqlite/pimem-store.ts#L610) |
-| `MemoryStore.searchLexical(scopeId: string, request: SearchRequest): StoreSearchHit[]` | Searches lexical. | method | public | [line 619](../../src/platform/sqlite/pimem-store.ts#L619) |
-| `MemoryStore.search(scopeId: string, request: SearchRequest): StoreSearchHit[]` | Executes filtered FTS5 search and returns finalized retrieval hits. | method | public | [line 623](../../src/platform/sqlite/pimem-store.ts#L623) |
-| `MemoryStore.read(scopeId: string, memoryIds: string[], contextBefore = 0, contextAfter = 0): MemoryRecord[]` | Reads exact memories by ID within one scope. | method | public | [line 765](../../src/platform/sqlite/pimem-store.ts#L765) |
-| `MemoryStore.getRecords(scopeId: string, memoryIds: string[]): MemoryRecord[]` | Returns records. | method | public | [line 810](../../src/platform/sqlite/pimem-store.ts#L810) |
-| `MemoryStore.listScopeRecords(scopeId: string): MemoryRecord[]` | Implements the list scope records operation. | method | public | [line 827](../../src/platform/sqlite/pimem-store.ts#L827) |
-| `MemoryStore.assertEmbeddingProfileConsistent(profile: EmbeddingProfile): void` | Validates embedding profile consistent and throws when invalid. | method | private | [line 841](../../src/platform/sqlite/pimem-store.ts#L841) |
-| `MemoryStore.getEmbeddingIndexStatus(scopeId: string, profile: EmbeddingProfile): EmbeddingIndexStatus` | Returns embedding index status. | method | public | [line 867](../../src/platform/sqlite/pimem-store.ts#L867) |
-| `MemoryStore.listMissingEmbeddingRecords(scopeId: string, profile: EmbeddingProfile): MemoryRecord[]` | Implements the list missing embedding records operation. | method | public | [line 922](../../src/platform/sqlite/pimem-store.ts#L922) |
-| `MemoryStore.storeEmbeddingBatch(records: readonly MemoryRecord[], profile: EmbeddingProfile, vectors: readonly (readonly number[])[]): StoreEmbeddingBatchResult` | Implements the store embedding batch operation. | method | public | [line 941](../../src/platform/sqlite/pimem-store.ts#L941) |
-| `MemoryStore.listStoredEmbeddings(scopeId: string, profile: EmbeddingProfile, request: Omit<SearchRequest, "queries" \| "limit"> = {}): StoredEmbeddingRecord[]` | Implements the list stored embeddings operation. | method | public | [line 1028](../../src/platform/sqlite/pimem-store.ts#L1028) |
-| `MemoryStore.findMentionedMemoryIds(scopeId: string, text: string): string[]` | Implements the find mentioned memory ids operation. | method | public | [line 1080](../../src/platform/sqlite/pimem-store.ts#L1080) |
-| `MemoryStore.exportScope(scopeId: string, exportRoot: string): Promise<ScopeExport>` | Writes a sanitized, permission-restricted filesystem export of one scope. | method | public | [line 1086](../../src/platform/sqlite/pimem-store.ts#L1086) |
-| `MemoryStore.create(databasePath: string): Promise<MemoryStore>` | Implements the create operation. | method | public | [line 1163](../../src/platform/sqlite/pimem-store.ts#L1163) |
+| `quoteFtsToken(token: string): string` | Implements the quote fts token operation. | function | internal | [line 95](../../src/platform/sqlite/pimem-store.ts#L95) |
+| `rawFtsTokens(text: string): string[]` | Implements the raw fts tokens operation. | function | internal | [line 99](../../src/platform/sqlite/pimem-store.ts#L99) |
+| `ftsQueryPlans(text: string): FtsQueryPlan[]` | Builds strict-to-broad FTS plans from query text alone. | function | internal | [line 110](../../src/platform/sqlite/pimem-store.ts#L110) |
+| `compareRecords(a: MemoryRecord, b: MemoryRecord): number` | Compares records. | function | internal | [line 144](../../src/platform/sqlite/pimem-store.ts#L144) |
+| `recordFingerprint(record: MemoryRecord): string` | Implements the record fingerprint operation. | function | internal | [line 155](../../src/platform/sqlite/pimem-store.ts#L155) |
+| `isExistingTargetError(error: unknown): boolean` | Checks whether existing target error. | function | internal | [line 169](../../src/platform/sqlite/pimem-store.ts#L169) |
+| `validateEmbeddingProfile(profile: EmbeddingProfile): void` | Validates embedding profile. | function | internal | [line 177](../../src/platform/sqlite/pimem-store.ts#L177) |
+| `MemoryStore` | Implements memory store. | class | exported | [line 185](../../src/platform/sqlite/pimem-store.ts#L185) |
+| `MemoryStore.constructor(databasePath: string)` | Creates a memory store instance. | method | public | [line 196](../../src/platform/sqlite/pimem-store.ts#L196) |
+| `MemoryStore.close(): void` | Closes owned resources. | method | public | [line 271](../../src/platform/sqlite/pimem-store.ts#L271) |
+| `MemoryStore.ingestScope(scopeId: string, records: MemoryRecord[]): ScopeIngestStatus` | Atomically persists one immutable memory scope and reports whether it was inserted or reused. | method | public | [line 282](../../src/platform/sqlite/pimem-store.ts#L282) |
+| `MemoryStore.appendMemoryRequest(request: AppendMemoryRequest): AppendMemoryResult` | Appends immutable source messages while the online scope is ingesting. | method | public | [line 353](../../src/platform/sqlite/pimem-store.ts#L353) |
+| `MemoryStore.hasPendingAppendRequests(scopeId: string): boolean` | Checks whether pending append requests. | method | public | [line 495](../../src/platform/sqlite/pimem-store.ts#L495) |
+| `MemoryStore.markAppendRequestComplete(requestId: string, requestHash: string): void` | Implements the mark append request complete operation. | method | public | [line 502](../../src/platform/sqlite/pimem-store.ts#L502) |
+| `MemoryStore.getOnlineScopeState(scopeId: string): OnlineScopeState \| undefined` | Returns online scope state. | method | public | [line 512](../../src/platform/sqlite/pimem-store.ts#L512) |
+| `MemoryStore.sealOnlineScope(scopeId: string): OnlineScopeState` | Implements the seal online scope operation. | method | public | [line 519](../../src/platform/sqlite/pimem-store.ts#L519) |
+| `MemoryStore.recordsInTurnRange(scopeId: string, sessionId: string, startTurnIndex: number, count: number): MemoryRecord[]` | Implements the records in turn range operation. | method | private | [line 554](../../src/platform/sqlite/pimem-store.ts#L554) |
+| `MemoryStore.ensureEvidenceFactIndex(scopeId: string): EvidenceFactIndexStatus` | Builds or validates the deterministic sidecar index for one scope. | method | public | [line 580](../../src/platform/sqlite/pimem-store.ts#L580) |
+| `MemoryStore.expandEvidenceOperator(scopeId: string, request: SearchRequest, context: EvidenceOperatorSearchContext, seedHits: readonly StoreSearchHit[]): StoreSearchHit[]` | Expands hybrid/FTS seeds through the versioned database fact index. | method | public | [line 585](../../src/platform/sqlite/pimem-store.ts#L585) |
+| `MemoryStore.searchLexical(scopeId: string, request: SearchRequest): StoreSearchHit[]` | Searches lexical. | method | public | [line 594](../../src/platform/sqlite/pimem-store.ts#L594) |
+| `MemoryStore.search(scopeId: string, request: SearchRequest): StoreSearchHit[]` | Executes filtered FTS5 search and returns finalized retrieval hits. | method | public | [line 598](../../src/platform/sqlite/pimem-store.ts#L598) |
+| `MemoryStore.read(scopeId: string, memoryIds: string[], contextBefore = 0, contextAfter = 0): MemoryRecord[]` | Reads exact memories by ID within one scope. | method | public | [line 740](../../src/platform/sqlite/pimem-store.ts#L740) |
+| `MemoryStore.getRecords(scopeId: string, memoryIds: string[]): MemoryRecord[]` | Returns records. | method | public | [line 785](../../src/platform/sqlite/pimem-store.ts#L785) |
+| `MemoryStore.listScopeRecords(scopeId: string): MemoryRecord[]` | Implements the list scope records operation. | method | public | [line 802](../../src/platform/sqlite/pimem-store.ts#L802) |
+| `MemoryStore.listScopeIds(): string[]` | Lists immutable memory scope IDs in stable order for whole-corpus derived-index publication. | method | public | [line 816](../../src/platform/sqlite/pimem-store.ts#L816) |
+| `MemoryStore.assertEmbeddingProfileConsistent(profile: EmbeddingProfile): void` | Validates embedding profile consistent and throws when invalid. | method | private | [line 823](../../src/platform/sqlite/pimem-store.ts#L823) |
+| `MemoryStore.getEmbeddingIndexStatus(scopeId: string, profile: EmbeddingProfile): EmbeddingIndexStatus` | Returns embedding index status. | method | public | [line 849](../../src/platform/sqlite/pimem-store.ts#L849) |
+| `MemoryStore.listMissingEmbeddingRecords(scopeId: string, profile: EmbeddingProfile): MemoryRecord[]` | Implements the list missing embedding records operation. | method | public | [line 904](../../src/platform/sqlite/pimem-store.ts#L904) |
+| `MemoryStore.storeEmbeddingBatch(records: readonly MemoryRecord[], profile: EmbeddingProfile, vectors: readonly (readonly number[])[]): StoreEmbeddingBatchResult` | Implements the store embedding batch operation. | method | public | [line 923](../../src/platform/sqlite/pimem-store.ts#L923) |
+| `MemoryStore.beginVectorIndexGeneration(config: VectorIndexGenerationConfig): VectorIndexGenerationStatus` | Implements the begin vector index generation operation. | method | public | [line 1010](../../src/platform/sqlite/pimem-store.ts#L1010) |
+| `MemoryStore.enqueueStoredScopeEmbeddingsForVectorGeneration(generationId: string, scopeId: string, profile: EmbeddingProfile): number` | Implements the enqueue stored scope embeddings for vector generation operation. | method | public | [line 1016](../../src/platform/sqlite/pimem-store.ts#L1016) |
+| `MemoryStore.getVectorIndexGeneration(generationId: string): VectorIndexGenerationStatus` | Returns vector index generation. | method | public | [line 1028](../../src/platform/sqlite/pimem-store.ts#L1028) |
+| `MemoryStore.sealVectorIndexGeneration(generationId: string): VectorIndexGenerationStatus` | Implements the seal vector index generation operation. | method | public | [line 1034](../../src/platform/sqlite/pimem-store.ts#L1034) |
+| `MemoryStore.claimVectorSyncBatch(generationId: string, limit: number, leaseMs: number, nowMs = Date.now()): VectorSyncClaim[]` | Implements the claim vector sync batch operation. | method | public | [line 1040](../../src/platform/sqlite/pimem-store.ts#L1040) |
+| `MemoryStore.completeVectorSyncBatch(generationId: string, sequenceIds: readonly number[]): void` | Implements the complete vector sync batch operation. | method | public | [line 1054](../../src/platform/sqlite/pimem-store.ts#L1054) |
+| `MemoryStore.releaseVectorSyncBatch(generationId: string, sequenceIds: readonly number[], error: unknown): void` | Implements the release vector sync batch operation. | method | public | [line 1061](../../src/platform/sqlite/pimem-store.ts#L1061) |
+| `MemoryStore.beginVectorIndexVerification(generationId: string): VectorIndexGenerationStatus` | Implements the begin vector index verification operation. | method | public | [line 1069](../../src/platform/sqlite/pimem-store.ts#L1069) |
+| `MemoryStore.markVectorIndexGenerationReady(generationId: string, observedVectorCount: number): VectorIndexGenerationStatus` | Implements the mark vector index generation ready operation. | method | public | [line 1075](../../src/platform/sqlite/pimem-store.ts#L1075) |
+| `MemoryStore.failVectorIndexGeneration(generationId: string, error: unknown): void` | Implements the fail vector index generation operation. | method | public | [line 1085](../../src/platform/sqlite/pimem-store.ts#L1085) |
+| `MemoryStore.assertVectorIndexGenerationReady(generationId: string): VectorIndexGenerationStatus` | Validates vector index generation ready and throws when invalid. | method | public | [line 1089](../../src/platform/sqlite/pimem-store.ts#L1089) |
+| `MemoryStore.listVectorGenerationScopeCounts(generationId: string): Array<{ scopeId: string; count: number }>` | Implements the list vector generation scope counts operation. | method | public | [line 1095](../../src/platform/sqlite/pimem-store.ts#L1095) |
+| `MemoryStore.getVectorGenerationScopeCount(generationId: string, scopeId: string): number` | Returns one generation's durable vector count for a scope-level fail-closed retrieval check. | method | public | [line 1101](../../src/platform/sqlite/pimem-store.ts#L1101) |
+| `MemoryStore.listStoredEmbeddings(scopeId: string, profile: EmbeddingProfile, request: Omit<SearchRequest, "queries" \| "limit"> = {}): StoredEmbeddingRecord[]` | Implements the list stored embeddings operation. | method | public | [line 1111](../../src/platform/sqlite/pimem-store.ts#L1111) |
+| `MemoryStore.findMentionedMemoryIds(scopeId: string, text: string): string[]` | Implements the find mentioned memory ids operation. | method | public | [line 1163](../../src/platform/sqlite/pimem-store.ts#L1163) |
+| `MemoryStore.exportScope(scopeId: string, exportRoot: string): Promise<ScopeExport>` | Writes a sanitized, permission-restricted filesystem export of one scope. | method | public | [line 1169](../../src/platform/sqlite/pimem-store.ts#L1169) |
+| `MemoryStore.create(databasePath: string): Promise<MemoryStore>` | Implements the create operation. | method | public | [line 1246](../../src/platform/sqlite/pimem-store.ts#L1246) |
+## `src/platform/sqlite/vector-index-state-store.ts`
+
+| Symbol | Purpose | Kind | Visibility | Source |
+|---|---|---|---|---|
+| `requiredIdentity(value: string, label: string): string` | Implements the required identity operation. | function | internal | [line 49](../../src/platform/sqlite/vector-index-state-store.ts#L49) |
+| `boundedError(error: unknown): string` | Implements the bounded error operation. | function | internal | [line 55](../../src/platform/sqlite/vector-index-state-store.ts#L55) |
+| `assertEmbeddingProfile(profile: EmbeddingProfile): void` | Validates embedding profile and throws when invalid. | function | internal | [line 59](../../src/platform/sqlite/vector-index-state-store.ts#L59) |
+| `SqliteVectorIndexStateStore` | SQLite outbox and state machine for immutable external vector generations. | class | exported | [line 68](../../src/platform/sqlite/vector-index-state-store.ts#L68) |
+| `SqliteVectorIndexStateStore.constructor(private readonly db: DatabaseSync, private readonly embeddingStatus: ( scopeId: string, profile: EmbeddingProfile, ) => EmbeddingIndexStatus)` | Creates a sqlite vector index state store instance. | method | public | [line 69](../../src/platform/sqlite/vector-index-state-store.ts#L69) |
+| `SqliteVectorIndexStateStore.beginVectorIndexGeneration(config: VectorIndexGenerationConfig): VectorIndexGenerationStatus` | Implements the begin vector index generation operation. | method | public | [line 117](../../src/platform/sqlite/vector-index-state-store.ts#L117) |
+| `SqliteVectorIndexStateStore.enqueueStoredScopeEmbeddingsForVectorGeneration(generationId: string, scopeId: string, profile: EmbeddingProfile): number` | Implements the enqueue stored scope embeddings for vector generation operation. | method | public | [line 155](../../src/platform/sqlite/vector-index-state-store.ts#L155) |
+| `SqliteVectorIndexStateStore.getVectorIndexGeneration(generationId: string): VectorIndexGenerationStatus` | Returns vector index generation. | method | public | [line 211](../../src/platform/sqlite/vector-index-state-store.ts#L211) |
+| `SqliteVectorIndexStateStore.sealVectorIndexGeneration(generationId: string): VectorIndexGenerationStatus` | Implements the seal vector index generation operation. | method | public | [line 246](../../src/platform/sqlite/vector-index-state-store.ts#L246) |
+| `SqliteVectorIndexStateStore.claimVectorSyncBatch(generationId: string, limit: number, leaseMs: number, nowMs = Date.now()): VectorSyncClaim[]` | Implements the claim vector sync batch operation. | method | public | [line 293](../../src/platform/sqlite/vector-index-state-store.ts#L293) |
+| `SqliteVectorIndexStateStore.completeVectorSyncBatch(generationId: string, sequenceIds: readonly number[]): void` | Implements the complete vector sync batch operation. | method | public | [line 369](../../src/platform/sqlite/vector-index-state-store.ts#L369) |
+| `SqliteVectorIndexStateStore.releaseVectorSyncBatch(generationId: string, sequenceIds: readonly number[], error: unknown): void` | Implements the release vector sync batch operation. | method | public | [line 376](../../src/platform/sqlite/vector-index-state-store.ts#L376) |
+| `SqliteVectorIndexStateStore.beginVectorIndexVerification(generationId: string): VectorIndexGenerationStatus` | Implements the begin vector index verification operation. | method | public | [line 389](../../src/platform/sqlite/vector-index-state-store.ts#L389) |
+| `SqliteVectorIndexStateStore.markVectorIndexGenerationReady(generationId: string, observedVectorCount: number): VectorIndexGenerationStatus` | Implements the mark vector index generation ready operation. | method | public | [line 413](../../src/platform/sqlite/vector-index-state-store.ts#L413) |
+| `SqliteVectorIndexStateStore.failVectorIndexGeneration(generationId: string, error: unknown): void` | Implements the fail vector index generation operation. | method | public | [line 436](../../src/platform/sqlite/vector-index-state-store.ts#L436) |
+| `SqliteVectorIndexStateStore.assertVectorIndexGenerationReady(generationId: string): VectorIndexGenerationStatus` | Validates vector index generation ready and throws when invalid. | method | public | [line 445](../../src/platform/sqlite/vector-index-state-store.ts#L445) |
+| `SqliteVectorIndexStateStore.listVectorGenerationScopeCounts(generationId: string): Array<{ scopeId: string; count: number }>` | Implements the list vector generation scope counts operation. | method | public | [line 455](../../src/platform/sqlite/vector-index-state-store.ts#L455) |
+| `SqliteVectorIndexStateStore.getVectorGenerationScopeCount(generationId: string, scopeId: string): number` | Returns vector generation scope count. | method | public | [line 466](../../src/platform/sqlite/vector-index-state-store.ts#L466) |
+| `SqliteVectorIndexStateStore.generationRow(generationId: string): VectorGenerationRow \| undefined` | Implements the generation row operation. | method | private | [line 478](../../src/platform/sqlite/vector-index-state-store.ts#L478) |
+| `SqliteVectorIndexStateStore.generationFingerprint(generationId: string): string` | Implements the generation fingerprint operation. | method | private | [line 490](../../src/platform/sqlite/vector-index-state-store.ts#L490) |
+| `SqliteVectorIndexStateStore.updateVectorSyncBatch(generationId: string, sequenceIds: readonly number[], state: "pending" \| "synced", lastError?: string): void` | Implements the update vector sync batch operation. | method | private | [line 527](../../src/platform/sqlite/vector-index-state-store.ts#L527) |
 ## `src/retrieval/adapters/openai/openai-compatible-embedder.ts`
 
 | Symbol | Purpose | Kind | Visibility | Source |
@@ -1055,6 +1116,61 @@ _No top-level functions, classes, or class methods._
 | `chronologicalOperator(store: SearchOperatorStore): SearchOperator` | Implements the chronological operator operation. | function | internal | [line 90](../../src/retrieval/adapters/operators/builtins.ts#L90) |
 | `evidenceIndexOperator(store: SearchOperatorStore, operator: "temporal" \| "numeric"): SearchOperator` | Implements the evidence index operator operation. | function | internal | [line 110](../../src/retrieval/adapters/operators/builtins.ts#L110) |
 | `builtInSearchOperators(store: SearchOperatorStore): SearchOperator[]` | Creates the built-in search-operator implementations over one injected store. | function | exported | [line 173](../../src/retrieval/adapters/operators/builtins.ts#L173) |
+## `src/retrieval/adapters/qdrant/client.ts`
+
+| Symbol | Purpose | Kind | Visibility | Source |
+|---|---|---|---|---|
+| `QdrantHttpError` | Implements qdrant http error. | class | exported | [line 87](../../src/retrieval/adapters/qdrant/client.ts#L87) |
+| `QdrantHttpError.constructor(readonly status: number, message: string)` | Creates a qdrant http error instance. | method | public | [line 88](../../src/retrieval/adapters/qdrant/client.ts#L88) |
+| `positiveInteger(value: number, label: string): number` | Implements the positive integer operation. | function | internal | [line 94](../../src/retrieval/adapters/qdrant/client.ts#L94) |
+| `nonNegativeInteger(value: number, label: string): number` | Implements the non negative integer operation. | function | internal | [line 101](../../src/retrieval/adapters/qdrant/client.ts#L101) |
+| `nonEmpty(value: string, label: string): string` | Implements the non empty operation. | function | internal | [line 108](../../src/retrieval/adapters/qdrant/client.ts#L108) |
+| `objectValue(value: unknown, label: string): Record<string, unknown>` | Implements the object value operation. | function | internal | [line 113](../../src/retrieval/adapters/qdrant/client.ts#L113) |
+| `memoryRole(value: unknown, label: string): MemoryRole` | Implements the memory role operation. | function | internal | [line 120](../../src/retrieval/adapters/qdrant/client.ts#L120) |
+| `dateTimeMilliseconds(value: string, label: string): number` | Implements the date time milliseconds operation. | function | internal | [line 127](../../src/retrieval/adapters/qdrant/client.ts#L127) |
+| `dateTime(value: string, label: string): string` | Implements the date time operation. | function | internal | [line 149](../../src/retrieval/adapters/qdrant/client.ts#L149) |
+| `collectionName(value: string): string` | Collects ion name. | function | internal | [line 154](../../src/retrieval/adapters/qdrant/client.ts#L154) |
+| `baseUrl(value: string): string` | Implements the base url operation. | function | internal | [line 161](../../src/retrieval/adapters/qdrant/client.ts#L161) |
+| `finiteVector(vector: readonly number[], dimensions?: number): number[]` | Implements the finite vector operation. | function | internal | [line 178](../../src/retrieval/adapters/qdrant/client.ts#L178) |
+| `responseSignal(timeoutMs: number, signal?: AbortSignal): AbortSignal` | Implements the response signal operation. | function | internal | [line 188](../../src/retrieval/adapters/qdrant/client.ts#L188) |
+| `responseMessage(status: number, body: string): string` | Implements the response message operation. | function | internal | [line 193](../../src/retrieval/adapters/qdrant/client.ts#L193) |
+| `optimizerStatus(value: unknown): string` | Implements the optimizer status operation. | function | internal | [line 200](../../src/retrieval/adapters/qdrant/client.ts#L200) |
+| `parseCollectionInfo(value: unknown): QdrantCollectionInfo` | Parses collection info. | function | internal | [line 208](../../src/retrieval/adapters/qdrant/client.ts#L208) |
+| `QdrantClient` | Minimal HTTP adapter; Qdrant is never trusted as the source of memory text. | class | exported | [line 251](../../src/retrieval/adapters/qdrant/client.ts#L251) |
+| `QdrantClient.constructor(options: QdrantClientOptions)` | Creates a qdrant client instance. | method | public | [line 257](../../src/retrieval/adapters/qdrant/client.ts#L257) |
+| `QdrantClient.request(method: string, path: string, options: { body?: unknown; signal?: AbortSignal; acceptedStatuses?: readonly number[]; } = {}): Promise<{ status: number; value: unknown }>` | Implements the request operation. | method | private | [line 264](../../src/retrieval/adapters/qdrant/client.ts#L264) |
+| `QdrantClient.getCollection(name: string, signal?: AbortSignal): Promise<QdrantCollectionInfo \| undefined>` | Returns collection. | method | public | [line 295](../../src/retrieval/adapters/qdrant/client.ts#L295) |
+| `QdrantClient.ensurePayloadIndex(collection: string, fieldName: string, fieldSchema: Record<string, unknown>, signal?: AbortSignal): Promise<void>` | Implements the ensure payload index operation. | method | private | [line 310](../../src/retrieval/adapters/qdrant/client.ts#L310) |
+| `QdrantClient.ensureCollection(spec: QdrantCollectionSpec, signal?: AbortSignal): Promise<void>` | Implements the ensure collection operation. | method | public | [line 326](../../src/retrieval/adapters/qdrant/client.ts#L326) |
+| `QdrantClient.upsert(collection: string, dimensions: number, points: readonly QdrantVectorPoint[], signal?: AbortSignal): Promise<void>` | Implements the upsert operation. | method | public | [line 379](../../src/retrieval/adapters/qdrant/client.ts#L379) |
+| `QdrantClient.count(request: QdrantCountRequest): Promise<number>` | Implements the count operation. | method | public | [line 418](../../src/retrieval/adapters/qdrant/client.ts#L418) |
+| `QdrantClient.search(request: QdrantSearchRequest): Promise<QdrantSearchHit[]>` | Performs a search. | method | public | [line 442](../../src/retrieval/adapters/qdrant/client.ts#L442) |
+## `src/retrieval/adapters/qdrant/dense-retriever.ts`
+
+| Symbol | Purpose | Kind | Visibility | Source |
+|---|---|---|---|---|
+| `QdrantDenseRetriever` | Filtered HNSW whose IDs and immutable provenance are revalidated in SQLite. | class | exported | [line 50](../../src/retrieval/adapters/qdrant/dense-retriever.ts#L50) |
+| `QdrantDenseRetriever.constructor(private readonly options: QdrantDenseRetrieverOptions)` | Creates a qdrant dense retriever instance. | method | public | [line 56](../../src/retrieval/adapters/qdrant/dense-retriever.ts#L56) |
+| `QdrantDenseRetriever.hydrate(scopeId: string, hits: readonly QdrantSearchHit[], limit: number): Promise<DenseSearchHit[]>` | Implements the hydrate operation. | method | private | [line 68](../../src/retrieval/adapters/qdrant/dense-retriever.ts#L68) |
+| `QdrantDenseRetriever.search(request: DenseSearchBatchRequest): Promise<DenseSearchHit[][]>` | Performs a search. | method | public | [line 109](../../src/retrieval/adapters/qdrant/dense-retriever.ts#L109) |
+## `src/retrieval/adapters/qdrant/vector-synchronizer.ts`
+
+| Symbol | Purpose | Kind | Visibility | Source |
+|---|---|---|---|---|
+| `boundedInteger(value: number, label: string, maximum: number): number` | Implements the bounded integer operation. | function | internal | [line 42](../../src/retrieval/adapters/qdrant/vector-synchronizer.ts#L42) |
+| `deterministicQdrantPointId(generationId: string, scopeId: string, memoryId: string, profileId: string): string` | Implements the deterministic qdrant point id operation. | function | exported | [line 49](../../src/retrieval/adapters/qdrant/vector-synchronizer.ts#L49) |
+| `pointFromClaim(claim: VectorSyncClaim): QdrantVectorPoint` | Implements the point from claim operation. | function | internal | [line 81](../../src/retrieval/adapters/qdrant/vector-synchronizer.ts#L81) |
+| `permanentFailure(error: unknown): boolean` | Implements the permanent failure operation. | function | internal | [line 101](../../src/retrieval/adapters/qdrant/vector-synchronizer.ts#L101) |
+| `qdrantCollectionIndexReady(info: Pick< QdrantCollectionInfo, \| "status" \| "optimizerStatus" \| "pointsCount" \| "indexedVectorsCount" \| "segmentsCount" >, dimensions: number, indexingThresholdKb: number): boolean` | Implements the qdrant collection index ready operation. | function | exported | [line 109](../../src/retrieval/adapters/qdrant/vector-synchronizer.ts#L109) |
+| `wait(delayMs: number, signal?: AbortSignal): Promise<void>` | Implements the wait operation. | function | internal | [line 129](../../src/retrieval/adapters/qdrant/vector-synchronizer.ts#L129) |
+| `QdrantVectorSynchronizer` | Publishes an immutable, resumable Qdrant generation from SQLite outbox rows. | class | exported | [line 147](../../src/retrieval/adapters/qdrant/vector-synchronizer.ts#L147) |
+| `QdrantVectorSynchronizer.constructor(private readonly options: QdrantVectorSynchronizerOptions)` | Creates a qdrant vector synchronizer instance. | method | public | [line 154](../../src/retrieval/adapters/qdrant/vector-synchronizer.ts#L154) |
+| `QdrantVectorSynchronizer.initialize(signal?: AbortSignal): Promise<VectorIndexGenerationStatus>` | Implements the initialize operation. | method | public | [line 166](../../src/retrieval/adapters/qdrant/vector-synchronizer.ts#L166) |
+| `QdrantVectorSynchronizer.worker(signal?: AbortSignal): Promise<number>` | Implements the worker operation. | method | private | [line 185](../../src/retrieval/adapters/qdrant/vector-synchronizer.ts#L185) |
+| `QdrantVectorSynchronizer.synchronizeAvailable(signal?: AbortSignal): Promise<number>` | Implements the synchronize available operation. | method | public | [line 215](../../src/retrieval/adapters/qdrant/vector-synchronizer.ts#L215) |
+| `QdrantVectorSynchronizer.waitForIndex(signal?: AbortSignal): Promise<void>` | Implements the wait for index operation. | method | private | [line 224](../../src/retrieval/adapters/qdrant/vector-synchronizer.ts#L224) |
+| `QdrantVectorSynchronizer.verifyCounts(status: VectorIndexGenerationStatus, signal?: AbortSignal): Promise<number>` | Implements the verify counts operation. | method | private | [line 248](../../src/retrieval/adapters/qdrant/vector-synchronizer.ts#L248) |
+| `QdrantVectorSynchronizer.finalize(signal?: AbortSignal): Promise<VectorIndexGenerationStatus>` | Implements the finalize operation. | method | public | [line 276](../../src/retrieval/adapters/qdrant/vector-synchronizer.ts#L276) |
 ## `src/retrieval/adapters/sqlite/database-evidence-operators.ts`
 
 | Symbol | Purpose | Kind | Visibility | Source |
@@ -1082,6 +1198,14 @@ _No top-level functions, classes, or class methods._
 | `EvidenceFactIndex.indexRows(rows: readonly MemoryRow[]): void` | Indexes rows. | method | private | [line 110](../../src/retrieval/adapters/sqlite/evidence-fact-index.ts#L110) |
 | `EvidenceFactIndex.indexRecord(row: MemoryRow, insertNumeric: ReturnType<DatabaseSync["prepare"]>, insertTemporal: ReturnType<DatabaseSync["prepare"]>, markIndexed: ReturnType<DatabaseSync["prepare"]>): void` | Indexes record. | method | private | [line 139](../../src/retrieval/adapters/sqlite/evidence-fact-index.ts#L139) |
 | `EvidenceFactIndex.status(scopeId: string): EvidenceFactIndexStatus` | Implements the status operation. | method | private | [line 198](../../src/retrieval/adapters/sqlite/evidence-fact-index.ts#L198) |
+## `src/retrieval/adapters/sqlite/exact-dense-retriever.ts`
+
+| Symbol | Purpose | Kind | Visibility | Source |
+|---|---|---|---|---|
+| `cosineSimilarity(left: ArrayLike<number>, right: ArrayLike<number>): number` | Implements the cosine similarity operation. | function | internal | [line 8](../../src/retrieval/adapters/sqlite/exact-dense-retriever.ts#L8) |
+| `SqliteExactDenseRetriever` | Exact SQLite implementation retained as the regression oracle. | class | exported | [line 33](../../src/retrieval/adapters/sqlite/exact-dense-retriever.ts#L33) |
+| `SqliteExactDenseRetriever.constructor(private readonly store: EmbeddingIndexStore)` | Creates a sqlite exact dense retriever instance. | method | public | [line 36](../../src/retrieval/adapters/sqlite/exact-dense-retriever.ts#L36) |
+| `SqliteExactDenseRetriever.search(request: DenseSearchBatchRequest): Promise<DenseSearchHit[][]>` | Performs a search. | method | public | [line 38](../../src/retrieval/adapters/sqlite/exact-dense-retriever.ts#L38) |
 ## `src/retrieval/finalize-search-hits.ts`
 
 | Symbol | Purpose | Kind | Visibility | Source |
@@ -1131,21 +1255,20 @@ _No top-level functions, classes, or class methods._
 
 | Symbol | Purpose | Kind | Visibility | Source |
 |---|---|---|---|---|
-| `metadataFilterKey(filter: RetrievalMetadataFilter): string` | Implements the metadata filter key operation. | function | internal | [line 39](../../src/retrieval/operators/hybrid-search.ts#L39) |
-| `mergeMetadataFilters(...groups: Array<readonly RetrievalMetadataFilter[] \| undefined>): RetrievalMetadataFilter[] \| undefined` | Merges metadata filters. | function | internal | [line 48](../../src/retrieval/operators/hybrid-search.ts#L48) |
-| `reserveMetadataRoutes(rankings: readonly (readonly T[])[]): T[]` | Implements the reserve metadata routes operation. | function | internal | [line 58](../../src/retrieval/operators/hybrid-search.ts#L58) |
-| `cosineSimilarity(left: ArrayLike<number>, right: ArrayLike<number>): number` | Implements the cosine similarity operation. | function | internal | [line 78](../../src/retrieval/operators/hybrid-search.ts#L78) |
-| `compareFinal(left: RankedHybridHit, right: RankedHybridHit): number` | Compares final. | function | internal | [line 99](../../src/retrieval/operators/hybrid-search.ts#L99) |
-| `HybridMemoryStore` | Implements hybrid memory store. | class | exported | [line 127](../../src/retrieval/operators/hybrid-search.ts#L127) |
-| `HybridMemoryStore.constructor(rawStore: HybridSearchStore, embedder: Embedder)` | Creates a hybrid memory store instance. | method | public | [line 134](../../src/retrieval/operators/hybrid-search.ts#L134) |
-| `HybridMemoryStore.getRetrievalMetadata(): RetrievalMetadata` | Returns retrieval metadata. | method | public | [line 139](../../src/retrieval/operators/hybrid-search.ts#L139) |
-| `HybridMemoryStore.snapshotRetrievalMetrics(): RetrievalMetricsSnapshot` | Implements the snapshot retrieval metrics operation. | method | public | [line 148](../../src/retrieval/operators/hybrid-search.ts#L148) |
-| `HybridMemoryStore.search(scopeId: string, request: SearchRequest, signal?: AbortSignal): Promise<RetrievalHit[]>` | Performs a search. | method | public | [line 158](../../src/retrieval/operators/hybrid-search.ts#L158) |
-| `HybridMemoryStore.searchLexical(scopeId: string, request: SearchRequest): RetrievalHit[]` | Searches lexical. | method | public | [line 433](../../src/retrieval/operators/hybrid-search.ts#L433) |
-| `HybridMemoryStore.expandEvidenceOperator(scopeId: string, request: SearchRequest, context: EvidenceOperatorSearchContext, seedHits: readonly RetrievalHit[]): RetrievalHit[]` | Implements the expand evidence operator operation. | method | public | [line 440](../../src/retrieval/operators/hybrid-search.ts#L440) |
-| `HybridMemoryStore.read(scopeId: string, memoryIds: string[], contextBefore = 0, contextAfter = 0): MemoryRecord[]` | Reads the requested value. | method | public | [line 454](../../src/retrieval/operators/hybrid-search.ts#L454) |
-| `HybridMemoryStore.getRecords(scopeId: string, memoryIds: string[]): MemoryRecord[]` | Returns records. | method | public | [line 468](../../src/retrieval/operators/hybrid-search.ts#L468) |
-| `HybridMemoryStore.findMentionedMemoryIds(scopeId: string, text: string): string[]` | Implements the find mentioned memory ids operation. | method | public | [line 472](../../src/retrieval/operators/hybrid-search.ts#L472) |
+| `metadataFilterKey(filter: RetrievalMetadataFilter): string` | Implements the metadata filter key operation. | function | internal | [line 40](../../src/retrieval/operators/hybrid-search.ts#L40) |
+| `mergeMetadataFilters(...groups: Array<readonly RetrievalMetadataFilter[] \| undefined>): RetrievalMetadataFilter[] \| undefined` | Merges metadata filters. | function | internal | [line 49](../../src/retrieval/operators/hybrid-search.ts#L49) |
+| `reserveMetadataRoutes(rankings: readonly (readonly T[])[]): T[]` | Implements the reserve metadata routes operation. | function | internal | [line 59](../../src/retrieval/operators/hybrid-search.ts#L59) |
+| `compareFinal(left: RankedHybridHit, right: RankedHybridHit): number` | Compares final. | function | internal | [line 79](../../src/retrieval/operators/hybrid-search.ts#L79) |
+| `HybridMemoryStore` | Implements hybrid memory store. | class | exported | [line 107](../../src/retrieval/operators/hybrid-search.ts#L107) |
+| `HybridMemoryStore.constructor(rawStore: HybridSearchStore, embedder: Embedder, denseRetriever?: DenseRetriever)` | Creates a hybrid memory store instance. | method | public | [line 115](../../src/retrieval/operators/hybrid-search.ts#L115) |
+| `HybridMemoryStore.getRetrievalMetadata(): RetrievalMetadata` | Returns retrieval metadata. | method | public | [line 125](../../src/retrieval/operators/hybrid-search.ts#L125) |
+| `HybridMemoryStore.snapshotRetrievalMetrics(): RetrievalMetricsSnapshot` | Implements the snapshot retrieval metrics operation. | method | public | [line 140](../../src/retrieval/operators/hybrid-search.ts#L140) |
+| `HybridMemoryStore.search(scopeId: string, request: SearchRequest, signal?: AbortSignal): Promise<RetrievalHit[]>` | Performs a search. | method | public | [line 150](../../src/retrieval/operators/hybrid-search.ts#L150) |
+| `HybridMemoryStore.searchLexical(scopeId: string, request: SearchRequest): RetrievalHit[]` | Searches lexical. | method | public | [line 445](../../src/retrieval/operators/hybrid-search.ts#L445) |
+| `HybridMemoryStore.expandEvidenceOperator(scopeId: string, request: SearchRequest, context: EvidenceOperatorSearchContext, seedHits: readonly RetrievalHit[]): RetrievalHit[]` | Implements the expand evidence operator operation. | method | public | [line 452](../../src/retrieval/operators/hybrid-search.ts#L452) |
+| `HybridMemoryStore.read(scopeId: string, memoryIds: string[], contextBefore = 0, contextAfter = 0): MemoryRecord[]` | Reads the requested value. | method | public | [line 466](../../src/retrieval/operators/hybrid-search.ts#L466) |
+| `HybridMemoryStore.getRecords(scopeId: string, memoryIds: string[]): MemoryRecord[]` | Returns records. | method | public | [line 480](../../src/retrieval/operators/hybrid-search.ts#L480) |
+| `HybridMemoryStore.findMentionedMemoryIds(scopeId: string, text: string): string[]` | Implements the find mentioned memory ids operation. | method | public | [line 484](../../src/retrieval/operators/hybrid-search.ts#L484) |
 ## `src/retrieval/operators/numeric-operator.ts`
 
 | Symbol | Purpose | Kind | Visibility | Source |
@@ -1170,6 +1293,9 @@ _No top-level functions, classes, or class methods._
 | `explicitDates(content: string, fallbackYear?: number): string[]` | Implements the explicit dates operation. | function | internal | [line 214](../../src/retrieval/operators/temporal-operator.ts#L214) |
 | `extractTemporalFacts(content: string, sourceTimestamp?: string): TemporalFact[]` | Extracts deterministic event-date facts from one immutable memory turn. | function | exported | [line 239](../../src/retrieval/operators/temporal-operator.ts#L239) |
 | `buildTimelineOperatorResult(hits: readonly RetrievalHit[], question: string, questionDate?: string, auxiliaryRequest?: SearchRequest): EvidenceOperatorResult` | Builds timeline operator result. | function | exported | [line 338](../../src/retrieval/operators/temporal-operator.ts#L338) |
+## `src/retrieval/ports/dense-retriever.ts`
+
+_No top-level functions, classes, or class methods._
 ## `src/retrieval/ports/memory-tool-store.ts`
 
 _No top-level functions, classes, or class methods._
@@ -1180,6 +1306,9 @@ _No top-level functions, classes, or class methods._
 
 _No top-level functions, classes, or class methods._
 ## `src/retrieval/ports/search-operator.ts`
+
+_No top-level functions, classes, or class methods._
+## `src/retrieval/ports/vector-index-state-store.ts`
 
 _No top-level functions, classes, or class methods._
 ## `src/retrieval/ranking.ts`

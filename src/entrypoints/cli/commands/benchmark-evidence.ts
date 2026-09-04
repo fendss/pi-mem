@@ -32,7 +32,10 @@ import {
 import { runAsyncPool } from "../../../platform/concurrency/async-pool.js";
 import { loadPiModelRuntime } from "../../../platform/pi/load-model-runtime.js";
 import { MemoryStore } from "../../../platform/sqlite/pimem-store.js";
-import { embeddingProfile } from "../../../retrieval/index.js";
+import {
+  embeddingProfile,
+  type RetrievalProfile,
+} from "../../../retrieval/index.js";
 import { safePathSegment, sha256 } from "../../../util.js";
 import {
   BENCHMARK_MODEL_FLAG_NAMES,
@@ -82,7 +85,7 @@ interface DatasetManifest {
 
 function datasetRetrievalProfile(
   manifest: DatasetManifest,
-): "fts5" | "pimem-hybrid" {
+): RetrievalProfile {
   if (
     typeof manifest.retrieval !== "object" || manifest.retrieval === null ||
     Array.isArray(manifest.retrieval) ||
@@ -91,7 +94,11 @@ function datasetRetrievalProfile(
     throw new Error("Dataset manifest has no retrieval profile");
   }
   const profile = manifest.retrieval.retrievalProfile;
-  if (profile !== "fts5" && profile !== "pimem-hybrid") {
+  if (
+    profile !== "fts5" &&
+    profile !== "pimem-hybrid" &&
+    profile !== "pimem-hybrid-qdrant-hnsw-v1"
+  ) {
     throw new Error("Dataset manifest has an unsupported retrieval profile");
   }
   return profile;
@@ -381,7 +388,7 @@ export async function benchmarkEvidence(parsed: ParsedCommand): Promise<void> {
     }
     const operatorCatalog = contexts[0]!.operatorRegistry.list();
 
-    if (retrievalProfile === "pimem-hybrid") {
+    if (retrievalProfile !== "fts5") {
       const profile = embeddingProfile(contexts[0]!.embedder!);
       for (const query of selected) {
         const status = rawStore.getEmbeddingIndexStatus(query.scopeId, profile);

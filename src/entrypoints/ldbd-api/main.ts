@@ -6,6 +6,7 @@ import { loadPiModelRuntime } from "../../platform/pi/load-model-runtime.js";
 import { MemoryStore } from "../../platform/sqlite/pimem-store.js";
 import { AsyncRequestGate } from "../../platform/concurrency/request-gate.js";
 import { OpenAICompatibleEmbedder } from "../../retrieval/adapters/openai/openai-compatible-embedder.js";
+import { parseRetrievalProfile } from "../../retrieval/index.js";
 import { PiMemLdbdApplication } from "./pimem-runtime.js";
 import {
   LdbdApiService,
@@ -86,7 +87,11 @@ const modelRuntime = await loadPiModelRuntime({
   transport: process.env.PIMEM_TRANSPORT?.trim() === "sse" ? "sse" : "non-stream",
 });
 const service = new LdbdApiService(
-  new PiMemLdbdApplication(store, embedder, modelRuntime),
+  new PiMemLdbdApplication(store, embedder, modelRuntime, {
+    retrievalProfile: parseRetrievalProfile(
+      process.env.PIMEM_RETRIEVAL_PROFILE?.trim() || "pimem-hybrid",
+    ),
+  }),
 );
 const addGate = new AsyncRequestGate(8, 1_000);
 const searchGate = new AsyncRequestGate(16, 1_000);

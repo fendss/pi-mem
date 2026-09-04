@@ -323,7 +323,7 @@ export async function benchmarkLongMemEval(
     retrieval = retrievalContexts[0]!.metadata;
     const operatorCatalog = retrievalContexts[0]!.operatorRegistry.list();
 
-    if (retrievalProfile === "pimem-hybrid") {
+    if (retrievalProfile !== "fts5") {
       const profile = embeddingProfile(retrievalContexts[0]!.embedder!);
       let total = 0;
       let indexed = 0;

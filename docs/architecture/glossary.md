@@ -10,6 +10,7 @@
 | Evidence | An exact memory successfully read during the current run. |
 | Citation | A support claim attached to evidence selected by `finish`. |
 | Evidence package | The sufficient/insufficient status, citations, summary, optional count, and inventory. |
-| Retrieval profile | A configured collection of retrieval implementations, currently `fts5` or `pimem-hybrid`. |
+| Retrieval profile | A configured collection of retrieval implementations: `fts5`, SQLite-exact `pimem-hybrid`, or `pimem-hybrid-qdrant-hnsw-v1`. |
+| Vector generation | An immutable, fingerprinted set of SQLite-derived embeddings published to Qdrant through a resumable outbox and activated only after count and index verification. |
 | Fact index | A deterministic, rebuildable sidecar containing extracted temporal or numeric facts. |
 | Benchmark record | The durable combination of retrieval output, answer output, metadata, and trace for one question. |

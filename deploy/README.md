@@ -12,7 +12,14 @@ The HTTP entrypoint delegates to an application service. The application service
 
 Each `user_id` maps to one stable, opaque PiMem scope. Add appends immutable source messages directly to SQLite and completes only after FTS5 and embedding indexing are complete. Repeating the same `request_id` and payload is idempotent; conflicting reuse returns `409`.
 
-The first Search atomically seals the user's scope. Search fails closed while an Add is incomplete, and every later Add for that user returns `409`. Search uses uncapped `pimem-hybrid` retrieval and returns only immutable raw memories cited by the evidence agent. It never returns benchmark questions, Gold fields, retrieval traces, ranks, or synthetic scores.
+The first Search atomically seals the user's scope. Search fails closed while an Add is incomplete, and every later Add for that user returns `409`. Search uses the configured hybrid retrieval profile and returns only immutable raw memories cited by the evidence agent. It never returns benchmark questions, Gold fields, retrieval traces, ranks, or synthetic scores.
+
+Set `PIMEM_RETRIEVAL_PROFILE=pimem-hybrid-qdrant-hnsw-v1` plus the Qdrant
+variables documented in the root README to use filtered HNSW. The configured
+`PIMEM_VECTOR_GENERATION_ID` is a run-level base ID; the service derives one
+immutable generation per scope and corpus fingerprint. Qdrant contains vectors
+and provenance only. SQLite remains the source of raw text and revalidates every
+returned point before it becomes a candidate.
 
 ## Container
 

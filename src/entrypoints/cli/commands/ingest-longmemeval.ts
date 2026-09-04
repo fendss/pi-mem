@@ -14,6 +14,7 @@ import {
   type EmbeddingIndexResult,
 } from "../../../retrieval/index-scope-embeddings.js";
 import type { RetrievalMetadata } from "../../../retrieval/index.js";
+import { publishQdrantGeneration } from "../../../composition/qdrant-retrieval.js";
 import {
   assertOnlyFlags,
   positiveIntegerFlag,
@@ -46,7 +47,7 @@ export async function ingestLongMemEval(parsed: ParsedCommand): Promise<void> {
     retrievalProfile === "fts5" &&
     (parsed.flags.has("embedding-slots") || parsed.flags.has("embedding-rps"))
   ) {
-    throw new Error("Embedding concurrency flags require pimem-hybrid");
+    throw new Error("Embedding concurrency flags require a hybrid retrieval profile");
   }
   const requestedIds = new Set(parsed.flags.get("question-id") ?? []);
   const adapted = await loadLongMemEvalS(source);
@@ -82,7 +83,7 @@ export async function ingestLongMemEval(parsed: ParsedCommand): Promise<void> {
     });
     let retrieval: RetrievalMetadata = { retrievalProfile: "fts5" };
     let embeddingIndexes: EmbeddingIndexResult[] = [];
-    if (retrievalProfile === "pimem-hybrid") {
+    if (retrievalProfile !== "fts5") {
       const requestGate = new AsyncRequestGate(
         embeddingSlots,
         embeddingRequestsPerSecond,
@@ -95,12 +96,6 @@ export async function ingestLongMemEval(parsed: ParsedCommand): Promise<void> {
         ),
       );
       const profile = embeddingProfile(embedders[0]!);
-      retrieval = {
-        retrievalProfile,
-        embeddingProfileId: profile.profileId,
-        embeddingModel: profile.model,
-        embeddingDimensions: profile.dimensions,
-      };
       let firstError: unknown;
       let halted = false;
       let settledScopes = 0;
@@ -132,13 +127,32 @@ export async function ingestLongMemEval(parsed: ParsedCommand): Promise<void> {
       embeddingIndexes = indexes.filter(
         (index): index is EmbeddingIndexResult => index !== undefined,
       );
+      const qdrant = retrievalProfile === "pimem-hybrid-qdrant-hnsw-v1"
+        ? await publishQdrantGeneration(
+            store,
+            embedders[0]!,
+            results.map((result) => result.scopeId),
+          )
+        : undefined;
+      retrieval = {
+        retrievalProfile,
+        embeddingProfileId: profile.profileId,
+        embeddingModel: profile.model,
+        embeddingDimensions: profile.dimensions,
+        ...(qdrant === undefined
+          ? {}
+          : {
+              vectorGenerationId: qdrant.generationId,
+              vectorCollection: qdrant.collectionName,
+            }),
+      };
     }
     await mergeScopeRecords(paths.privateQuestions, selectedQuestions);
     process.stdout.write(
       `${JSON.stringify({
         command: "ingest-longmemeval",
         retrieval,
-        ...(retrievalProfile === "pimem-hybrid"
+        ...(retrievalProfile !== "fts5"
           ? {
               embeddingConcurrency: {
                 slots: embeddingSlots,

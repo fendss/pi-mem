@@ -11,6 +11,7 @@ import {
 } from "../../../benchmark/memoryagentbench/dataset.js";
 import { runBenchmarkAnswer } from "../../../benchmark/index.js";
 import { createRetrievalContext } from "../../../composition/create-retrieval-context.js";
+import { publishQdrantGeneration } from "../../../composition/qdrant-retrieval.js";
 import { ingestMemorySessions } from "../../../memory/index.js";
 import {
   OperatorEvolutionCatalog,
@@ -205,10 +206,17 @@ export async function benchmarkMemoryAgentBench(
     }
 
     let embedder: OpenAICompatibleEmbedder | undefined;
-    if (retrievalProfile === "pimem-hybrid") {
+    if (retrievalProfile !== "fts5") {
       embedder = OpenAICompatibleEmbedder.fromEnvironment();
       for (const contextQuestions of contexts.values()) {
         await indexScopeEmbeddings(rawStore, contextQuestions[0]!.scopeId, embedder);
+      }
+      if (retrievalProfile === "pimem-hybrid-qdrant-hnsw-v1") {
+        await publishQdrantGeneration(
+          rawStore,
+          embedder,
+          [...contexts.values()].map((items) => items[0]!.scopeId),
+        );
       }
     }
     const retrieval = createRetrievalContext(rawStore, retrievalProfile, embedder);
@@ -232,6 +240,9 @@ export async function benchmarkMemoryAgentBench(
       temperature: 0,
       answerPromptVersion: MEMORY_AGENT_BENCH_ANSWER_PROMPT_VERSION,
       retrievalProfile,
+      ...(retrievalProfile === "pimem-hybrid-qdrant-hnsw-v1"
+        ? { retrievalIdentity: retrieval.metadata }
+        : {}),
       maxSearchCalls,
       maxTurns: MAX_TURNS,
       maxToolCalls: MAX_TOOL_CALLS,

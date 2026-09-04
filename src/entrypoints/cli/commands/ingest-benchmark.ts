@@ -177,7 +177,7 @@ export async function ingestBenchmark(parsed: ParsedCommand): Promise<void> {
     retrievalProfile === "fts5" &&
     (parsed.flags.has("embedding-slots") || parsed.flags.has("embedding-rps"))
   ) {
-    throw new Error("Embedding concurrency flags require pimem-hybrid");
+    throw new Error("Embedding concurrency flags require a hybrid retrieval profile");
   }
 
   const requestedIds = new Set(parsed.flags.get("case-id") ?? []);

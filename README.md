@@ -33,10 +33,10 @@ runner. Ingest never invokes a generative model.
 ## Current capabilities
 
 - deterministic TypeScript ingest and an immutable SQLite source store;
-- SQLite FTS5 plus optional `text-embedding-v4` dense retrieval, candidate-local BM25, and RRF;
+- SQLite FTS5 plus optional exact or Qdrant HNSW dense retrieval and RRF;
 - Agent-routed `hybrid`, `lexical`, `coverage`, `temporal`, `numeric`, and `history` search operators behind a three-field API;
 - harness-owned scope enforcement, prepared SQL, session aggregation, fact joins, ranking, and provenance;
-- resumable Float32 derived embeddings that never modify raw memory;
+- resumable Float32 derived embeddings and immutable, verified Qdrant index generations that never modify raw memory;
 - exact `read` with neighboring source turns;
 - networkless, read-only Docker shell over one sanitized scope;
 - Pi Core retrieval-agent loop where `read` retains exact evidence and the
@@ -87,7 +87,8 @@ LongMemEval adapter whitelist
   -> sanitized source turns
   -> immutable memories rows + FTS5 rows
   -> scope-only read-only export
-  -> optional missing embedding rows for pimem-hybrid
+  -> optional missing embedding rows for pimem-hybrid profiles
+  -> optional durable outbox -> verified Qdrant generation
 ```
 
 A raw scope that already exists byte-for-byte reports `status: unchanged`; this
@@ -104,8 +105,13 @@ fts5:
 pimem-hybrid:
   query embedding -> scope-filtered dense candidates
   + SQLite FTS5 candidates
-  -> candidate-local BM25Okapi over the union
-  -> RRF(dense, FTS5, BM25, k=60) -> candidates
+  -> RRF(dense, FTS5, k=60) -> candidates
+
+pimem-hybrid-qdrant-hnsw-v1:
+  query embedding -> generation/scope/session/role/time-filtered Qdrant HNSW
+  -> hydrate and revalidate immutable provenance in SQLite
+  + SQLite FTS5 candidates
+  -> RRF(dense, FTS5, k=60) -> candidates
 ```
 
 The Agent routes one `search` call with only `operator`, `queries`, and optional
@@ -193,6 +199,43 @@ PIMEM_EMBEDDING_DIMENSIONS=1024
 PIMEM_EMBEDDING_MAX_INPUT_LENGTH=2048
 PIMEM_EMBEDDING_BATCH_SIZE=10
 ```
+
+To publish and use the Qdrant profile, provide the same embedding variables plus:
+
+```text
+PIMEM_QDRANT_URL=http://127.0.0.1:6333
+# Optional for an authenticated Qdrant deployment.
+PIMEM_QDRANT_API_KEY=
+PIMEM_VECTOR_GENERATION_ID=my-corpus-v1
+PIMEM_QDRANT_COLLECTION=pimem_vectors_v1
+
+# Optional tuning; defaults are shown.
+PIMEM_QDRANT_TIMEOUT_MS=120000
+PIMEM_QDRANT_HNSW_M=32
+PIMEM_QDRANT_EF_CONSTRUCT=200
+PIMEM_QDRANT_HNSW_EF=800
+PIMEM_QDRANT_FULL_SCAN_THRESHOLD_KB=1000
+PIMEM_QDRANT_INDEXING_THRESHOLD_KB=10000
+PIMEM_QDRANT_SYNC_BATCH_SIZE=512
+PIMEM_QDRANT_SYNC_CONCURRENCY=4
+PIMEM_QDRANT_VERIFY_POLL_MS=1000
+PIMEM_QDRANT_VERIFY_TIMEOUT_MS=3600000
+```
+
+Use `--retrieval-profile pimem-hybrid-qdrant-hnsw-v1` for both ingest and
+run. Ingest writes embeddings to SQLite, enqueues them in a durable outbox,
+upserts bounded concurrent batches, verifies total and per-scope counts, and
+only then marks the generation ready. Search refuses incomplete generations;
+every Qdrant result is hydrated from SQLite and checked for point identity,
+scope, content hash, session, role, and timestamp before it can become a
+Candidate. A generation is immutable after sealing; use a new
+`PIMEM_VECTOR_GENERATION_ID` when the corpus or embedding profile changes.
+Indexes produced by the earlier experimental Qdrant branch use a different
+point-identity schema and must likewise be republished under a new generation.
+The LDBD service selects the same backend with
+`PIMEM_RETRIEVAL_PROFILE=pimem-hybrid-qdrant-hnsw-v1`. It derives an immutable
+generation from the configured base ID, scope ID, and sealed corpus
+fingerprint, so independent users never overwrite each other.
 
 `--embedding-slots` controls in-flight embedding requests and
 `--embedding-rps` controls their global start rate. All slots share one gate;
