@@ -9,6 +9,7 @@ import {
   type PiMemSkill,
 } from "../../evidence-agent/index.js";
 import type { PiModelRuntime } from "../../platform/pi/load-model-runtime.js";
+import type { RetrievalMetadata } from "../../retrieval/index.js";
 
 export interface MemoryArenaRuntimeContract {
   schema_version: 1;
@@ -27,6 +28,7 @@ export interface MemoryArenaRuntimeContract {
     transport: string;
     base_url: string;
   };
+  memory_index?: RetrievalMetadata;
   limits: {
     max_run_ms: number;
     max_turns: number;
@@ -93,6 +95,7 @@ export function createMemoryArenaRuntimeIdentity(options: {
   requestMaxRetries: number;
   requestMaxRetryDelayMs: number;
   maxConcurrentWraps: number;
+  memoryIndex?: RetrievalMetadata;
 }): MemoryArenaRuntimeIdentity {
   const contract: MemoryArenaRuntimeContract = {
     schema_version: 1,
@@ -114,6 +117,9 @@ export function createMemoryArenaRuntimeIdentity(options: {
       transport: options.modelRuntime.transport,
       base_url: nonEmpty(options.baseUrl, "retrieval base URL").replace(/\/+$/u, ""),
     },
+    ...(options.memoryIndex === undefined
+      ? {}
+      : { memory_index: structuredClone(options.memoryIndex) }),
     limits: {
       max_run_ms: options.maxRunMs,
       max_turns: options.maxTurns,

@@ -35,7 +35,11 @@ import type { PiMemSkill } from "../../../evidence-agent/index.js";
 import type { PiModelRuntime } from "../../../platform/pi/load-model-runtime.js";
 import { MemoryStore } from "../../../platform/sqlite/pimem-store.js";
 import type { RetrievalMetadata } from "../../../retrieval/index.js";
+import type { RetrievalProfile } from "../../../retrieval/index.js";
 import { createRetrievalContext } from "../../../composition/create-retrieval-context.js";
+import { ScopedQdrantRetrieval } from "../../../composition/scoped-qdrant-retrieval.js";
+
+type MemoryArenaRetrievalProfile = Exclude<RetrievalProfile, "fts5">;
 
 export interface CreateMemoryArenaPublicRuntimeOptions {
   dataDir: string;
@@ -46,6 +50,8 @@ export interface CreateMemoryArenaPublicRuntimeOptions {
   maxRunMs?: number;
   maxTurns?: number;
   maxToolCalls?: number;
+  retrievalProfile?: MemoryArenaRetrievalProfile;
+  environment?: NodeJS.ProcessEnv;
   auditSink?: MemoryArenaWrapAuditSink;
   operationAuditSink?: MemoryArenaOperationAuditSink;
 }
@@ -238,11 +244,25 @@ export async function createMemoryArenaPublicRuntime(
     );
     rawStore = await MemoryStore.create(paths.database);
     const measuredEmbedder = new MemoryArenaMeasuredEmbedder(options.embedder);
-    const retrieval = createRetrievalContext(
+    const retrievalProfile = options.retrievalProfile ?? "pimem-hybrid";
+    const environment = options.environment ?? process.env;
+    const localRetrieval = createRetrievalContext(
       rawStore,
       "pimem-hybrid",
       measuredEmbedder,
+      environment,
     );
+    const scopedQdrant = retrievalProfile === "pimem-hybrid-qdrant-hnsw-v1"
+      ? new ScopedQdrantRetrieval(rawStore, measuredEmbedder, environment)
+      : undefined;
+    const retrievalMetadata = scopedQdrant === undefined
+      ? localRetrieval.metadata
+      : createRetrievalContext(
+          rawStore,
+          retrievalProfile,
+          measuredEmbedder,
+          environment,
+        ).metadata;
     const generations = new FileMemoryArenaGenerationStore(paths.generations);
     const fileAudits = options.auditSink === undefined
       ? new JsonlMemoryArenaWrapAuditSink(paths.wrapAudits)
@@ -254,8 +274,14 @@ export async function createMemoryArenaPublicRuntime(
     const operationAudits = options.operationAuditSink ?? fileOperationAudits!;
     const memory = new PiMemMemoryArenaAdapter({
       rawStore,
-      runtimeStore: retrieval.store,
-      operatorRegistry: retrieval.operatorRegistry,
+      runtimeStore: localRetrieval.store,
+      operatorRegistry: localRetrieval.operatorRegistry,
+      ...(scopedQdrant === undefined
+        ? {}
+        : {
+            retrievalContextForScope: (scopeId: string) =>
+              scopedQdrant.context(scopeId),
+          }),
       embedder: measuredEmbedder,
       modelRuntime: options.modelRuntime,
       ...(options.skill === undefined ? {} : { skill: options.skill }),
@@ -281,8 +307,8 @@ export async function createMemoryArenaPublicRuntime(
       backend,
       memorySystemName,
       persistenceIdentity,
-      retrieval: retrieval.metadata,
-      operatorCatalog: retrieval.operatorRegistry.list(),
+      retrieval: retrievalMetadata,
+      operatorCatalog: localRetrieval.operatorRegistry.list(),
       paths,
       close: async () => {
         if (closed) return;

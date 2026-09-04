@@ -34,6 +34,11 @@ describe("MemoryArena retrieval runtime identity", () => {
       requestMaxRetries: 1,
       requestMaxRetryDelayMs: 5_000,
       maxConcurrentWraps: 16,
+      memoryIndex: {
+        retrievalProfile: "pimem-hybrid-qdrant-hnsw-v1",
+        vectorGenerationId: "event30-v1",
+        vectorCollection: "event30",
+      },
     });
     const service = new MemoryArenaPublicApiService(
       new MemoryArenaPublicApplication({
@@ -58,6 +63,11 @@ describe("MemoryArena retrieval runtime identity", () => {
           route_model_id: "route-model",
         },
         limits: { max_search_calls: 4 },
+        memory_index: {
+          retrievalProfile: "pimem-hybrid-qdrant-hnsw-v1",
+          vectorGenerationId: "event30-v1",
+          vectorCollection: "event30",
+        },
       },
     });
   });

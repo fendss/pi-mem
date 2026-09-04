@@ -33,6 +33,10 @@ export interface PiMemMemoryArenaAdapterOptions {
   rawStore: MemoryStore & OnlineMemoryStore;
   runtimeStore: PiMemRuntimeStore;
   operatorRegistry: SearchOperatorRegistry;
+  retrievalContextForScope?: (scopeId: string) => Promise<{
+    store: PiMemRuntimeStore;
+    operatorRegistry: SearchOperatorRegistry;
+  }>;
   embedder: Embedder;
   modelRuntime: PiModelRuntime;
   skill?: PiMemSkill;
@@ -279,6 +283,12 @@ export class PiMemMemoryArenaAdapter
   }): Promise<MemoryArenaRetrievalResult> {
     const scopeId = memoryArenaPublicScopeId(options.userId, options.generation);
     try {
+      const retrieval = this.options.retrievalContextForScope === undefined
+        ? {
+            store: this.options.runtimeStore,
+            operatorRegistry: this.options.operatorRegistry,
+          }
+        : await this.options.retrievalContextForScope(scopeId);
       const experiment = options.operatorExperiment;
       const evolution = experiment?.mode === "cumulative"
         ? experiment.evolutionSnapshot === undefined
@@ -290,8 +300,8 @@ export class PiMemMemoryArenaAdapter
           : OperatorEvolutionCatalog.restore(experiment.evolutionSnapshot)
         : undefined;
       const runtimeOptions: RunPiMemOptions = {
-        store: this.options.runtimeStore,
-        operatorRegistry: this.options.operatorRegistry,
+        store: retrieval.store,
+        operatorRegistry: retrieval.operatorRegistry,
         modelRuntime: this.options.modelRuntime,
         scopeId,
         question: options.question,

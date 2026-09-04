@@ -225,6 +225,41 @@ function experimentAdapter(
 }
 
 describe("MemoryArena Public PiMem adapter", () => {
+  it("resolves a scope-specific retrieval context before running PiMem", async () => {
+    const scopedStore = {} as RunPiMemOptions["store"];
+    const scopedRegistry = {} as RunPiMemOptions["operatorRegistry"];
+    const run = vi.fn(async ({ question }: RunPiMemOptions) =>
+      operatorExperimentResult({ question })
+    );
+    const retrievalContextForScope = vi.fn(async () => ({
+      store: scopedStore,
+      operatorRegistry: scopedRegistry,
+    }));
+    const adapter = new PiMemMemoryArenaAdapter({
+      rawStore: {} as never,
+      runtimeStore: {} as never,
+      operatorRegistry: {} as never,
+      retrievalContextForScope,
+      embedder: {} as never,
+      modelRuntime: {} as PiModelRuntime,
+      runPiMemImpl: run,
+    });
+
+    await adapter.retrieve({
+      userId: "scoped-user",
+      generation: 3,
+      question: "What happened first?",
+    });
+
+    const scopeId = memoryArenaPublicScopeId("scoped-user", 3);
+    expect(retrievalContextForScope).toHaveBeenCalledWith(scopeId);
+    expect(run).toHaveBeenCalledWith(expect.objectContaining({
+      scopeId,
+      store: scopedStore,
+      operatorRegistry: scopedRegistry,
+    }));
+  });
+
   it("maps typed agent failures without exposing the raw model message", () => {
     for (const [piMemCode, expected] of [
       ["tool_protocol_exhausted", {
@@ -834,5 +869,15 @@ describe("MemoryArena Public PiMem adapter", () => {
     })).rejects.toThrow(
       "database and persistence identity must be created together",
     );
+  });
+
+  it("fails closed when Qdrant generation configuration is incomplete", async () => {
+    await expect(createMemoryArenaPublicRuntime({
+      dataDir: await temporaryDirectory(),
+      modelRuntime: {} as PiModelRuntime,
+      embedder: new DeterministicEmbedder(),
+      retrievalProfile: "pimem-hybrid-qdrant-hnsw-v1",
+      environment: {},
+    })).rejects.toThrow("PIMEM_VECTOR_GENERATION_ID");
   });
 });

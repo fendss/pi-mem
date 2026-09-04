@@ -14,6 +14,7 @@ import {
   type PiModelRuntime,
 } from "../../platform/pi/load-model-runtime.js";
 import { OpenAICompatibleEmbedder } from "../../retrieval/adapters/openai/openai-compatible-embedder.js";
+import { parseRetrievalProfile } from "../../retrieval/index.js";
 import {
   MemoryArenaPublicApiService,
   MemoryArenaPublicApplication,
@@ -162,6 +163,14 @@ async function main(): Promise<void> {
       }),
   };
   const embedder = OpenAICompatibleEmbedder.fromEnvironment();
+  const retrievalProfile = parseRetrievalProfile(
+    process.env.PIMEM_RETRIEVAL_PROFILE,
+  );
+  if (retrievalProfile === "fts5") {
+    throw new Error(
+      "MemoryArena public API requires pimem-hybrid or pimem-hybrid-qdrant-hnsw-v1",
+    );
+  }
   const skill = skillEnvironment();
   const maxRunMs = integerEnvironment("PIMEM_MAX_RUN_MS", 300_000, 1_800_000);
   const maxTurns = integerEnvironment("PIMEM_MAX_TURNS", 64, 256);
@@ -183,6 +192,7 @@ async function main(): Promise<void> {
     maxRunMs,
     maxTurns,
     maxToolCalls,
+    retrievalProfile,
   });
   const runtimeIdentity = createMemoryArenaRuntimeIdentity({
     sourceIdentity: requiredEnvironment("PIMEM_SOURCE_IDENTITY"),
@@ -202,6 +212,9 @@ async function main(): Promise<void> {
     requestMaxRetries: requestPolicy.maxRetries,
     requestMaxRetryDelayMs: requestPolicy.maxRetryDelayMs,
     maxConcurrentWraps: maximumConcurrentWraps,
+    ...(retrievalProfile === "pimem-hybrid-qdrant-hnsw-v1"
+      ? { memoryIndex: runtime.retrieval }
+      : {}),
   });
   const expectedRuntimeIdentity = process.env
     .PIMEM_EXPECTED_RUNTIME_IDENTITY_SHA256?.trim();
