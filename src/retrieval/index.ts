@@ -87,7 +87,7 @@ export type {
 } from "./ports/dense-retriever.js";
 export type { VectorIndexStateStore } from "./ports/vector-index-state-store.js";
 export { SqliteExactDenseRetriever } from "./adapters/sqlite/exact-dense-retriever.js";
-export { FailOpenDenseRetriever } from "./adapters/fail-open-dense-retriever.js";
+export { FallbackDenseRetriever } from "./adapters/fallback-dense-retriever.js";
 export {
   QdrantClient,
   QdrantHttpError,

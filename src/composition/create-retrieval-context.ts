@@ -11,7 +11,7 @@ import type { MemoryStore } from "../platform/sqlite/pimem-store.js";
 import { createSearchOperatorRegistry } from "./create-search-operator-registry.js";
 import { createQdrantDenseRetriever } from "./qdrant-retrieval.js";
 import {
-  FailOpenDenseRetriever,
+  FallbackDenseRetriever,
   SqliteExactDenseRetriever,
 } from "../retrieval/index.js";
 
@@ -40,13 +40,13 @@ export function createRetrievalContext(
   const qdrant = profile === "pimem-hybrid-qdrant-hnsw-v1"
     ? createQdrantDenseRetriever(rawStore, selectedEmbedder, environment)
     : undefined;
-  const denseRetrievers = qdrant === undefined
+  const denseRetriever = qdrant === undefined
     ? undefined
-    : [
+    : new FallbackDenseRetriever(
+        qdrant,
         new SqliteExactDenseRetriever(rawStore),
-        new FailOpenDenseRetriever(qdrant),
-      ];
-  const store = new HybridMemoryStore(rawStore, selectedEmbedder, denseRetrievers);
+      );
+  const store = new HybridMemoryStore(rawStore, selectedEmbedder, denseRetriever);
   return {
     store,
     metadata: store.getRetrievalMetadata(),

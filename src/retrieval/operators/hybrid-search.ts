@@ -111,7 +111,6 @@ export class HybridMemoryStore {
   readonly rawStore: HybridSearchStore;
   readonly embedder: Embedder;
   readonly denseRetriever: DenseRetriever;
-  readonly denseRetrievers: readonly DenseRetriever[];
 
   private denseCandidateCount = 0;
   private rerankCandidateCount = 0;
@@ -119,19 +118,11 @@ export class HybridMemoryStore {
   constructor(
     rawStore: HybridSearchStore,
     embedder: Embedder,
-    denseRetriever?: DenseRetriever | readonly DenseRetriever[],
+    denseRetriever?: DenseRetriever,
   ) {
     this.rawStore = rawStore;
     this.embedder = embedder;
-    this.denseRetrievers = denseRetriever === undefined
-      ? [new SqliteExactDenseRetriever(rawStore)]
-      : Array.isArray(denseRetriever)
-      ? [...denseRetriever]
-      : [denseRetriever];
-    if (this.denseRetrievers.length === 0) {
-      throw new Error("Hybrid search requires at least one dense retriever");
-    }
-    this.denseRetriever = this.denseRetrievers[this.denseRetrievers.length - 1]!;
+    this.denseRetriever = denseRetriever ?? new SqliteExactDenseRetriever(rawStore);
   }
 
   getRetrievalMetadata(): RetrievalMetadata {
@@ -208,15 +199,14 @@ export class HybridMemoryStore {
       },
       ...(signal === undefined ? {} : { signal }),
     };
-    const baseDenseRankings = Promise.all(this.denseRetrievers.map(
-      async (retriever) => {
-        const rankings = await retriever.search(denseRequest);
+    const baseDenseRankings = this.denseRetriever.search(denseRequest).then(
+      (rankings) => {
         if (rankings.length !== request.queries.length) {
           throw new Error("Dense ranking count does not match query count");
         }
         return rankings;
       },
-    ));
+    );
     const rankedQueries = await Promise.all(request.queries.map(async (
       query,
       queryIndex,
@@ -229,23 +219,18 @@ export class HybridMemoryStore {
       } = request;
       const rankRoute = async (
         routeRequest: SearchRequest,
-        denseCandidatesPromise: Promise<readonly DenseSearchHit[][]>,
+        denseCandidatesPromise: Promise<readonly DenseSearchHit[]>,
         metadataFilter?: RetrievalMetadataFilter,
       ): Promise<RankedHybridHit[]> => {
-        const [denseCandidateGroups, lexicalHits] = await Promise.all([
+        const [denseCandidates, lexicalHits] = await Promise.all([
           denseCandidatesPromise,
           Promise.resolve(this.rawStore.search(scopeId, routeRequest)),
         ]);
-        this.denseCandidateCount += denseCandidateGroups.reduce(
-          (count, candidates) => count + candidates.length,
-          0,
-        );
+        this.denseCandidateCount += denseCandidates.length;
 
         const union = new Map<string, { record: MemoryRecord }>();
-        for (const candidates of denseCandidateGroups) {
-          for (const candidate of candidates) {
-            union.set(candidate.record.memoryId, { record: candidate.record });
-          }
+        for (const candidate of denseCandidates) {
+          union.set(candidate.record.memoryId, { record: candidate.record });
         }
         for (const hit of lexicalHits) {
           if (!union.has(hit.record.memoryId)) {
@@ -257,29 +242,20 @@ export class HybridMemoryStore {
         const indexes = new Map(
           candidates.map((candidate, index) => [candidate.record.memoryId, index]),
         );
-        const denseRankings = denseCandidateGroups.map((candidates) =>
-          candidates.map((candidate) => indexes.get(candidate.record.memoryId)!)
+        const denseRanking = denseCandidates.map((candidate) =>
+          indexes.get(candidate.record.memoryId)!
         );
         const lexicalRanking = lexicalHits.map((hit) =>
           indexes.get(hit.record.memoryId)!
         );
         const fused = reciprocalRankFusion(
-          [...denseRankings, lexicalRanking],
+          [denseRanking, lexicalRanking],
           60,
           candidates.length,
         );
-        const denseRanks = new Map<number, number>();
-        for (const ranking of denseRankings) {
-          ranking.forEach((candidateIndex, index) => {
-            denseRanks.set(
-              candidateIndex,
-              Math.min(
-                denseRanks.get(candidateIndex) ?? Number.MAX_SAFE_INTEGER,
-                index + 1,
-              ),
-            );
-          });
-        }
+        const denseRanks = new Map(
+          denseRanking.map((candidateIndex, index) => [candidateIndex, index + 1]),
+        );
         const lexicalRanks = new Map(
           lexicalRanking.map((candidateIndex, index) => [candidateIndex, index + 1]),
         );
@@ -310,9 +286,7 @@ export class HybridMemoryStore {
           limit: Math.min(100, headroom),
           order: "relevance",
         },
-        baseDenseRankings.then((rankings) =>
-          rankings.map((ranking) => ranking[queryIndex]!)
-        ),
+        baseDenseRankings.then((rankings) => rankings[queryIndex]!),
       );
       const dateFilter = request.after === undefined && request.before === undefined
         ? explicitQueryDateFilter(query)
@@ -328,26 +302,23 @@ export class HybridMemoryStore {
               after: dateFilter.after,
               before: dateFilter.before,
             },
-            Promise.all(this.denseRetrievers.map(async (retriever) => {
-              const rankings = await retriever.search({
-                scopeId,
-                profile,
-                queryVectors: [queryVector],
-                limit: headroom,
-                filters: {
-                  ...(request.sessionIds === undefined
-                    ? {}
-                    : { sessionIds: request.sessionIds }),
-                  ...(request.roles === undefined
-                    ? {}
-                    : { roles: request.roles }),
-                  after: dateFilter.after,
-                  before: dateFilter.before,
-                },
-                ...(signal === undefined ? {} : { signal }),
-              });
-              return rankings[0] ?? [];
-            })),
+            this.denseRetriever.search({
+              scopeId,
+              profile,
+              queryVectors: [queryVector],
+              limit: headroom,
+              filters: {
+                ...(request.sessionIds === undefined
+                  ? {}
+                  : { sessionIds: request.sessionIds }),
+                ...(request.roles === undefined
+                  ? {}
+                  : { roles: request.roles }),
+                after: dateFilter.after,
+                before: dateFilter.before,
+              },
+              ...(signal === undefined ? {} : { signal }),
+            }).then((rankings) => rankings[0] ?? []),
             dateFilter,
           );
       const [baseRanking, dateRanking] = await Promise.all([

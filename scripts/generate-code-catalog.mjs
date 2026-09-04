@@ -120,7 +120,7 @@ const FILE_RESPONSIBILITIES = new Map(Object.entries({
   "src/retrieval/adapters/qdrant/client.ts": "Implements filtered Qdrant collection, upsert, count, and HNSW search operations over HTTP.",
   "src/retrieval/adapters/qdrant/dense-retriever.ts": "Hydrates Qdrant HNSW hits from SQLite and rejects any immutable-provenance mismatch.",
   "src/retrieval/adapters/qdrant/vector-synchronizer.ts": "Publishes resumable immutable vector generations to Qdrant and verifies index readiness and counts.",
-  "src/retrieval/adapters/fail-open-dense-retriever.ts": "Isolates optional dense expansion failures without changing the baseline dense route.",
+  "src/retrieval/adapters/fallback-dense-retriever.ts": "Uses the scalable dense retriever as the primary route and recovers with exact SQLite dense retrieval on failure.",
   "src/retrieval/adapters/openai/openai-compatible-embedder.ts": "Implements the embedder port with an OpenAI-compatible embeddings endpoint.",
   "src/retrieval/adapters/operators/builtins.ts": "Implements the built-in search operators over injected retrieval capabilities.",
   "src/retrieval/adapters/sqlite/database-evidence-operators.ts": "Implements temporal and numeric evidence-operator queries over SQLite.",

@@ -1067,13 +1067,13 @@ _No top-level functions, classes, or class methods._
 | `SqliteVectorIndexStateStore.generationRow(generationId: string): VectorGenerationRow \| undefined` | Implements the generation row operation. | method | private | [line 478](../../src/platform/sqlite/vector-index-state-store.ts#L478) |
 | `SqliteVectorIndexStateStore.generationFingerprint(generationId: string): string` | Implements the generation fingerprint operation. | method | private | [line 490](../../src/platform/sqlite/vector-index-state-store.ts#L490) |
 | `SqliteVectorIndexStateStore.updateVectorSyncBatch(generationId: string, sequenceIds: readonly number[], state: "pending" \| "synced", lastError?: string): void` | Implements the update vector sync batch operation. | method | private | [line 527](../../src/platform/sqlite/vector-index-state-store.ts#L527) |
-## `src/retrieval/adapters/fail-open-dense-retriever.ts`
+## `src/retrieval/adapters/fallback-dense-retriever.ts`
 
 | Symbol | Purpose | Kind | Visibility | Source |
 |---|---|---|---|---|
-| `FailOpenDenseRetriever` | Prevents an optional expansion lane from weakening the baseline route. | class | exported | [line 8](../../src/retrieval/adapters/fail-open-dense-retriever.ts#L8) |
-| `FailOpenDenseRetriever.constructor(private readonly delegate: DenseRetriever)` | Creates a fail open dense retriever instance. | method | public | [line 13](../../src/retrieval/adapters/fail-open-dense-retriever.ts#L13) |
-| `FailOpenDenseRetriever.search(request: DenseSearchBatchRequest): Promise<DenseSearchHit[][]>` | Performs a search. | method | public | [line 25](../../src/retrieval/adapters/fail-open-dense-retriever.ts#L25) |
+| `FallbackDenseRetriever` | Uses the scalable dense engine first and preserves exact SQLite recovery. | class | exported | [line 8](../../src/retrieval/adapters/fallback-dense-retriever.ts#L8) |
+| `FallbackDenseRetriever.constructor(private readonly primary: DenseRetriever, private readonly fallback: DenseRetriever)` | Creates a fallback dense retriever instance. | method | public | [line 13](../../src/retrieval/adapters/fallback-dense-retriever.ts#L13) |
+| `FallbackDenseRetriever.search(request: DenseSearchBatchRequest): Promise<DenseSearchHit[][]>` | Performs a search. | method | public | [line 28](../../src/retrieval/adapters/fallback-dense-retriever.ts#L28) |
 ## `src/retrieval/adapters/openai/openai-compatible-embedder.ts`
 
 | Symbol | Purpose | Kind | Visibility | Source |
@@ -1267,15 +1267,15 @@ _No top-level functions, classes, or class methods._
 | `reserveMetadataRoutes(rankings: readonly (readonly T[])[]): T[]` | Implements the reserve metadata routes operation. | function | internal | [line 62](../../src/retrieval/operators/hybrid-search.ts#L62) |
 | `compareFinal(left: RankedHybridHit, right: RankedHybridHit): number` | Compares final. | function | internal | [line 82](../../src/retrieval/operators/hybrid-search.ts#L82) |
 | `HybridMemoryStore` | Implements hybrid memory store. | class | exported | [line 110](../../src/retrieval/operators/hybrid-search.ts#L110) |
-| `HybridMemoryStore.constructor(rawStore: HybridSearchStore, embedder: Embedder, denseRetriever?: DenseRetriever \| readonly DenseRetriever[])` | Creates a hybrid memory store instance. | method | public | [line 119](../../src/retrieval/operators/hybrid-search.ts#L119) |
-| `HybridMemoryStore.getRetrievalMetadata(): RetrievalMetadata` | Returns retrieval metadata. | method | public | [line 137](../../src/retrieval/operators/hybrid-search.ts#L137) |
-| `HybridMemoryStore.snapshotRetrievalMetrics(): RetrievalMetricsSnapshot` | Implements the snapshot retrieval metrics operation. | method | public | [line 152](../../src/retrieval/operators/hybrid-search.ts#L152) |
-| `HybridMemoryStore.search(scopeId: string, request: SearchRequest, signal?: AbortSignal): Promise<RetrievalHit[]>` | Performs a search. | method | public | [line 162](../../src/retrieval/operators/hybrid-search.ts#L162) |
-| `HybridMemoryStore.searchLexical(scopeId: string, request: SearchRequest): RetrievalHit[]` | Searches lexical. | method | public | [line 478](../../src/retrieval/operators/hybrid-search.ts#L478) |
-| `HybridMemoryStore.expandEvidenceOperator(scopeId: string, request: SearchRequest, context: EvidenceOperatorSearchContext, seedHits: readonly RetrievalHit[]): RetrievalHit[]` | Implements the expand evidence operator operation. | method | public | [line 485](../../src/retrieval/operators/hybrid-search.ts#L485) |
-| `HybridMemoryStore.read(scopeId: string, memoryIds: string[], contextBefore = 0, contextAfter = 0): MemoryRecord[]` | Reads the requested value. | method | public | [line 499](../../src/retrieval/operators/hybrid-search.ts#L499) |
-| `HybridMemoryStore.getRecords(scopeId: string, memoryIds: string[]): MemoryRecord[]` | Returns records. | method | public | [line 513](../../src/retrieval/operators/hybrid-search.ts#L513) |
-| `HybridMemoryStore.findMentionedMemoryIds(scopeId: string, text: string): string[]` | Implements the find mentioned memory ids operation. | method | public | [line 517](../../src/retrieval/operators/hybrid-search.ts#L517) |
+| `HybridMemoryStore.constructor(rawStore: HybridSearchStore, embedder: Embedder, denseRetriever?: DenseRetriever)` | Creates a hybrid memory store instance. | method | public | [line 118](../../src/retrieval/operators/hybrid-search.ts#L118) |
+| `HybridMemoryStore.getRetrievalMetadata(): RetrievalMetadata` | Returns retrieval metadata. | method | public | [line 128](../../src/retrieval/operators/hybrid-search.ts#L128) |
+| `HybridMemoryStore.snapshotRetrievalMetrics(): RetrievalMetricsSnapshot` | Implements the snapshot retrieval metrics operation. | method | public | [line 143](../../src/retrieval/operators/hybrid-search.ts#L143) |
+| `HybridMemoryStore.search(scopeId: string, request: SearchRequest, signal?: AbortSignal): Promise<RetrievalHit[]>` | Performs a search. | method | public | [line 153](../../src/retrieval/operators/hybrid-search.ts#L153) |
+| `HybridMemoryStore.searchLexical(scopeId: string, request: SearchRequest): RetrievalHit[]` | Searches lexical. | method | public | [line 449](../../src/retrieval/operators/hybrid-search.ts#L449) |
+| `HybridMemoryStore.expandEvidenceOperator(scopeId: string, request: SearchRequest, context: EvidenceOperatorSearchContext, seedHits: readonly RetrievalHit[]): RetrievalHit[]` | Implements the expand evidence operator operation. | method | public | [line 456](../../src/retrieval/operators/hybrid-search.ts#L456) |
+| `HybridMemoryStore.read(scopeId: string, memoryIds: string[], contextBefore = 0, contextAfter = 0): MemoryRecord[]` | Reads the requested value. | method | public | [line 470](../../src/retrieval/operators/hybrid-search.ts#L470) |
+| `HybridMemoryStore.getRecords(scopeId: string, memoryIds: string[]): MemoryRecord[]` | Returns records. | method | public | [line 484](../../src/retrieval/operators/hybrid-search.ts#L484) |
+| `HybridMemoryStore.findMentionedMemoryIds(scopeId: string, text: string): string[]` | Implements the find mentioned memory ids operation. | method | public | [line 488](../../src/retrieval/operators/hybrid-search.ts#L488) |
 ## `src/retrieval/operators/numeric-operator.ts`
 
 | Symbol | Purpose | Kind | Visibility | Source |
