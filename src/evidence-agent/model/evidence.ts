@@ -120,6 +120,7 @@ export interface PiMemResult {
     embeddingLatencyMs: number;
     denseCandidateCount: number;
     rerankCandidateCount: number;
+    denseFallbackCount: number;
     expiredNavigationResults: number;
     compactedReadResults: number;
   };

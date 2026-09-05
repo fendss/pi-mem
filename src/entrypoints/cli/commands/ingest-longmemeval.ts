@@ -14,7 +14,11 @@ import {
   type EmbeddingIndexResult,
 } from "../../../retrieval/index-scope-embeddings.js";
 import type { RetrievalMetadata } from "../../../retrieval/index.js";
-import { publishQdrantGeneration } from "../../../composition/qdrant-retrieval.js";
+import {
+  publishQdrantGeneration,
+  qdrantRetrievalConfiguration,
+  qdrantVectorSearchConfiguration,
+} from "../../../composition/qdrant-retrieval.js";
 import {
   assertOnlyFlags,
   positiveIntegerFlag,
@@ -127,23 +131,33 @@ export async function ingestLongMemEval(parsed: ParsedCommand): Promise<void> {
       embeddingIndexes = indexes.filter(
         (index): index is EmbeddingIndexResult => index !== undefined,
       );
-      const qdrant = retrievalProfile === "pimem-hybrid-qdrant-hnsw-v1"
-        ? await publishQdrantGeneration(
+      const qdrantConfig = retrievalProfile === "pimem-hybrid-qdrant-hnsw-v1"
+        ? qdrantRetrievalConfiguration(embedders[0]!)
+        : undefined;
+      const qdrant = qdrantConfig === undefined
+        ? undefined
+        : await publishQdrantGeneration(
             store,
             embedders[0]!,
             results.map((result) => result.scopeId),
-          )
-        : undefined;
+          );
+      const vectorSearch = qdrantConfig === undefined
+        ? undefined
+        : {
+            ...qdrantVectorSearchConfiguration(qdrantConfig),
+            fallbackPolicy: "sqlite-exact-on-unavailable-v1" as const,
+          };
       retrieval = {
         retrievalProfile,
         embeddingProfileId: profile.profileId,
         embeddingModel: profile.model,
         embeddingDimensions: profile.dimensions,
-        ...(qdrant === undefined
+        ...(qdrant === undefined || vectorSearch === undefined
           ? {}
           : {
               vectorGenerationId: qdrant.generationId,
               vectorCollection: qdrant.collectionName,
+              vectorSearch,
             }),
       };
     }

@@ -5,7 +5,7 @@ import {
   type SearchOperatorRegistry,
 } from "../retrieval/index.js";
 import { OpenAICompatibleEmbedder } from "../retrieval/adapters/openai/openai-compatible-embedder.js";
-import { HybridMemoryStore } from "../retrieval/operators/hybrid-search.js";
+import { HybridRetriever } from "../retrieval/operators/hybrid-search.js";
 import type { PiMemRuntimeStore } from "../evidence-agent/index.js";
 import type { MemoryStore } from "../platform/sqlite/pimem-store.js";
 import { createSearchOperatorRegistry } from "./create-search-operator-registry.js";
@@ -41,12 +41,12 @@ export function createRetrievalContext(
     ? createQdrantDenseRetriever(rawStore, selectedEmbedder, environment)
     : undefined;
   const denseRetriever = qdrant === undefined
-    ? undefined
+    ? new SqliteExactDenseRetriever(rawStore)
     : new FallbackDenseRetriever(
         qdrant,
         new SqliteExactDenseRetriever(rawStore),
       );
-  const store = new HybridMemoryStore(rawStore, selectedEmbedder, denseRetriever);
+  const store = new HybridRetriever(rawStore, selectedEmbedder, denseRetriever);
   return {
     store,
     metadata: store.getRetrievalMetadata(),

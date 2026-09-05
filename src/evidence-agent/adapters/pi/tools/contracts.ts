@@ -15,9 +15,9 @@ import type {
 } from "../../../../retrieval/index.js";
 import type {
   MemoryCandidate,
-  MemoryEvidence,
   PiMemSelection,
-} from "../../../index.js";
+} from "../../../model/evidence.js";
+import type { MemoryEvidence } from "../../../model/source-evidence.js";
 import type { MemoryLedger } from "../../../model/ledger.js";
 import type { MemoryObservation } from "../memory-observation.js";
 import {

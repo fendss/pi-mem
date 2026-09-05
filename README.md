@@ -112,7 +112,7 @@ pimem-hybrid-qdrant-hnsw-v1:
   + SQLite FTS5 candidates
   -> hydrate and revalidate immutable provenance in SQLite
   -> RRF(HNSW dense, FTS5, k=60) -> candidates
-  -> if Qdrant fails, retry the dense lane with exact SQLite search
+  -> on typed Qdrant availability failure, retry dense with exact SQLite search
 ```
 
 The Agent routes one `search` call with only `operator`, `queries`, and optional
@@ -232,7 +232,9 @@ scope, content hash, session, role, and timestamp before it can become a
 Candidate. Qdrant and SQLite exact search are alternative implementations of
 one dense lane, so dense evidence receives one RRF vote. If Qdrant is
 unavailable, the dense lane falls back to exact SQLite search while FTS5 stays
-available. A generation is immutable after sealing; use a new
+available, and the run records the fallback count. Configuration, generation,
+scope, and provenance failures remain visible and fail closed. A generation is
+immutable after sealing; use a new
 `PIMEM_VECTOR_GENERATION_ID` when the corpus or embedding profile changes.
 Indexes produced by the earlier experimental Qdrant branch use a different
 point-identity schema and must likewise be republished under a new generation.

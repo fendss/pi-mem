@@ -8,6 +8,7 @@ export type {
   RetrievalMetadata,
   RetrievalMetricsSnapshot,
   RetrievalProfile,
+  VectorSearchConfiguration,
   SearchCoverageProgress,
   SearchFrontierStatus,
   SearchOrder,
@@ -81,10 +82,13 @@ export type {
 } from "./ports/memory-tool-store.js";
 export type { SearchOperator } from "./ports/search-operator.js";
 export type {
+  DenseRetrievalFailureKind,
   DenseRetriever,
   DenseSearchBatchRequest,
   DenseSearchHit,
 } from "./ports/dense-retriever.js";
+export { DenseRetrievalError } from "./ports/dense-retriever.js";
+export type { HybridSearchStore } from "./ports/hybrid-search-store.js";
 export type { VectorIndexStateStore } from "./ports/vector-index-state-store.js";
 export { SqliteExactDenseRetriever } from "./adapters/sqlite/exact-dense-retriever.js";
 export { FallbackDenseRetriever } from "./adapters/fallback-dense-retriever.js";

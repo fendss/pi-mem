@@ -2,7 +2,8 @@
 
 import { readFile, writeFile } from "node:fs/promises";
 import { MemoryStore } from "../../dist/platform/sqlite/pimem-store.js";
-import { HybridMemoryStore } from "../../dist/retrieval/operators/hybrid-search.js";
+import { HybridRetriever } from "../../dist/retrieval/operators/hybrid-search.js";
+import { SqliteExactDenseRetriever } from "../../dist/retrieval/adapters/sqlite/exact-dense-retriever.js";
 import { OpenAICompatibleEmbedder } from "../../dist/retrieval/adapters/openai/openai-compatible-embedder.js";
 
 const TARGET_STAGES = new Set([
@@ -115,7 +116,11 @@ async function main() {
     new Map(queryTexts.map((query, index) => [query, queryVectors[index]])),
   );
   const rawStore = new MemoryStore(sqlitePath);
-  const hybridStore = new HybridMemoryStore(rawStore, cachedEmbedder);
+  const hybridStore = new HybridRetriever(
+    rawStore,
+    cachedEmbedder,
+    new SqliteExactDenseRetriever(rawStore),
+  );
   const rows = [];
   try {
     for (const target of targetRows) {

@@ -1,10 +1,10 @@
 import type {
-  MemoryIngestStore,
   MemoryRecord,
   MemoryRole,
   MemorySessionInput,
   ScopeIngestStatus,
-} from "./index.js";
+} from "./model/memory.js";
+import type { MemoryIngestStore } from "./ports/memory-ingest-store.js";
 import { assertNonEmpty, sha256, stableMemoryId } from "../util.js";
 
 const ROLES = new Set<MemoryRole>([

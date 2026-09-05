@@ -179,6 +179,8 @@ describe("MemoryAgentBench YAML configuration", () => {
           "    url: http://127.0.0.1:6333/",
           "    collection: test_vectors",
           "    vector_generation_id: test-generation-v1",
+          "    request_timeout_ms: 90000",
+          "    hnsw_ef: 640",
         ].join("\n"),
       ),
     );
@@ -196,6 +198,8 @@ describe("MemoryAgentBench YAML configuration", () => {
       PIMEM_QDRANT_URL: "http://127.0.0.1:6333",
       PIMEM_QDRANT_COLLECTION: "test_vectors",
       PIMEM_VECTOR_GENERATION_ID: "test-generation-v1",
+      PIMEM_QDRANT_TIMEOUT_MS: "90000",
+      PIMEM_QDRANT_HNSW_EF: "640",
       PIMEM_EXPECTED_RUNTIME_IDENTITY_SHA256: identity.sha256,
     });
     expect(environment.PIMEM_QDRANT_API_KEY).toBeUndefined();
@@ -206,7 +210,21 @@ describe("MemoryAgentBench YAML configuration", () => {
       embeddingDimensions: embedder.dimensions,
       vectorGenerationId: "test-generation-v1",
       vectorCollection: "test_vectors",
+      vectorSearch: {
+        algorithm: "qdrant-hnsw",
+        hnswM: 32,
+        efConstruct: 200,
+        hnswEf: 640,
+        fullScanThresholdKb: 1_000,
+        indexingThresholdKb: 10_000,
+        exact: false,
+        requestTimeoutMs: 90_000,
+        fallbackPolicy: "sqlite-exact-on-unavailable-v1",
+      },
     });
+    const changed = structuredClone(config);
+    changed.service.qdrant!.hnswEf += 1;
+    expect(runtimeIdentityForConfig(changed).sha256).not.toBe(identity.sha256);
   });
 
   it("rejects adaptive concurrency outside the query-slot ceiling", async () => {

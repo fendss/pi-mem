@@ -1,4 +1,4 @@
-import type { PiMemSelection } from "../../../index.js";
+import type { PiMemSelection } from "../../../model/evidence.js";
 import type { CreatePiMemToolsOptions, FinishToolDetails, PiMemTools } from "./contracts.js";
 import { FinishParameters } from "./schemas.js";
 import { compactPreview } from "../../../../util.js";

@@ -200,6 +200,7 @@ export async function runPiMem(
     embeddingLatencyMs: 0,
     denseCandidateCount: 0,
     rerankCandidateCount: 0,
+    denseFallbackCount: 0,
   };
   const retrievalMetricsBefore =
     options.store.snapshotRetrievalMetrics?.() ?? zeroRetrievalMetrics;
@@ -484,6 +485,11 @@ export async function runPiMem(
       0,
       retrievalMetricsAfter.rerankCandidateCount -
         retrievalMetricsBefore.rerankCandidateCount,
+    ),
+    denseFallbackCount: Math.max(
+      0,
+      retrievalMetricsAfter.denseFallbackCount -
+        retrievalMetricsBefore.denseFallbackCount,
     ),
   };
   const responseModels = validateResponseModels(

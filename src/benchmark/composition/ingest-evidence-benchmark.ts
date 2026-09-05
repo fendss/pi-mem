@@ -4,7 +4,7 @@ import {
   ingestMemoryWorkspace,
   type IngestMemoryWorkspaceResult,
 } from "../../composition/ingest-memory-workspace.js";
-import { assertBenchmarkLabelFirewall } from "../index.js";
+import { assertBenchmarkLabelFirewall } from "../label-firewall.js";
 
 export interface IngestEvidenceBenchmarkOptions {
   paths: { database: string; sanitized: string };

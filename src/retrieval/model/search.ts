@@ -149,6 +149,19 @@ export type RetrievalProfile =
   | "pimem-hybrid"
   | "pimem-hybrid-qdrant-hnsw-v1";
 
+/** Result-affecting configuration for an external approximate vector index. */
+export interface VectorSearchConfiguration {
+  algorithm: "qdrant-hnsw";
+  hnswM: number;
+  efConstruct: number;
+  hnswEf: number;
+  fullScanThresholdKb: number;
+  indexingThresholdKb: number;
+  exact: false;
+  requestTimeoutMs: number;
+  fallbackPolicy?: "sqlite-exact-on-unavailable-v1";
+}
+
 export interface RetrievalMetadata {
   retrievalProfile: RetrievalProfile;
   embeddingProfileId?: string;
@@ -156,6 +169,7 @@ export interface RetrievalMetadata {
   embeddingDimensions?: number;
   vectorGenerationId?: string;
   vectorCollection?: string;
+  vectorSearch?: VectorSearchConfiguration;
 }
 
 export interface RetrievalMetricsSnapshot {
@@ -163,4 +177,5 @@ export interface RetrievalMetricsSnapshot {
   embeddingLatencyMs: number;
   denseCandidateCount: number;
   rerankCandidateCount: number;
+  denseFallbackCount: number;
 }

@@ -3,7 +3,7 @@ import {
   temporalAnnotation,
   type EvidenceOperatorResult,
 } from "../../../../retrieval/index.js";
-import type { MemoryCandidate } from "../../../index.js";
+import type { MemoryCandidate } from "../../../model/evidence.js";
 import type { MemoryLedger } from "../../../model/ledger.js";
 
 function temporalSuffix(

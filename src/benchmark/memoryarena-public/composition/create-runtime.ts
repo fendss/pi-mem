@@ -27,10 +27,14 @@ import {
 } from "../adapters/measured-embedder.js";
 import {
   MEMORYARENA_PUBLIC_MEMORY_SYSTEM,
+} from "../model/memory-backend.js";
+import {
   MemoryArenaPublicMemoryBackend,
-  type MemoryArenaOperationAuditSink,
-  type MemoryArenaWrapAuditSink,
-} from "../index.js";
+} from "../use-cases/memory-backend.js";
+import type {
+  MemoryArenaOperationAuditSink,
+  MemoryArenaWrapAuditSink,
+} from "../ports/memory-backend.js";
 import type { PiMemSkill } from "../../../evidence-agent/index.js";
 import type { PiModelRuntime } from "../../../platform/pi/load-model-runtime.js";
 import { MemoryStore } from "../../../platform/sqlite/pimem-store.js";

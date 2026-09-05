@@ -1,6 +1,6 @@
 {
   "name": "pi-mem",
-  "version": "1.3.0",
+  "version": "1.3.1",
   "private": true,
   "description": "A minimal, source-grounded memory agent runtime built on Pi.",
   "repository": {

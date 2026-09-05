@@ -2,6 +2,19 @@
 
 ## Unreleased
 
+## 1.3.1
+
+- Classify dense-retrieval failures so exact SQLite fallback is used only for
+  Qdrant availability failures; configuration and provenance errors now remain
+  visible and fail closed.
+- Record fallback usage and every result-affecting HNSW setting in retrieval
+  metadata and formal runtime identities.
+- Pin all Qdrant settings in protected MemoryAgentBench YAML instead of
+  inheriting ambient process values.
+- Move SQLite lexical query planning and ranking out of the platform store,
+  require dense retrievers to be injected into hybrid policy, and strengthen
+  architecture tests around policy-to-adapter dependencies.
+
 ## 1.3.0
 
 - Added the `pimem-hybrid-qdrant-hnsw-v1` retrieval profile behind the existing

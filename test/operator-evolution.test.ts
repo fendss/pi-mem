@@ -93,6 +93,7 @@ function result(
       embeddingLatencyMs: 0,
       denseCandidateCount: 0,
       rerankCandidateCount: 0,
+      denseFallbackCount: 0,
       expiredNavigationResults: 0,
       compactedReadResults: 0,
     },

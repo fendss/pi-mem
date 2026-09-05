@@ -5,15 +5,22 @@ import type {
   VectorIndexGenerationStatus,
 } from "../../model/embedding.js";
 import type {
+  VectorSearchConfiguration,
+} from "../../model/search.js";
+import type {
   DenseRetriever,
   DenseSearchBatchRequest,
   DenseSearchHit,
 } from "../../ports/dense-retriever.js";
+import { DenseRetrievalError } from "../../ports/dense-retriever.js";
 import type {
   QdrantSearchHit,
   QdrantSearchRequest,
 } from "./client.js";
-import { QDRANT_COLLECTION_SCHEMA_VERSION } from "./client.js";
+import {
+  QDRANT_COLLECTION_SCHEMA_VERSION,
+  QdrantHttpError,
+} from "./client.js";
 import { deterministicQdrantPointId } from "./vector-synchronizer.js";
 
 export interface QdrantDenseSearchClient {
@@ -43,7 +50,39 @@ export interface QdrantDenseRetrieverOptions {
   client: QdrantDenseSearchClient;
   generationId: string;
   collectionName: string;
-  hnswEf?: number;
+  vectorSearch: VectorSearchConfiguration;
+}
+
+function qdrantSearchFailure(
+  error: unknown,
+  callerAborted: boolean,
+): unknown {
+  if (callerAborted) return error;
+  if (error instanceof QdrantHttpError) {
+    const unavailable = error.status === 408 || error.status === 429 ||
+      error.status >= 500;
+    return new DenseRetrievalError(
+      unavailable ? "unavailable" : "configuration",
+      `Qdrant search returned HTTP ${String(error.status)}`,
+      { cause: error },
+    );
+  }
+  if (
+    error instanceof TypeError ||
+    (error instanceof DOMException &&
+      (error.name === "TimeoutError" || error.name === "AbortError"))
+  ) {
+    return new DenseRetrievalError(
+      "unavailable",
+      "Qdrant search transport is unavailable",
+      { cause: error },
+    );
+  }
+  return new DenseRetrievalError(
+    "integrity",
+    "Qdrant search response failed validation",
+    { cause: error },
+  );
 }
 
 /** Filtered HNSW whose IDs and immutable provenance are revalidated in SQLite. */
@@ -51,18 +90,28 @@ export class QdrantDenseRetriever implements DenseRetriever {
   readonly retrievalProfile = "pimem-hybrid-qdrant-hnsw-v1" as const;
   readonly vectorGenerationId: string;
   readonly vectorCollection: string;
+  readonly vectorSearch;
   private readonly hnswEf: number;
 
   constructor(private readonly options: QdrantDenseRetrieverOptions) {
     if (!options.generationId.trim() || !options.collectionName.trim()) {
       throw new Error("Qdrant generation and collection must not be empty");
     }
-    this.hnswEf = options.hnswEf ?? 512;
+    this.hnswEf = options.vectorSearch.hnswEf;
     if (!Number.isSafeInteger(this.hnswEf) || this.hnswEf < 1 || this.hnswEf > 10_000) {
       throw new Error("Qdrant HNSW ef must be between 1 and 10000");
     }
     this.vectorGenerationId = options.generationId;
     this.vectorCollection = options.collectionName;
+    const requestTimeoutMs = options.vectorSearch.requestTimeoutMs;
+    if (
+      !Number.isSafeInteger(requestTimeoutMs) ||
+      requestTimeoutMs < 1 ||
+      requestTimeoutMs > 600_000
+    ) {
+      throw new Error("Qdrant request timeout must be between 1 and 600000");
+    }
+    this.vectorSearch = structuredClone(options.vectorSearch);
   }
 
   private async hydrate(
@@ -71,7 +120,10 @@ export class QdrantDenseRetriever implements DenseRetriever {
     limit: number,
   ): Promise<DenseSearchHit[]> {
     if (new Set(hits.map((hit) => hit.memoryId)).size !== hits.length) {
-      throw new Error("Qdrant results contain duplicate memory IDs");
+      throw new DenseRetrievalError(
+        "integrity",
+        "Qdrant results contain duplicate memory IDs",
+      );
     }
     const records = new Map(
       (await this.options.store.getRecords(
@@ -82,7 +134,10 @@ export class QdrantDenseRetriever implements DenseRetriever {
     return hits.map((hit) => {
       const record = records.get(hit.memoryId);
       if (record === undefined) {
-        throw new Error(`Qdrant returned missing scoped memory: ${hit.memoryId}`);
+        throw new DenseRetrievalError(
+          "integrity",
+          `Qdrant returned missing scoped memory: ${hit.memoryId}`,
+        );
       }
       if (
         hit.pointId !== deterministicQdrantPointId(
@@ -97,7 +152,10 @@ export class QdrantDenseRetriever implements DenseRetriever {
         hit.role !== record.role ||
         hit.timestamp !== record.timestamp
       ) {
-        throw new Error(`Qdrant provenance mismatch for memory: ${hit.memoryId}`);
+        throw new DenseRetrievalError(
+          "integrity",
+          `Qdrant provenance mismatch for memory: ${hit.memoryId}`,
+        );
       }
       return { record, score: hit.score, rank: 0 };
     }).sort((left, right) =>
@@ -116,7 +174,10 @@ export class QdrantDenseRetriever implements DenseRetriever {
       generation.profile.model !== request.profile.model ||
       generation.profile.dimensions !== request.profile.dimensions
     ) {
-      throw new Error(`Qdrant generation mismatch: ${this.vectorGenerationId}`);
+      throw new DenseRetrievalError(
+        "configuration",
+        `Qdrant generation mismatch: ${this.vectorGenerationId}`,
+      );
     }
     const [embeddingStatus, generationScopeCount] = await Promise.all([
       this.options.store.getEmbeddingIndexStatus(request.scopeId, request.profile),
@@ -130,7 +191,8 @@ export class QdrantDenseRetriever implements DenseRetriever {
       embeddingStatus.missing !== 0 ||
       generationScopeCount !== embeddingStatus.total
     ) {
-      throw new Error(
+      throw new DenseRetrievalError(
+        "integrity",
         `Qdrant generation does not cover scope ${request.scopeId}: ` +
           `${generationScopeCount}/${embeddingStatus.total}`,
       );
@@ -140,25 +202,33 @@ export class QdrantDenseRetriever implements DenseRetriever {
         vector.length !== request.profile.dimensions ||
         vector.some((value) => !Number.isFinite(value))
       ) {
-        throw new Error("Qdrant query vector does not match the embedding profile");
+        throw new DenseRetrievalError(
+          "configuration",
+          "Qdrant query vector does not match the embedding profile",
+        );
       }
     }
     const filters = request.filters;
     return Promise.all(request.queryVectors.map(async (vector) => {
-      const hits = await this.options.client.search({
-        collection: this.vectorCollection,
-        vector,
-        generationId: this.vectorGenerationId,
-        scopeId: request.scopeId,
-        profileId: request.profile.profileId,
-        ...(filters?.sessionIds === undefined ? {} : { sessionIds: filters.sessionIds }),
-        ...(filters?.roles === undefined ? {} : { roles: filters.roles }),
-        ...(filters?.after === undefined ? {} : { after: filters.after }),
-        ...(filters?.before === undefined ? {} : { before: filters.before }),
-        limit: request.limit,
-        hnswEf: Math.min(10_000, Math.max(this.hnswEf, request.limit * 2)),
-        ...(request.signal === undefined ? {} : { signal: request.signal }),
-      });
+      let hits: QdrantSearchHit[];
+      try {
+        hits = await this.options.client.search({
+          collection: this.vectorCollection,
+          vector,
+          generationId: this.vectorGenerationId,
+          scopeId: request.scopeId,
+          profileId: request.profile.profileId,
+          ...(filters?.sessionIds === undefined ? {} : { sessionIds: filters.sessionIds }),
+          ...(filters?.roles === undefined ? {} : { roles: filters.roles }),
+          ...(filters?.after === undefined ? {} : { after: filters.after }),
+          ...(filters?.before === undefined ? {} : { before: filters.before }),
+          limit: request.limit,
+          hnswEf: Math.min(10_000, Math.max(this.hnswEf, request.limit * 2)),
+          ...(request.signal === undefined ? {} : { signal: request.signal }),
+        });
+      } catch (error) {
+        throw qdrantSearchFailure(error, request.signal?.aborted === true);
+      }
       return this.hydrate(request.scopeId, hits, request.limit);
     }));
   }

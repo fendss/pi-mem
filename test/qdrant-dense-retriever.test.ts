@@ -5,7 +5,9 @@ import { afterEach, describe, expect, it } from "vitest";
 import { ingestMemorySessions } from "../src/memory/index.js";
 import { MemoryStore } from "../src/platform/sqlite/pimem-store.js";
 import {
+  DenseRetrievalError,
   deterministicQdrantPointId,
+  QdrantHttpError,
   QdrantDenseRetriever,
   type EmbeddingProfile,
   type QdrantDenseSearchClient,
@@ -23,9 +25,11 @@ const profile: EmbeddingProfile = {
 class CapturingClient implements QdrantDenseSearchClient {
   requests: QdrantSearchRequest[] = [];
   hits: QdrantSearchHit[] = [];
+  error: unknown = undefined;
 
   search(request: QdrantSearchRequest): Promise<QdrantSearchHit[]> {
     this.requests.push(request);
+    if (this.error !== undefined) return Promise.reject(this.error);
     return Promise.resolve(this.hits);
   }
 }
@@ -78,7 +82,16 @@ async function fixture(ready: boolean): Promise<{
       client,
       generationId: "generation-a",
       collectionName: "pimem_vectors_v1",
-      hnswEf: 256,
+      vectorSearch: {
+        algorithm: "qdrant-hnsw",
+        hnswM: 32,
+        efConstruct: 200,
+        hnswEf: 256,
+        fullScanThresholdKb: 1_000,
+        indexingThresholdKb: 10_000,
+        exact: false,
+        requestTimeoutMs: 90_000,
+      },
     }),
   };
 }
@@ -143,6 +156,10 @@ describe("Qdrant dense retriever", () => {
         roles: ["user", "assistant"],
         hnswEf: 256,
       });
+      expect(retriever.vectorSearch).toMatchObject({
+        hnswEf: 256,
+        requestTimeoutMs: 90_000,
+      });
 
       client.hits = [{ ...hit(memoryA, 0.9), contentHash: "wrong" }];
       await expect(retriever.search({
@@ -151,6 +168,34 @@ describe("Qdrant dense retriever", () => {
         queryVectors: [[1, 0]],
         limit: 20,
       })).rejects.toThrow(/provenance mismatch/u);
+    } finally {
+      store.close();
+    }
+  });
+
+  it("classifies transport failures without making integrity errors retryable", async () => {
+    const { store, client, retriever } = await fixture(true);
+    const request = {
+      scopeId: "scope-a",
+      profile,
+      queryVectors: [[1, 0]],
+      limit: 20,
+    };
+    try {
+      client.error = new QdrantHttpError(503, "busy");
+      await expect(retriever.search(request)).rejects.toMatchObject({
+        kind: "unavailable",
+      } satisfies Partial<DenseRetrievalError>);
+
+      client.error = new QdrantHttpError(401, "unauthorized");
+      await expect(retriever.search(request)).rejects.toMatchObject({
+        kind: "configuration",
+      } satisfies Partial<DenseRetrievalError>);
+
+      client.error = new Error("malformed response");
+      await expect(retriever.search(request)).rejects.toMatchObject({
+        kind: "integrity",
+      } satisfies Partial<DenseRetrievalError>);
     } finally {
       store.close();
     }

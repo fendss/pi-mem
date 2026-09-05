@@ -5,9 +5,7 @@ import type {
   MemorySessionInput,
   MemoryTurnInput,
 } from "../../memory/index.js";
-import type {
-  BenchmarkQuery,
-} from "../index.js";
+import type { BenchmarkQuery } from "../model/benchmark-query.js";
 import type {
   PiMemResult,
 } from "../../evidence-agent/index.js";

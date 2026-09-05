@@ -277,6 +277,56 @@ function qdrantAt(value, path, retrievalProfile) {
       qdrant.vector_generation_id,
       `${path}.vector_generation_id`,
     ),
+    requestTimeoutMs: qdrant.request_timeout_ms === undefined
+      ? 120_000
+      : integerAt(qdrant.request_timeout_ms, `${path}.request_timeout_ms`, 1, 600_000),
+    hnswM: qdrant.hnsw_m === undefined
+      ? 32
+      : integerAt(qdrant.hnsw_m, `${path}.hnsw_m`, 1, 256),
+    efConstruct: qdrant.ef_construct === undefined
+      ? 200
+      : integerAt(qdrant.ef_construct, `${path}.ef_construct`, 1, 10_000),
+    hnswEf: qdrant.hnsw_ef === undefined
+      ? 800
+      : integerAt(qdrant.hnsw_ef, `${path}.hnsw_ef`, 1, 10_000),
+    fullScanThresholdKb: qdrant.full_scan_threshold_kb === undefined
+      ? 1_000
+      : integerAt(
+          qdrant.full_scan_threshold_kb,
+          `${path}.full_scan_threshold_kb`,
+          1,
+          1_000_000_000,
+        ),
+    indexingThresholdKb: qdrant.indexing_threshold_kb === undefined
+      ? 10_000
+      : integerAt(
+          qdrant.indexing_threshold_kb,
+          `${path}.indexing_threshold_kb`,
+          1,
+          1_000_000_000,
+        ),
+    syncBatchSize: qdrant.sync_batch_size === undefined
+      ? 512
+      : integerAt(qdrant.sync_batch_size, `${path}.sync_batch_size`, 1, 10_000),
+    syncConcurrency: qdrant.sync_concurrency === undefined
+      ? 4
+      : integerAt(qdrant.sync_concurrency, `${path}.sync_concurrency`, 1, 64),
+    verificationPollMs: qdrant.verification_poll_ms === undefined
+      ? 1_000
+      : integerAt(
+          qdrant.verification_poll_ms,
+          `${path}.verification_poll_ms`,
+          1,
+          60_000,
+        ),
+    verificationTimeoutMs: qdrant.verification_timeout_ms === undefined
+      ? 3_600_000
+      : integerAt(
+          qdrant.verification_timeout_ms,
+          `${path}.verification_timeout_ms`,
+          1,
+          86_400_000,
+        ),
   };
 }
 
@@ -498,6 +548,17 @@ function memoryIndexForConfig(config) {
     embeddingDimensions: dimensions,
     vectorGenerationId: config.service.qdrant.vectorGenerationId,
     vectorCollection: config.service.qdrant.collection,
+    vectorSearch: {
+      algorithm: "qdrant-hnsw",
+      hnswM: config.service.qdrant.hnswM,
+      efConstruct: config.service.qdrant.efConstruct,
+      hnswEf: config.service.qdrant.hnswEf,
+      fullScanThresholdKb: config.service.qdrant.fullScanThresholdKb,
+      indexingThresholdKb: config.service.qdrant.indexingThresholdKb,
+      exact: false,
+      requestTimeoutMs: config.service.qdrant.requestTimeoutMs,
+      fallbackPolicy: "sqlite-exact-on-unavailable-v1",
+    },
   };
 }
 
@@ -643,6 +704,22 @@ export function serviceEnvironment(config, inherited = process.env) {
           PIMEM_QDRANT_URL: qdrant.url,
           PIMEM_QDRANT_COLLECTION: qdrant.collection,
           PIMEM_VECTOR_GENERATION_ID: qdrant.vectorGenerationId,
+          PIMEM_QDRANT_TIMEOUT_MS: String(qdrant.requestTimeoutMs),
+          PIMEM_QDRANT_HNSW_M: String(qdrant.hnswM),
+          PIMEM_QDRANT_EF_CONSTRUCT: String(qdrant.efConstruct),
+          PIMEM_QDRANT_HNSW_EF: String(qdrant.hnswEf),
+          PIMEM_QDRANT_FULL_SCAN_THRESHOLD_KB: String(
+            qdrant.fullScanThresholdKb,
+          ),
+          PIMEM_QDRANT_INDEXING_THRESHOLD_KB: String(
+            qdrant.indexingThresholdKb,
+          ),
+          PIMEM_QDRANT_SYNC_BATCH_SIZE: String(qdrant.syncBatchSize),
+          PIMEM_QDRANT_SYNC_CONCURRENCY: String(qdrant.syncConcurrency),
+          PIMEM_QDRANT_VERIFY_POLL_MS: String(qdrant.verificationPollMs),
+          PIMEM_QDRANT_VERIFY_TIMEOUT_MS: String(
+            qdrant.verificationTimeoutMs,
+          ),
           ...(qdrant.apiKey === undefined
             ? {}
             : { PIMEM_QDRANT_API_KEY: qdrant.apiKey }),

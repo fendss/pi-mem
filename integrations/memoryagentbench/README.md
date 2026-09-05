@@ -118,12 +118,24 @@ service:
     url: http://127.0.0.1:6333
     collection: pimem_vectors_v1
     vector_generation_id: my-corpus-v1
+    request_timeout_ms: 120000
+    hnsw_m: 32
+    ef_construct: 200
+    hnsw_ef: 800
+    full_scan_threshold_kb: 1000
+    indexing_threshold_kb: 10000
+    sync_batch_size: 512
+    sync_concurrency: 4
+    verification_poll_ms: 1000
+    verification_timeout_ms: 3600000
     # api_key: optional-secret
 ```
 
 The launcher derives the embedding profile from `paths.embedding_env`, passes
-the Qdrant settings to the service, and includes the resulting memory-index
-contract in the runtime identity checked by both service and runner.
+the pinned Qdrant settings to the service, and includes result-affecting index,
+search, timeout, and fallback settings in the memory-index runtime identity
+checked by both service and runner. Omitted fields use the defaults shown above;
+ambient process values cannot override them.
 
 ```bash
 node run_from_yaml.mjs --check /path/to/run.yaml

@@ -8,7 +8,7 @@ import {
   type SearchMemoryResult,
   type SearchOperatorCompositionTrace,
 } from "../../../../retrieval/index.js";
-import type { MemoryCandidate } from "../../../index.js";
+import type { MemoryCandidate } from "../../../model/evidence.js";
 import type { MemoryLedger } from "../../../model/ledger.js";
 import type { CreatePiMemToolsOptions, PiMemTools, SearchToolDetails } from "./contracts.js";
 import { renderCandidates, renderEvidenceOperator } from "./render-tool-result.js";

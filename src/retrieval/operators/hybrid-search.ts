@@ -11,13 +11,10 @@ import type {
   SearchRequest,
 } from "../model/search.js";
 import type {
-  EmbeddingIndexStore,
-} from "../model/embedding.js";
-import type {
   DenseRetriever,
   DenseSearchHit,
 } from "../ports/dense-retriever.js";
-import { SqliteExactDenseRetriever } from "../adapters/sqlite/exact-dense-retriever.js";
+import type { HybridSearchStore } from "../ports/hybrid-search-store.js";
 import type { MemoryRecord } from "../../memory/index.js";
 import { queryCenteredEpisodicPreview } from "../../util.js";
 import { explicitQueryDateFilter } from "../structured-query-constraints.js";
@@ -89,25 +86,7 @@ function compareFinal(left: RankedHybridHit, right: RankedHybridHit): number {
   return left.record.memoryId.localeCompare(right.record.memoryId);
 }
 
-export interface HybridSearchStore extends EmbeddingIndexStore {
-  search(scopeId: string, request: SearchRequest): RetrievalHit[];
-  expandEvidenceOperator(
-    scopeId: string,
-    request: SearchRequest,
-    context: EvidenceOperatorSearchContext,
-    seedHits: readonly RetrievalHit[],
-  ): RetrievalHit[];
-  read(
-    scopeId: string,
-    memoryIds: string[],
-    contextBefore?: number,
-    contextAfter?: number,
-  ): MemoryRecord[];
-  getRecords(scopeId: string, memoryIds: string[]): MemoryRecord[];
-  findMentionedMemoryIds(scopeId: string, text: string): string[];
-}
-
-export class HybridMemoryStore {
+export class HybridRetriever {
   readonly rawStore: HybridSearchStore;
   readonly embedder: Embedder;
   readonly denseRetriever: DenseRetriever;
@@ -118,11 +97,11 @@ export class HybridMemoryStore {
   constructor(
     rawStore: HybridSearchStore,
     embedder: Embedder,
-    denseRetriever?: DenseRetriever,
+    denseRetriever: DenseRetriever,
   ) {
     this.rawStore = rawStore;
     this.embedder = embedder;
-    this.denseRetriever = denseRetriever ?? new SqliteExactDenseRetriever(rawStore);
+    this.denseRetriever = denseRetriever;
   }
 
   getRetrievalMetadata(): RetrievalMetadata {
@@ -137,6 +116,9 @@ export class HybridMemoryStore {
       ...(this.denseRetriever.vectorCollection === undefined
         ? {}
         : { vectorCollection: this.denseRetriever.vectorCollection }),
+      ...(this.denseRetriever.vectorSearch === undefined
+        ? {}
+        : { vectorSearch: structuredClone(this.denseRetriever.vectorSearch) }),
     };
   }
 
@@ -147,6 +129,7 @@ export class HybridMemoryStore {
       embeddingLatencyMs: embedding.latencyMs,
       denseCandidateCount: this.denseCandidateCount,
       rerankCandidateCount: this.rerankCandidateCount,
+      denseFallbackCount: this.denseRetriever.snapshotFallbackCount?.() ?? 0,
     };
   }
 

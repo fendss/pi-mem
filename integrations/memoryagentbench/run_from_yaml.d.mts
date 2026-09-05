@@ -43,6 +43,16 @@ export interface MemoryAgentBenchYamlConfiguration {
       apiKey?: string;
       collection: string;
       vectorGenerationId: string;
+      requestTimeoutMs: number;
+      hnswM: number;
+      efConstruct: number;
+      hnswEf: number;
+      fullScanThresholdKb: number;
+      indexingThresholdKb: number;
+      syncBatchSize: number;
+      syncConcurrency: number;
+      verificationPollMs: number;
+      verificationTimeoutMs: number;
     } | null;
     skill: "none" | "pimem-minimal" | "pimem-v0";
     maxRunMs: number;

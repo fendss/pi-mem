@@ -103,6 +103,24 @@ describe("architecture dependency rules", () => {
     expect(violations).toEqual([]);
   });
 
+  it("keeps internal modules from re-entering their own public API", async () => {
+    const violations: string[] = [];
+    for (const path of await listTypeScriptFiles(sourceRoot)) {
+      const owner = contextFor(path);
+      if (!owner || path === resolve(sourceRoot, owner, "index.ts")) continue;
+      const source = await readFile(path, "utf8");
+      for (const specifier of importsFor(path, source)) {
+        if (
+          importedContext(path, specifier) === owner &&
+          specifier.endsWith("/index.js")
+        ) {
+          violations.push(`${relative(projectRoot, path)} -> ${specifier}`);
+        }
+      }
+    }
+    expect(violations).toEqual([]);
+  });
+
   it("keeps context models independent of adapters and platform code", async () => {
     const violations: string[] = [];
     for (const path of await listTypeScriptFiles(sourceRoot)) {
@@ -117,11 +135,14 @@ describe("architecture dependency rules", () => {
     expect(violations).toEqual([]);
   });
 
-  it("keeps context use cases independent of adapters and outer layers", async () => {
+  it("keeps context policies independent of adapters and outer layers", async () => {
     const violations: string[] = [];
     for (const path of await listTypeScriptFiles(sourceRoot)) {
       const pathParts = relative(sourceRoot, path).split(sep);
-      if (!contextFor(path) || !pathParts.includes("use-cases")) continue;
+      if (
+        !contextFor(path) ||
+        (!pathParts.includes("use-cases") && !pathParts.includes("operators"))
+      ) continue;
       const source = await readFile(path, "utf8");
       for (const specifier of importsFor(path, source)) {
         if (/(?:^|\/)(?:adapters|platform|composition)(?:\/|$)/u.test(specifier)) {

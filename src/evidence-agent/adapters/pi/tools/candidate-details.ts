@@ -1,4 +1,4 @@
-import type { MemoryCandidate } from "../../../index.js";
+import type { MemoryCandidate } from "../../../model/evidence.js";
 import type { CandidateToolDetails } from "./contracts.js";
 
 /** Keeps exact text in preview once, while retaining passage provenance. */

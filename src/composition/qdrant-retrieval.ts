@@ -7,6 +7,7 @@ import {
   QdrantVectorSynchronizer,
   type Embedder,
   type QdrantCollectionSpec,
+  type VectorSearchConfiguration,
   type VectorIndexGenerationStatus,
 } from "../retrieval/index.js";
 
@@ -29,6 +30,7 @@ export interface QdrantRetrievalConfiguration {
   generationId: string;
   collection: QdrantCollectionSpec;
   client: QdrantClient;
+  requestTimeoutMs: number;
   hnswEf: number;
   syncBatchSize: number;
   syncConcurrency: number;
@@ -36,11 +38,33 @@ export interface QdrantRetrievalConfiguration {
   verificationTimeoutMs: number;
 }
 
+/** Projects result-affecting Qdrant settings into the runtime identity. */
+export function qdrantVectorSearchConfiguration(
+  config: QdrantRetrievalConfiguration,
+): VectorSearchConfiguration {
+  return {
+    algorithm: "qdrant-hnsw",
+    hnswM: config.collection.hnsw.m,
+    efConstruct: config.collection.hnsw.efConstruct,
+    hnswEf: config.hnswEf,
+    fullScanThresholdKb: config.collection.hnsw.fullScanThresholdKb,
+    indexingThresholdKb: config.collection.indexingThresholdKb,
+    exact: false,
+    requestTimeoutMs: config.requestTimeoutMs,
+  };
+}
+
 /** Resolves one pinned Qdrant generation without leaking environment into domains. */
 export function qdrantRetrievalConfiguration(
   embedder: Embedder,
   environment: NodeJS.ProcessEnv = process.env,
 ): QdrantRetrievalConfiguration {
+  const requestTimeoutMs = environmentInteger(
+    environment,
+    "PIMEM_QDRANT_TIMEOUT_MS",
+    120_000,
+    600_000,
+  );
   const collection: QdrantCollectionSpec = {
     name: environment.PIMEM_QDRANT_COLLECTION?.trim() || "pimem_vectors_v1",
     dimensions: embedder.dimensions,
@@ -77,13 +101,9 @@ export function qdrantRetrievalConfiguration(
       ...(environment.PIMEM_QDRANT_API_KEY === undefined
         ? {}
         : { apiKey: environment.PIMEM_QDRANT_API_KEY }),
-      timeoutMs: environmentInteger(
-        environment,
-        "PIMEM_QDRANT_TIMEOUT_MS",
-        120_000,
-        600_000,
-      ),
+      timeoutMs: requestTimeoutMs,
     }),
+    requestTimeoutMs,
     hnswEf: environmentInteger(environment, "PIMEM_QDRANT_HNSW_EF", 800, 10_000),
     syncBatchSize: environmentInteger(
       environment,
@@ -123,7 +143,7 @@ export function createQdrantDenseRetriever(
     client: config.client,
     generationId: config.generationId,
     collectionName: config.collection.name,
-    hnswEf: config.hnswEf,
+    vectorSearch: qdrantVectorSearchConfiguration(config),
   });
 }
 
