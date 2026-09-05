@@ -108,6 +108,23 @@ service:
 Both values are required and must identify the exact deployed source/build;
 they are not display labels.
 
+For the Qdrant profile, pin its externally visible identity in the same
+protected YAML instead of relying on ambient environment variables:
+
+```yaml
+service:
+  retrieval_profile: pimem-hybrid-qdrant-hnsw-v1
+  qdrant:
+    url: http://127.0.0.1:6333
+    collection: pimem_vectors_v1
+    vector_generation_id: my-corpus-v1
+    # api_key: optional-secret
+```
+
+The launcher derives the embedding profile from `paths.embedding_env`, passes
+the Qdrant settings to the service, and includes the resulting memory-index
+contract in the runtime identity checked by both service and runner.
+
 ```bash
 node run_from_yaml.mjs --check /path/to/run.yaml
 node run_from_yaml.mjs service /path/to/run.yaml

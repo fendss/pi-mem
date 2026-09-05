@@ -2,11 +2,12 @@
 
 ## Unreleased
 
+## 1.3.0
+
 - Added the `pimem-hybrid-qdrant-hnsw-v1` retrieval profile behind the existing
-  dense-retriever port while retaining SQLite exact dense search as the
-  regression baseline.
-- Qdrant contributes a fail-open expansion lane to three-way RRF with SQLite
-  exact dense and FTS5 instead of replacing the exact dense lane.
+  dense-retriever port. Qdrant provides the scalable dense lane, SQLite FTS5
+  remains the lexical lane, and exact SQLite dense search is the failure
+  fallback rather than a duplicate RRF vote.
 - Added resumable, fingerprinted vector generations with a durable SQLite
   outbox, bounded concurrent Qdrant synchronization, index/count verification,
   and fail-closed scope coverage checks.
@@ -19,6 +20,9 @@
 - LDBD service composition can select the same Qdrant profile; sealed online
   scopes derive corpus-fingerprinted generations while the Agent tool protocol
   remains unchanged.
+- MemoryAgentBench YAML runs can pin the Qdrant profile, endpoint, collection,
+  and vector generation in the same protected configuration. The resulting
+  memory-index contract is included in the reproducible runtime identity.
 
 ## 1.2.0
 

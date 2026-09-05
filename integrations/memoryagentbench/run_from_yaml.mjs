@@ -18,6 +18,7 @@ import { parse } from "yaml";
 const ANSWER_HANDOFF_ID = "evidence-aware-v1";
 const ANSWER_PROMPT_VERSION =
   "memoryarena-public-budgeted-full-parent-no-summary-no-status-20260831-v3";
+const QDRANT_RETRIEVAL_PROFILE = "pimem-hybrid-qdrant-hnsw-v1";
 
 function recordAt(value, path) {
   if (typeof value !== "object" || value === null || Array.isArray(value)) {
@@ -244,6 +245,41 @@ function modelAt(value, path) {
   };
 }
 
+function retrievalProfileAt(value, path) {
+  const profile = optionalStringAt(value, path, "pimem-hybrid");
+  if (!["pimem-hybrid", QDRANT_RETRIEVAL_PROFILE].includes(profile)) {
+    throw new TypeError(
+      `${path} must be pimem-hybrid or ${QDRANT_RETRIEVAL_PROFILE}`,
+    );
+  }
+  return profile;
+}
+
+function qdrantAt(value, path, retrievalProfile) {
+  if (retrievalProfile !== QDRANT_RETRIEVAL_PROFILE) {
+    if (value !== undefined && value !== null) {
+      throw new TypeError(`${path} requires ${QDRANT_RETRIEVAL_PROFILE}`);
+    }
+    return null;
+  }
+  const qdrant = recordAt(value, path);
+  return {
+    url: stringAt(qdrant.url, `${path}.url`).replace(/\/+$/u, ""),
+    apiKey: qdrant.api_key === undefined
+      ? undefined
+      : stringAt(qdrant.api_key, `${path}.api_key`),
+    collection: optionalStringAt(
+      qdrant.collection,
+      `${path}.collection`,
+      "pimem_vectors_v1",
+    ),
+    vectorGenerationId: stringAt(
+      qdrant.vector_generation_id,
+      `${path}.vector_generation_id`,
+    ),
+  };
+}
+
 /** Loads the single protected configuration used by both service and runner. */
 export function loadMemoryAgentBenchYaml(configPath) {
   const absolutePath = resolve(configPath);
@@ -299,6 +335,15 @@ export function loadMemoryAgentBenchYaml(configPath) {
     );
   }
   const tasks = tasksAt(run);
+  const retrievalProfile = retrievalProfileAt(
+    service.retrieval_profile,
+    "config.service.retrieval_profile",
+  );
+  const qdrant = qdrantAt(
+    service.qdrant,
+    "config.service.qdrant",
+    retrievalProfile,
+  );
   return {
     configPath: absolutePath,
     paths: {
@@ -333,6 +378,8 @@ export function loadMemoryAgentBenchYaml(configPath) {
         service.build_identity,
         "config.service.build_identity",
       ),
+      retrievalProfile,
+      qdrant,
       skill: skillAt(service.skill, "config.service.skill"),
       maxRunMs: integerAt(service.max_run_ms, "config.service.max_run_ms", 1, 1_800_000),
       maxTurns: integerAt(service.max_turns, "config.service.max_turns", 1, 256),
@@ -384,8 +431,79 @@ function skillFile(config) {
   return join(config.paths.source, ".agents", "skills", directory, "SKILL.md");
 }
 
+function embeddingInteger(environment, name, fallback) {
+  const raw = environment[name]?.trim();
+  if (raw === undefined || raw === "") return fallback;
+  const value = Number(raw);
+  if (!Number.isSafeInteger(value) || value < 1) {
+    throw new TypeError(`${name} must be a positive integer`);
+  }
+  return value;
+}
+
+function embeddingEndpoint(baseUrl) {
+  let endpoint;
+  try {
+    endpoint = new URL(baseUrl);
+  } catch {
+    throw new TypeError("PIMEM_EMBEDDING_BASE_URL must be a valid URL");
+  }
+  if (!["http:", "https:"].includes(endpoint.protocol) ||
+    endpoint.username || endpoint.password) {
+    throw new TypeError(
+      "PIMEM_EMBEDDING_BASE_URL must be an HTTP(S) URL without credentials",
+    );
+  }
+  endpoint.search = "";
+  endpoint.hash = "";
+  endpoint.pathname = `${endpoint.pathname.replace(/\/+$/u, "")}/embeddings`;
+  return endpoint.toString();
+}
+
+function memoryIndexForConfig(config) {
+  if (config.service.retrievalProfile !== QDRANT_RETRIEVAL_PROFILE) {
+    return undefined;
+  }
+  const environment = dotenv(config.paths.embeddingEnv);
+  const baseUrl = stringAt(
+    environment.PIMEM_EMBEDDING_BASE_URL,
+    "PIMEM_EMBEDDING_BASE_URL",
+  );
+  const model = environment.PIMEM_EMBEDDING_MODEL?.trim() || "text-embedding-v4";
+  const dimensions = embeddingInteger(
+    environment,
+    "PIMEM_EMBEDDING_DIMENSIONS",
+    1024,
+  );
+  const maxInputLength = embeddingInteger(
+    environment,
+    "PIMEM_EMBEDDING_MAX_INPUT_LENGTH",
+    2048,
+  );
+  const profile = JSON.stringify({
+    provider: "openai-compatible",
+    endpointFingerprint: sha256(embeddingEndpoint(baseUrl)),
+    model,
+    dimensions,
+    similarity: "cosine",
+    maxInputLength,
+    inputFormat: "role-colon-content-v1",
+    cleaning: "openai-special-token-cleaning-v1",
+    chunkAggregation: "arithmetic-mean-v1",
+  });
+  return {
+    retrievalProfile: QDRANT_RETRIEVAL_PROFILE,
+    embeddingProfileId: `embedding-${sha256(profile).slice(0, 24)}`,
+    embeddingModel: model,
+    embeddingDimensions: dimensions,
+    vectorGenerationId: config.service.qdrant.vectorGenerationId,
+    vectorCollection: config.service.qdrant.collection,
+  };
+}
+
 export function runtimeIdentityForConfig(config) {
   const path = skillFile(config);
+  const memoryIndex = memoryIndexForConfig(config);
   const contract = {
     schema_version: 1,
     source_identity: config.service.sourceIdentity,
@@ -403,6 +521,7 @@ export function runtimeIdentityForConfig(config) {
       transport: "non-stream",
       base_url: config.credentials.generation.baseUrl,
     },
+    ...(memoryIndex === undefined ? {} : { memory_index: memoryIndex }),
     limits: {
       max_run_ms: config.service.maxRunMs,
       max_turns: config.service.maxTurns,
@@ -494,7 +613,8 @@ function writeAgentConfig(config) {
 
 export function serviceEnvironment(config, inherited = process.env) {
   const runtimeIdentity = runtimeIdentityForConfig(config);
-  return {
+  const qdrant = config.service.qdrant;
+  const environment = {
     ...inherited,
     ...dotenv(config.paths.embeddingEnv),
     OPENAI_API_KEY: config.credentials.generation.apiKey,
@@ -505,6 +625,7 @@ export function serviceEnvironment(config, inherited = process.env) {
     PIMEM_MODEL: config.models.retrieval.routeId,
     PIMEM_LOGICAL_MODEL_ID: config.models.retrieval.id,
     PIMEM_RETRIEVAL_PROTOCOL: config.models.retrieval.protocol,
+    PIMEM_RETRIEVAL_PROFILE: config.service.retrievalProfile,
     PIMEM_THINKING_LEVEL: config.models.retrieval.thinkingLevel,
     PIMEM_TRANSPORT: "non-stream",
     PIMEM_MAX_RUN_MS: String(config.service.maxRunMs),
@@ -516,9 +637,23 @@ export function serviceEnvironment(config, inherited = process.env) {
     PIMEM_SOURCE_IDENTITY: config.service.sourceIdentity,
     PIMEM_BUILD_IDENTITY: config.service.buildIdentity,
     PIMEM_EXPECTED_RUNTIME_IDENTITY_SHA256: runtimeIdentity.sha256,
+    ...(qdrant === null
+      ? {}
+      : {
+          PIMEM_QDRANT_URL: qdrant.url,
+          PIMEM_QDRANT_COLLECTION: qdrant.collection,
+          PIMEM_VECTOR_GENERATION_ID: qdrant.vectorGenerationId,
+          ...(qdrant.apiKey === undefined
+            ? {}
+            : { PIMEM_QDRANT_API_KEY: qdrant.apiKey }),
+        }),
     HOST: config.service.host,
     PORT: String(config.service.port),
   };
+  if (qdrant !== null && qdrant.apiKey === undefined) {
+    delete environment.PIMEM_QDRANT_API_KEY;
+  }
+  return environment;
 }
 
 export function runnerInvocation(
@@ -596,6 +731,8 @@ function sanitized(config) {
     adaptive_query_slots: config.run.adaptiveQuerySlots,
     source_identity: config.service.sourceIdentity,
     build_identity: config.service.buildIdentity,
+    retrieval_profile: config.service.retrievalProfile,
+    vector_generation_id: config.service.qdrant?.vectorGenerationId ?? null,
     runtime_identity_sha256: runtimeIdentityForConfig(config).sha256,
     reuse_ingestion_from: config.run.reuseIngestionFrom,
     credentials: "configured",

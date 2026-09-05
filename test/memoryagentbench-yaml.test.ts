@@ -12,6 +12,8 @@ import {
   runtimeIdentityForConfig,
   serviceEnvironment,
 } from "../integrations/memoryagentbench/run_from_yaml.mjs";
+import { OpenAICompatibleEmbedder } from
+  "../src/retrieval/adapters/openai/openai-compatible-embedder.js";
 
 const temporaryDirectories: string[] = [];
 
@@ -149,6 +151,62 @@ describe("MemoryAgentBench YAML configuration", () => {
     expect(() => loadMemoryAgentBenchYaml(path)).toThrow(
       /mode 0600/iu,
     );
+  });
+
+  it("pins the Qdrant index in the service runtime identity", async () => {
+    const path = await configFile();
+    const source = await import("node:fs/promises");
+    await source.writeFile(
+      join(path, "..", "embedding.env"),
+      [
+        "PIMEM_EMBEDDING_BASE_URL=https://embedding.example/v1",
+        "PIMEM_EMBEDDING_API_KEY=test-embedding-key",
+        "PIMEM_EMBEDDING_MODEL=text-embedding-v4",
+        "PIMEM_EMBEDDING_DIMENSIONS=1024",
+        "PIMEM_EMBEDDING_MAX_INPUT_LENGTH=2048",
+        "",
+      ].join("\n"),
+    );
+    const current = await source.readFile(path, "utf8");
+    await source.writeFile(
+      path,
+      current.replace(
+        "  build_identity: build-test-v1",
+        [
+          "  build_identity: build-test-v1",
+          "  retrieval_profile: pimem-hybrid-qdrant-hnsw-v1",
+          "  qdrant:",
+          "    url: http://127.0.0.1:6333/",
+          "    collection: test_vectors",
+          "    vector_generation_id: test-generation-v1",
+        ].join("\n"),
+      ),
+    );
+    await chmod(path, 0o600);
+
+    const config = loadMemoryAgentBenchYaml(path);
+    const environment = serviceEnvironment(config, {
+      PIMEM_QDRANT_API_KEY: "stale-ambient-key",
+    });
+    const embedder = OpenAICompatibleEmbedder.fromEnvironment(environment);
+    const identity = runtimeIdentityForConfig(config);
+
+    expect(environment).toMatchObject({
+      PIMEM_RETRIEVAL_PROFILE: "pimem-hybrid-qdrant-hnsw-v1",
+      PIMEM_QDRANT_URL: "http://127.0.0.1:6333",
+      PIMEM_QDRANT_COLLECTION: "test_vectors",
+      PIMEM_VECTOR_GENERATION_ID: "test-generation-v1",
+      PIMEM_EXPECTED_RUNTIME_IDENTITY_SHA256: identity.sha256,
+    });
+    expect(environment.PIMEM_QDRANT_API_KEY).toBeUndefined();
+    expect(identity.contract.memory_index).toEqual({
+      retrievalProfile: "pimem-hybrid-qdrant-hnsw-v1",
+      embeddingProfileId: embedder.profileId,
+      embeddingModel: embedder.model,
+      embeddingDimensions: embedder.dimensions,
+      vectorGenerationId: "test-generation-v1",
+      vectorCollection: "test_vectors",
+    });
   });
 
   it("rejects adaptive concurrency outside the query-slot ceiling", async () => {

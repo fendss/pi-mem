@@ -37,6 +37,13 @@ export interface MemoryAgentBenchYamlConfiguration {
     port: number;
     sourceIdentity: string;
     buildIdentity: string;
+    retrievalProfile: "pimem-hybrid" | "pimem-hybrid-qdrant-hnsw-v1";
+    qdrant: {
+      url: string;
+      apiKey?: string;
+      collection: string;
+      vectorGenerationId: string;
+    } | null;
     skill: "none" | "pimem-minimal" | "pimem-v0";
     maxRunMs: number;
     maxTurns: number;
