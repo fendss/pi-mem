@@ -345,12 +345,15 @@ export async function runPiMem(
             : {}
         ),
       });
+      // Successful work gives the model another bounded chance to correct finish.
+      // Total turn/tool/search budgets still bound repeated recovery attempts.
+      if (!event.isError && event.toolName !== "finish") finishFailures = 0;
       if (event.toolName === "finish" && event.isError) {
         finishFailures += 1;
         if (finishFailures >= MAX_FINISH_FAILURES) {
           finishFailureMessage =
             `Protocol error: finish failed ${finishFailures} times; ` +
-            "terminating instead of continuing an unbounded correction loop.";
+            "without a successful intervening tool action; terminating the correction loop.";
           if (!finishCallsTerminatedByGuard.has(event.toolCallId)) {
             // Argument-schema failures bypass afterToolCall, so abort the active
             // loop here. The provider receives the already-aborted signal before

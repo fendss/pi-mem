@@ -2,7 +2,8 @@ import type { AgentMessage, AgentTool } from "@earendil-works/pi-agent-core";
 import { Type } from "@earendil-works/pi-ai";
 import type { MemoryLedger } from "../../model/ledger.js";
 import { IncrementalWorkingMemory, WORKING_MEMORY_MAX_CHARS, WORKING_MEMORY_MAX_OPERATIONS } from "../../model/working-memory.js";
-import { RewriteWorkingMemory } from "../../model/rewrite-working-memory.js";
+import { createRewriteWorkingMemoryContext } from "./rewrite-working-memory-context.js";
+export { REWRITE_WORKING_MEMORY_PROMPT } from "./rewrite-working-memory-context.js";
 import { createWorkProgress, WorkProgressParameters } from "./work-progress-contract.js";
 import { createWorkingMemoryObservation } from "./working-memory-observation.js";
 
@@ -37,35 +38,9 @@ explicit unchanged decision acknowledges them. No separate state tool is needed.
 The final answer handoff still uses exact read sources, not the working note.
 `;
 
-export const REWRITE_WORKING_MEMORY_PROMPT = `
-Context policy: working-memory-rewrite.
-Keep one short current note, not a transcript. Each non-null workingMemory string
-REPLACES the entire note. Carry forward still-valid intermediate facts and their
-C or E refs; remove resolved searches and revise choices contradicted by evidence.
-Use brief prose for: current supported facts; conflicts or missing relations;
-source refs still needing read. Hypotheses are not established facts. Follow the
-question's evidence and conflict rules, not outside knowledge. A plausible answer
-does not by itself settle an unresolved relation or conflicting source.
-
-Search requires workingMemory: the complete revised note, or null to keep it.
-After the first results, write an initial note before another search. Read and
-finish may omit it: omission keeps both the note and pending observations. Null
-explicitly acknowledges the observations without changing the note. Maximum note
-length is 1600 characters; no automatic truncation or separate note model call.
-Only the original question, this note and unacknowledged tool results are shown.
-Earlier candidates remain stored and can be reopened by their C refs.
-
-The note does not enter the final answer as evidence. Read the exact source for
-each relationship you rely on, including earlier steps, before finishing. A search
-preview or a note about that preview is not a delivered source; reading another
-passage from the same parent does not guarantee that relationship was delivered.
-Finish alone after observing the last tool result. Report insufficient when the
-available evidence does not settle the question. No task IDs or dependency edits.
-`;
-
 export function createWorkingMemoryContext(ledger: MemoryLedger, maxSearchCalls?: number, mode: "entries" | "progress" | "rewrite" = "entries") {
+  if (mode === "rewrite") return createRewriteWorkingMemoryContext(ledger, maxSearchCalls);
   const progress = mode === "progress";
-  const rewrite = mode === "rewrite";
   const optionalNotes = mode !== "entries";
   const acknowledged = new Set<string>();
   const expiredNavigation = new Set<string>();
@@ -81,7 +56,7 @@ export function createWorkingMemoryContext(ledger: MemoryLedger, maxSearchCalls?
       else if (!evidenceRefs.has(ref)) throw new Error(`Unknown workingMemory evidence ref ${ref}; use a returned C ref until its source has been read.`);
     }
   };
-  const memory = work?.memory ?? (rewrite ? new RewriteWorkingMemory(validateReferences) : new IncrementalWorkingMemory(validateReferences));
+  const memory = work?.memory ?? new IncrementalWorkingMemory(validateReferences);
   const text = Type.String({ minLength: 1, maxLength: WORKING_MEMORY_MAX_CHARS });
   const id = Type.String({ pattern: "^W[1-9][0-9]*$" });
   const operation = Type.Union([
@@ -90,9 +65,7 @@ export function createWorkingMemoryContext(ledger: MemoryLedger, maxSearchCalls?
     Type.Object({ op: Type.Literal("retire"), id, reason: text }, { additionalProperties: false }),
   ]);
 
-  const noteParameters = rewrite ? Type.Union([text, Type.Null()], {
-    description: "Replace the entire short note, preserving still-valid facts and C/E refs; remove resolved tasks and keep remaining gaps. Null acknowledges observations without rewriting. Omission on read or finish preserves pending observations. Notes do not replace exact source reads.",
-  }) : progress ? WorkProgressParameters : Type.Union([
+  const noteParameters = progress ? WorkProgressParameters : Type.Union([
     Type.Array(operation, { maxItems: WORKING_MEMORY_MAX_OPERATIONS }), Type.Null(),
   ], { description: "Incremental entries only: add new facts or gaps; update or retire a known W ID. Omitted entries stay intact. Null or [] explicitly keeps every entry unchanged. After the first tool result add an initial entry. The patch applies atomically before this action; a later action error does not undo it." });
 
@@ -138,7 +111,7 @@ export function createWorkingMemoryContext(ledger: MemoryLedger, maxSearchCalls?
           const { workingMemory: _note, ...nativeParams } = fields;
           const result = await tool.execute(id, nativeParams, signal, onUpdate);
           return { ...result, details: { ...result.details, workingMemoryUpdate: {
-            ...commit, mode: "changes" in commit ? (commit.changes.length ? "patch" : "unchanged") : commit.mode, acknowledgedToolCallIds,
+            ...commit, mode: commit.changes.length ? "patch" : "unchanged", acknowledgedToolCallIds,
           } } };
         },
         });

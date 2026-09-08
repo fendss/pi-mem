@@ -756,4 +756,61 @@ describe("PiMem offline workflow", () => {
     expect(replay.operatorCatalog).toEqual(result.operatorCatalog);
     expect(replay.metrics.operatorDefinitionCalls).toBe(0);
   });
+  it("recovers finish after a successful read, without allowing prose to create evidence", async () => {
+    const memory: MemoryRecord = {
+      memoryId: "read-source", scopeId: "scope-1", sessionId: "session-1", turnIndex: 0,
+      role: "user", content: "Arrives home at 6:30 pm.", contentHash: "read-source-hash", metadata: {},
+    };
+    const store: PiMemRuntimeStore = {
+      search: () => [{ record: memory, query: "arrival", retriever: "fts5", rank: 1, score: 1, preview: memory.content }],
+      read: () => [memory], findMentionedMemoryIds: () => [], getRecords: () => [memory],
+    };
+    const action = (id: string, name: string, args: Record<string, unknown>) =>
+      assistantMessage([{ type: "toolCall", id, name, arguments: args }], "toolUse");
+    const output = await runPiMem({ store, operatorRegistry: createSearchOperatorRegistry(store),
+      modelRuntime: scriptedRuntime([
+        action("search", "search", { queries: ["arrival"] }),
+        action("unread-finish", "finish", { status: "sufficient", workingMemory: "E999 proves 6:30 pm; C999 was discarded." }),
+        action("read", "read", { candidateRefs: ["C1"], workingMemory: "x".repeat(1854) }),
+        action("malformed-finish", "finish", { status: "invalid" }),
+        action("finish", "finish", { status: "sufficient", evidenceSummary: null }),
+      ], []), scopeId: "scope-1", question: "When does the user arrive home?",
+      contextPolicy: "working-memory-rewrite", maxSearchCalls: 1,
+    });
+    expect(output.trace.map(t => [t.toolName, t.isError])).toEqual([
+      ["search", false], ["finish", true], ["read", false], ["finish", true], ["finish", false],
+    ]);
+    expect(output.trace[2]!.details).toMatchObject({ workingMemoryUpdate: { rejected: true } });
+    expect(output.evidence).toHaveLength(1);
+    expect(output.evidence[0]!.memoryId).toBe(memory.memoryId);
+    expect(output.evidenceSummary).toBeUndefined();
+    expect(output.workingMemory).toMatchObject({ note: null, revision: 0 });
+  });
+
+  it("reads normally despite future evidence names and finishes despite a long optional note", async () => {
+    const memory: MemoryRecord = {
+      memoryId: "exact-source", scopeId: "scope-1", sessionId: "session-1", turnIndex: 0,
+      role: "user", content: "The filing date is November 10.", contentHash: "exact-source-hash", metadata: {},
+    };
+    const store: PiMemRuntimeStore = {
+      search: () => [{ record: memory, query: "filing", retriever: "fts5", rank: 1, score: 1, preview: memory.content }],
+      read: () => [memory], findMentionedMemoryIds: () => [], getRecords: () => [memory],
+    };
+    const action = (id: string, name: string, args: Record<string, unknown>) =>
+      assistantMessage([{ type: "toolCall", id, name, arguments: args }], "toolUse");
+    const output = await runPiMem({ store, operatorRegistry: createSearchOperatorRegistry(store),
+      modelRuntime: scriptedRuntime([
+        action("search", "search", { queries: ["filing"], workingMemory: null }),
+        action("read", "read", { candidateRefs: ["C1"], workingMemory: "Read C1 next to obtain E1. C999 is discarded." }),
+        action("finish", "finish", { status: "sufficient", workingMemory: "x".repeat(1854), evidenceSummary: "  " }),
+      ], []), scopeId: "scope-1", question: "When is the filing?", contextPolicy: "working-memory-rewrite",
+    });
+    expect(output.trace.every(t => !t.isError)).toBe(true);
+    expect(output.trace[2]!.details).toMatchObject({ workingMemoryUpdate: { rejected: true } });
+    expect(output.workingMemory).toMatchObject({ note: "Read C1 next to obtain E1. C999 is discarded." });
+    expect(output.evidence.map(e => e.memoryId)).toEqual([memory.memoryId]);
+    expect(output.citations.map(c => c.memoryId)).toEqual([memory.memoryId]);
+    expect(output.evidenceSummary).toBeUndefined();
+  });
+
 });

@@ -50,31 +50,48 @@ describe("single-note rewrite", () => {
     expect(JSON.stringify(await context.transformContext(observed))).not.toContain("unprocessed evidence");
   });
 
-  it("unknown refs keep the old note and observations; a later native failure retains a valid rewrite", async () => {
+  it("treats prose refs as annotations and preserves the note and observations on native failure", async () => {
     const context = createWorkingMemoryContext(new MemoryLedger("s"), 8, "rewrite");
     const read = context.wrapTools([stub])[0]!;
-    await read.execute("initial", { workingMemory: "Previous knowledge." });
+    await read.execute("initial", { workingMemory: "C999 is discarded; E999 might be a future label." });
     await context.transformContext(observed);
-    await expect(read.execute("invalid", { workingMemory: "E999 is the source." })).rejects.toThrow("Unknown");
-    await expect(read.execute("invalid", { workingMemory: "C999 is the source." })).rejects.toThrow();
-    expect(context.workingMemorySnapshot()).toMatchObject({ note: "Previous knowledge.", revision: 1 });
-    expect(JSON.stringify(await context.transformContext(observed))).toContain("unprocessed evidence");
     const failing = context.wrapTools([{ ...stub, execute: async () => { throw new Error("read unavailable"); } }])[0]!;
-    await expect(failing.execute("valid", { workingMemory: "Observed fact; still need its source." })).rejects.toThrow("read unavailable");
-    expect(context.workingMemorySnapshot()).toMatchObject({ note: "Observed fact; still need its source.", revision: 2 });
+    await expect(failing.execute("failed", { workingMemory: "New note." })).rejects.toThrow("read unavailable");
+    expect(context.workingMemorySnapshot()).toMatchObject({ note: "C999 is discarded; E999 might be a future label.", revision: 1 });
+    expect(JSON.stringify(await context.transformContext(observed))).toContain("unprocessed evidence");
   });
 
-  it("explicit null acknowledges only already-seen results while search still requires an initial note", async () => {
+  it("omission and null mean the same thing on every tool; only a replacement acknowledges prior results", async () => {
     const context = createWorkingMemoryContext(new MemoryLedger("s"), 8, "rewrite");
-    const [read, search] = context.wrapTools([stub, { ...stub, name: "search" }]);
+    const tools = context.wrapTools([stub, { ...stub, name: "search" }, { ...stub, name: "finish" }]);
     await context.transformContext(observed);
-    await expect(search!.execute("search", {})).rejects.toThrow("required");
-    await expect(search!.execute("search", { workingMemory: null })).rejects.toThrow("initial");
-    await read!.execute("one", { workingMemory: null });
-    await read!.execute("two", { workingMemory: null });
+    for (const tool of tools) {
+      const required = (tool.parameters as {required?: string[]}).required ?? [];
+      expect(required).not.toContain("workingMemory");
+      expect(JSON.stringify(tool.parameters)).not.toContain('"not"');
+      await tool.execute(tool.name + "-omitted", {});
+      await tool.execute(tool.name + "-null", { workingMemory: null });
+      expect(JSON.stringify(await context.transformContext(observed))).toContain("unprocessed evidence");
+    }
+    await tools[0]!.execute("update", { workingMemory: "Current fact; the next relation is missing." });
     const unseen = { ...observed[0], toolCallId: "unseen", content: [{ type: "text", text: "new unseen evidence" }] } as AgentMessage;
     const next = JSON.stringify(await context.transformContext([...observed, unseen]));
     expect(next).not.toContain("unprocessed evidence");
     expect(next).toContain("new unseen evidence");
+  });
+
+  it.each(["", "x".repeat(1601)])("does not let an invalid note block reading or finishing, and never truncates it", async value => {
+    const context = createWorkingMemoryContext(new MemoryLedger("s"), 8, "rewrite");
+    const [read, finish] = context.wrapTools([stub, { ...stub, name: "finish" }]);
+    await read!.execute("initial", { workingMemory: "Preserve this note." });
+    await context.transformContext(observed);
+    for (const tool of [read!, finish!]) {
+      const result = await tool.execute("invalid-note", { workingMemory: value });
+      expect(result.details.workingMemoryUpdate.rejected).toBe(true);
+      expect(result.details.workingMemoryUpdate.acknowledgedToolCallIds).toEqual([]);
+      expect(result.content).toEqual(expect.arrayContaining([expect.objectContaining({ text: expect.stringContaining("note was not updated") })]));
+      expect(context.workingMemorySnapshot()).toMatchObject({ note: "Preserve this note.", revision: 1 });
+      expect(JSON.stringify(await context.transformContext(observed))).toContain("unprocessed evidence");
+    }
   });
 });

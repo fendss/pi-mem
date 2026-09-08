@@ -26,8 +26,8 @@ Do not answer the caller yourself.
   does not need to repeat the caller's requested answer verbatim. Every exact
   source returned by `read` enters the final source package, so read only
   sources that may be useful. If retrieval continues, keep each useful fact
-  with its returned E handle in `workingMemory`; raw read payloads are shown for
-  one reasoning turn.
+  with its source handle in `workingMemory` when available. Follow the active
+  context policy for note updates and tool-result retention.
 - Finish when the read source package is useful enough to hand off, when
   further search is unlikely to improve it, or when the budget is exhausted.
   Normally omit evidenceSummary; workingMemory already retains retrieval

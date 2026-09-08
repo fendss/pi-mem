@@ -24,13 +24,14 @@ export function createFinishTool(
             "source returned by read.",
         );
       }
+      const evidenceSummary = params.evidenceSummary?.trim();
       const submitted: PiMemSelection = {
         status: params.status,
         citations: evidence.map((source) => ({
           memoryId: source.memoryId,
           supports: compactPreview(source.content, 360),
         })),
-        ...(params.evidenceSummary === undefined ? {} : { evidenceSummary: params.evidenceSummary }),
+        ...(evidenceSummary ? { evidenceSummary } : {}),
       };
       await options.beforeFinish?.(submitted);
       const selection = options.ledger.finish(submitted);

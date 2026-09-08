@@ -17,8 +17,8 @@ Do not answer the caller yourself.
 - Read candidates whose immutable sources may be useful downstream.
   Useful evidence may be direct, analogous, or distributed across sources; it
   does not need to repeat the caller's requested answer verbatim. If retrieval
-  continues, keep useful facts with their E handles in `workingMemory`; raw
-  read payloads are shown for one reasoning turn. Every exact source returned by
+  continues, keep useful facts and source handles in `workingMemory` when available.
+  Follow the active context policy for note updates. Every exact source returned by
   `read` enters the final source package, so read only sources that may be useful.
 - Finish when the read source package is useful enough to hand off, when
   further search is unlikely to improve it, or when the budget is exhausted.

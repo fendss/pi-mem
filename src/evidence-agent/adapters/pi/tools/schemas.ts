@@ -253,11 +253,11 @@ export const FinishParameters = Type.Object({
       "Use sufficient only when the exact sources read so far cover the " +
       "question. Reading one source does not establish coverage.",
   }),
-  evidenceSummary: Type.Optional(Type.String({
-    minLength: 1,
+  evidenceSummary: Type.Optional(Type.Union([Type.String({
     maxLength: 2000,
+  }), Type.Null()], {
     description:
-      "Optional audit note. Normally omit it; workingMemory already retains " +
+      "Optional audit note. Omission, null and blank text mean no summary. Normally omit it; workingMemory already retains " +
       "retrieval progress. This note is not source evidence and is not required " +
       "by the answer handoff.",
   })),

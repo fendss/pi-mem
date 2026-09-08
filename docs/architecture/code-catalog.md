@@ -712,6 +712,11 @@ _No top-level functions, classes, or class methods._
 |---|---|---|---|---|
 | `activeSkillPrompt(skill: Exclude<PiMemSkill, "none">): string` | Implements the active skill prompt operation. | function | internal | [line 45](../../src/evidence-agent/adapters/pi/retrieval-prompt.ts#L45) |
 | `piMemSystemPrompt(skill: PiMemSkill = "pimem-v0", basePrompt?: string, operatorCatalog: readonly SearchOperatorCatalogEntry[] = []): string` | Implements the pi mem system prompt operation. | function | exported | [line 53](../../src/evidence-agent/adapters/pi/retrieval-prompt.ts#L53) |
+## `src/evidence-agent/adapters/pi/rewrite-working-memory-context.ts`
+
+| Symbol | Purpose | Kind | Visibility | Source |
+|---|---|---|---|---|
+| `createRewriteWorkingMemoryContext(ledger: MemoryLedger, maxSearchCalls?: number)` | Notes are optional annotations. | function | exported | [line 32](../../src/evidence-agent/adapters/pi/rewrite-working-memory-context.ts#L32) |
 ## `src/evidence-agent/adapters/pi/run-agent.ts`
 
 | Symbol | Purpose | Kind | Visibility | Source |
@@ -807,7 +812,7 @@ _No top-level functions, classes, or class methods._
 
 | Symbol | Purpose | Kind | Visibility | Source |
 |---|---|---|---|---|
-| `createWorkingMemoryContext(ledger: MemoryLedger, maxSearchCalls?: number, mode: "entries" \| "progress" \| "rewrite" = "entries")` | Creates working memory context. | function | exported | [line 66](../../src/evidence-agent/adapters/pi/working-memory-context.ts#L66) |
+| `createWorkingMemoryContext(ledger: MemoryLedger, maxSearchCalls?: number, mode: "entries" \| "progress" \| "rewrite" = "entries")` | Creates working memory context. | function | exported | [line 41](../../src/evidence-agent/adapters/pi/working-memory-context.ts#L41) |
 ## `src/evidence-agent/adapters/pi/working-memory-observation.ts`
 
 | Symbol | Purpose | Kind | Visibility | Source |

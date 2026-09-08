@@ -13,6 +13,7 @@ const FILE_RESPONSIBILITIES = new Map(Object.entries({
   "src/evidence-agent/model/work-progress.ts": "Maintains small current task judgments, declared dependencies and exact-source obligations with atomic patches and a revision audit.",
   "src/evidence-agent/adapters/pi/work-progress-contract.ts": "Defines the opt-in task-progress tool contract and checks quoted source references against displayed and read evidence.",
   "src/evidence-agent/adapters/pi/working-memory-context.ts": "Applies opt-in replacement notes or incremental edits and retires only acknowledged tool results.",
+  "src/evidence-agent/adapters/pi/rewrite-working-memory-context.ts": "Keeps optional progress notes separate from tool execution, preserves unacknowledged observations, and reports rejected note updates without blocking source reads.",
   "src/evidence-agent/model/rewrite-working-memory.ts": "Maintains one replaceable short note with reference validation and an audit outside model context.",
   "src/evidence-agent/model/working-memory.ts": "Stores stable notebook entries with atomic local edits, explicit retirement, and an append-only audit without silently truncating prior information.",
   "src/evidence-agent/adapters/pi/working-memory-observation.ts": "Shows new candidate presentations without replaying prior candidate directories while preserving stable reread references.",
