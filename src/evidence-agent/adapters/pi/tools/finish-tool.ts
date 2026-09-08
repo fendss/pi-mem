@@ -30,7 +30,7 @@ export function createFinishTool(
           memoryId: source.memoryId,
           supports: compactPreview(source.content, 360),
         })),
-        evidenceSummary: params.evidenceSummary,
+        ...(params.evidenceSummary === undefined ? {} : { evidenceSummary: params.evidenceSummary }),
       };
       await options.beforeFinish?.(submitted);
       const selection = options.ledger.finish(submitted);

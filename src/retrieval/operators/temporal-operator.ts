@@ -1,5 +1,5 @@
 import type { RetrievalHit } from "../model/search.js";
-import { parseSourceTimestamp } from "../temporal-annotation.js";
+import { calendarTimestamp, compareMemoryChronology, sourceCalendarTimestamp } from "../model/source-time.js";
 import type {
   EvidenceOperatorResult,
   EvidenceOperatorRow,
@@ -71,7 +71,7 @@ function isoDate(timestamp: number): string {
 
 function startOfDay(timestamp: number): number {
   const date = new Date(timestamp);
-  return Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate());
+  return date.setUTCHours(0, 0, 0, 0);
 }
 
 function addCalendarUnits(
@@ -82,8 +82,15 @@ function addCalendarUnits(
   const date = new Date(startOfDay(timestamp));
   if (unit === "day") date.setUTCDate(date.getUTCDate() + amount);
   if (unit === "week") date.setUTCDate(date.getUTCDate() + amount * 7);
-  if (unit === "month") date.setUTCMonth(date.getUTCMonth() + amount);
-  if (unit === "year") date.setUTCFullYear(date.getUTCFullYear() + amount);
+  if (unit === "month" || unit === "year") {
+    const day = date.getUTCDate();
+    date.setUTCDate(1);
+    if (unit === "month") date.setUTCMonth(date.getUTCMonth() + amount);
+    else date.setUTCFullYear(date.getUTCFullYear() + amount);
+    const end = new Date(date.getTime());
+    end.setUTCMonth(end.getUTCMonth() + 1, 0);
+    date.setUTCDate(Math.min(day, end.getUTCDate()));
+  }
   return date.getTime();
 }
 
@@ -98,7 +105,10 @@ function cleanQuestion(question: string): string {
 }
 
 function parseAmount(value: string): number | undefined {
-  if (/^\d+$/u.test(value)) return Number(value);
+  if (/^\d+$/u.test(value)) {
+    const amount = Number(value);
+    return Number.isSafeInteger(amount) && amount <= 100_000 ? amount : undefined;
+  }
   return NUMBER_WORDS[value.toLowerCase()];
 }
 
@@ -106,88 +116,25 @@ export function resolveTemporalQuestion(
   question: string,
   questionDate?: string,
 ): TemporalQuestionPlan {
-  const questionTimestamp = parseSourceTimestamp(questionDate);
-  const plan: TemporalQuestionPlan = {
-    ...(questionDate === undefined ? {} : { questionDate }),
-    targets: [],
-  };
-  if (questionTimestamp === undefined) return plan;
   const cleaned = cleanQuestion(question);
-  const seen = new Set<string>();
-  const add = (target: ResolvedTemporalTarget): void => {
-    const key = `${target.expression}\0${target.date}`;
-    if (!seen.has(key)) {
-      seen.add(key);
-      plan.targets.push(target);
-    }
-  };
-
-  const relativePattern = /\b(\d+|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve)\s+(day|week|month|year)s?\s+ago\b/giu;
-  for (const match of cleaned.matchAll(relativePattern)) {
-    const amount = parseAmount(match[1]!);
-    if (amount === undefined) continue;
-    add({
-      expression: match[0],
-      date: isoDate(
-        addCalendarUnits(
-          questionTimestamp,
-          -amount,
-          match[2]!.toLowerCase() as "day" | "week" | "month" | "year",
-        ),
-      ),
-      basis: "relative-to-question",
-    });
+  const questionTimestamp = sourceCalendarTimestamp(questionDate);
+  const targets: ResolvedTemporalTarget[] = extractTemporalFacts(cleaned, questionDate).map((fact) => ({
+    expression: fact.expression,
+    date: fact.resolvedDate,
+    basis: fact.basis === "explicit-in-memory" ? "explicit-in-question" : "relative-to-question",
+  }));
+  if (questionTimestamp !== undefined && /\bvalentine(?:'s|s)?\s+day\b/iu.test(cleaned)) {
+    targets.push({ expression: "Valentine's Day",
+      date: `${String(new Date(questionTimestamp).getUTCFullYear())}-02-14`,
+      basis: "explicit-in-question" });
   }
+  return { ...(questionDate === undefined ? {} : { questionDate }), targets };
+}
 
-  if (/\byesterday\b/iu.test(cleaned)) {
-    add({
-      expression: "yesterday",
-      date: isoDate(addCalendarUnits(questionTimestamp, -1, "day")),
-      basis: "relative-to-question",
-    });
-  }
-
-  const weekdayPattern = /\blast\s+(sunday|monday|tuesday|wednesday|thursday|friday|saturday)\b/giu;
-  for (const match of cleaned.matchAll(weekdayPattern)) {
-    const targetWeekday = WEEKDAYS[match[1]!.toLowerCase()];
-    if (targetWeekday === undefined) continue;
-    const questionWeekday = new Date(questionTimestamp).getUTCDay();
-    const daysBack = ((questionWeekday - targetWeekday + 7) % 7) || 7;
-    add({
-      expression: match[0],
-      date: isoDate(addCalendarUnits(questionTimestamp, -daysBack, "day")),
-      basis: "relative-to-question",
-    });
-  }
-
-  const monthPattern = /\b(january|february|march|april|may|june|july|august|september|october|november|december)\s+(\d{1,2})(?:st|nd|rd|th)?(?:,?\s+(\d{4}))?\b/giu;
-  for (const match of cleaned.matchAll(monthPattern)) {
-    const month = MONTHS[match[1]!.toLowerCase()];
-    const day = Number(match[2]);
-    const year = Number(match[3] ?? new Date(questionTimestamp).getUTCFullYear());
-    if (month === undefined) continue;
-    const timestamp = Date.UTC(year, month, day);
-    const date = new Date(timestamp);
-    if (date.getUTCFullYear() !== year || date.getUTCMonth() !== month || date.getUTCDate() !== day) {
-      continue;
-    }
-    add({
-      expression: match[0],
-      date: isoDate(timestamp),
-      basis: "explicit-in-question",
-    });
-  }
-
-  if (/\bvalentine(?:'s|s)?\s+day\b/iu.test(cleaned)) {
-    const year = new Date(questionTimestamp).getUTCFullYear();
-    add({
-      expression: "Valentine's Day",
-      date: `${String(year)}-02-14`,
-      basis: "explicit-in-question",
-    });
-  }
-
-  return plan;
+function relativeDate(timestamp: number, amount: number, unit: "day" | "week" | "month" | "year"): string | undefined {
+  const shifted = addCalendarUnits(timestamp, amount, unit);
+  const year = new Date(shifted).getUTCFullYear();
+  return Number.isFinite(shifted) && year >= 0 && year <= 9999 ? isoDate(shifted) : undefined;
 }
 
 export function temporalAuxiliaryRequest(
@@ -206,29 +153,9 @@ export function temporalAuxiliaryRequest(
   return {
     ...request,
     after: request.after ?? `${target.date}T00:00:00`,
-    before: request.before ?? `${target.date}T23:59:59`,
+    before: request.before ?? `${target.date}T23:59:59.999`,
     order: "chronological",
   };
-}
-
-function explicitDates(content: string, fallbackYear?: number): string[] {
-  const dates = new Set<string>();
-  const numeric = /\b(\d{4})[-/](\d{2})[-/](\d{2})\b/gu;
-  for (const match of content.matchAll(numeric)) {
-    const timestamp = Date.UTC(Number(match[1]), Number(match[2]) - 1, Number(match[3]));
-    if (Number.isFinite(timestamp)) dates.add(isoDate(timestamp));
-  }
-  const monthPattern = /\b(january|february|march|april|may|june|july|august|september|october|november|december)\s+(\d{1,2})(?:st|nd|rd|th)?(?:,?\s+(\d{4}))?\b/giu;
-  for (const match of content.matchAll(monthPattern)) {
-    const month = MONTHS[match[1]!.toLowerCase()];
-    const year = Number(match[3] ?? fallbackYear);
-    const day = Number(match[2]);
-    if (month === undefined || !Number.isFinite(year)) continue;
-    const timestamp = Date.UTC(year, month, day);
-    const date = new Date(timestamp);
-    if (date.getUTCMonth() === month && date.getUTCDate() === day) dates.add(isoDate(timestamp));
-  }
-  return [...dates].sort();
 }
 
 /**
@@ -240,7 +167,7 @@ export function extractTemporalFacts(
   content: string,
   sourceTimestamp?: string,
 ): TemporalFact[] {
-  const sourceTime = parseSourceTimestamp(sourceTimestamp);
+  const sourceTime = sourceCalendarTimestamp(sourceTimestamp);
   const fallbackYear = sourceTime === undefined
     ? undefined
     : new Date(sourceTime).getUTCFullYear();
@@ -255,8 +182,8 @@ export function extractTemporalFacts(
   };
 
   for (const match of content.matchAll(/\b(\d{4})[-/](\d{2})[-/](\d{2})\b/gu)) {
-    const timestamp = Date.UTC(Number(match[1]), Number(match[2]) - 1, Number(match[3]));
-    if (!Number.isFinite(timestamp)) continue;
+    const timestamp = calendarTimestamp(Number(match[1]), Number(match[2]), Number(match[3]));
+    if (timestamp === undefined) continue;
     const index = match.index ?? 0;
     add({
       expression: match[0],
@@ -273,9 +200,8 @@ export function extractTemporalFacts(
     const year = Number(match[3] ?? fallbackYear);
     const day = Number(match[2]);
     if (month === undefined || !Number.isFinite(year)) continue;
-    const timestamp = Date.UTC(year, month, day);
-    const date = new Date(timestamp);
-    if (date.getUTCFullYear() !== year || date.getUTCMonth() !== month || date.getUTCDate() !== day) continue;
+    const timestamp = calendarTimestamp(year, month + 1, day);
+    if (timestamp === undefined) continue;
     const index = match.index ?? 0;
     add({
       expression: match[0],
@@ -291,24 +217,24 @@ export function extractTemporalFacts(
     for (const match of content.matchAll(relativePattern)) {
       const amount = parseAmount(match[1]!);
       if (amount === undefined) continue;
+      const resolvedDate = relativeDate(sourceTime, -amount, match[2]!.toLowerCase() as "day" | "week" | "month" | "year");
+      if (resolvedDate === undefined) continue;
       const index = match.index ?? 0;
       add({
         expression: match[0],
-        resolvedDate: isoDate(addCalendarUnits(
-          sourceTime,
-          -amount,
-          match[2]!.toLowerCase() as "day" | "week" | "month" | "year",
-        )),
+        resolvedDate,
         basis: "relative-to-memory",
         index,
         end: index + match[0].length,
       });
     }
     for (const match of content.matchAll(/\byesterday\b/giu)) {
+      const resolvedDate = relativeDate(sourceTime, -1, "day");
+      if (resolvedDate === undefined) continue;
       const index = match.index ?? 0;
       add({
         expression: match[0],
-        resolvedDate: isoDate(addCalendarUnits(sourceTime, -1, "day")),
+        resolvedDate,
         basis: "relative-to-memory",
         index,
         end: index + match[0].length,
@@ -319,10 +245,12 @@ export function extractTemporalFacts(
       if (targetWeekday === undefined) continue;
       const sourceWeekday = new Date(sourceTime).getUTCDay();
       const daysBack = ((sourceWeekday - targetWeekday + 7) % 7) || 7;
+      const resolvedDate = relativeDate(sourceTime, -daysBack, "day");
+      if (resolvedDate === undefined) continue;
       const index = match.index ?? 0;
       add({
         expression: match[0],
-        resolvedDate: isoDate(addCalendarUnits(sourceTime, -daysBack, "day")),
+        resolvedDate,
         basis: "relative-to-memory",
         index,
         end: index + match[0].length,
@@ -342,23 +270,16 @@ export function buildTimelineOperatorResult(
   auxiliaryRequest?: SearchRequest,
 ): EvidenceOperatorResult {
   const plan = resolveTemporalQuestion(question, questionDate);
-  const rows = hits.map((hit, sourceOrder) => {
-    const sessionTimestamp = parseSourceTimestamp(hit.record.timestamp);
+  const rows = [...hits].sort((left, right) => compareMemoryChronology(left.record, right.record)).map((hit) => {
+    const sessionTimestamp = sourceCalendarTimestamp(hit.record.timestamp);
     const sessionDate = sessionTimestamp === undefined ? undefined : isoDate(sessionTimestamp);
     const mentions = [
       ...new Set([
-        ...explicitDates(
-          hit.record.content,
-          sessionTimestamp === undefined
-            ? undefined
-            : new Date(sessionTimestamp).getUTCFullYear(),
-        ),
+        ...extractTemporalFacts(hit.record.content, hit.record.timestamp).map((fact) => fact.resolvedDate),
         ...(hit.operatorTemporalFacts ?? []).map((fact) => fact.resolvedDate),
       ]),
     ].sort();
     return {
-      sourceOrder,
-      row: {
       slot: hit.query,
       quote: hit.preview,
       memoryId: hit.record.memoryId,
@@ -367,12 +288,8 @@ export function buildTimelineOperatorResult(
       role: hit.record.role,
       ...(sessionDate === undefined ? {} : { eventTime: sessionDate }),
       ...(mentions.length === 0 ? {} : { mentionedDates: mentions }),
-      } satisfies EvidenceOperatorRow,
-    };
-  }).sort((left, right) => {
-    const time = (left.row.eventTime ?? "9999-99-99").localeCompare(right.row.eventTime ?? "9999-99-99");
-    return time !== 0 ? time : left.sourceOrder - right.sourceOrder;
-  }).map((item) => item.row);
+    } satisfies EvidenceOperatorRow;
+  });
   return {
     version: "pimem-evidence-operators-v1",
     operator: "temporal",

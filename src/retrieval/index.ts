@@ -1,3 +1,4 @@
+export { searchQueryFingerprint } from "./model/search.js";
 export type {
   EvidenceOperatorResult,
   EvidenceOperatorRow,

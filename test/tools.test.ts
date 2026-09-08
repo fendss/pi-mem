@@ -476,7 +476,7 @@ describe("PiMem tools", () => {
     });
   });
 
-  it("requires only status and a semantic summary", async () => {
+  it("requires only status and permits an optional audit summary", async () => {
     const searched = record("m1", 0);
     const ledger = new MemoryLedger("scope-1");
     const tools = createPiMemTools({
@@ -491,7 +491,7 @@ describe("PiMem tools", () => {
     };
     const rendered = JSON.stringify(schema);
     expect(rendered).toContain("Stop retrieval");
-    expect(schema.required).toEqual(["status", "evidenceSummary"]);
+    expect(schema.required).toEqual(["status"]);
     expect(Object.keys(schema.properties)).toEqual([
       "status",
       "evidenceSummary",
@@ -817,7 +817,7 @@ describe("PiMem tools", () => {
     expect(requests).toHaveLength(2);
     expect(requests[1]).toMatchObject({
       after: "2023-03-15T00:00:00",
-      before: "2023-03-15T23:59:59",
+      before: "2023-03-15T23:59:59.999",
       order: "chronological",
     });
     expect(result.details.operator).toBe("temporal-index");
@@ -850,7 +850,7 @@ describe("PiMem tools", () => {
     ).rejects.toThrow(/Valid candidate range is C1-C1/u);
   });
 
-  it("automatically commits every read source without agent-provided refs", async () => {
+  it("automatically commits every read source without refs or an evidence summary", async () => {
     const searched = record("m-auto-commit", 0);
     const ledger = new MemoryLedger("scope-1");
     const tools = createPiMemTools({
@@ -867,8 +867,8 @@ describe("PiMem tools", () => {
 
     const result = await tools.finish.execute("finish-auto-commit", {
       status: "sufficient",
-      evidenceSummary: "The read sources are the complete downstream package.",
     });
+    expect(result.details.selection).not.toHaveProperty("evidenceSummary");
     expect(result.details.committedEvidenceRefs).toEqual(["E1", "E2"]);
     expect(ledger.selection?.citations.map((citation) => citation.memoryId)).toEqual([
       "m-auto-commit",

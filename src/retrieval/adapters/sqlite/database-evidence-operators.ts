@@ -10,6 +10,8 @@ import type {
 } from "../../model/search.js";
 import type { MemoryRecord } from "../../../memory/index.js";
 import { queryCenteredEpisodicPreview } from "../../../util.js";
+import { compareMemoryChronology, parseSourceTimestamp } from "../../model/source-time.js";
+import { finalizeSearchHits } from "../../finalize-search-hits.js";
 import {
   type MemoryRow,
   memoryRowToRecord,
@@ -31,6 +33,18 @@ interface NumericFactRow extends MemoryRow {
 
 export interface DatabaseOperatorSeed {
   record: MemoryRecord;
+  query?: string;
+  matchedQueries?: readonly string[];
+}
+
+function sessionQueryPaths(seeds: readonly DatabaseOperatorSeed[]): Map<string, Set<string>> {
+  const paths = new Map<string, Set<string>>();
+  for (const seed of seeds) {
+    const queries = paths.get(seed.record.sessionId) ?? new Set<string>();
+    for (const query of seed.matchedQueries ?? (seed.query === undefined ? [] : [seed.query])) queries.add(query);
+    paths.set(seed.record.sessionId, queries);
+  }
+  return paths;
 }
 
 export interface DatabaseOperatorHit {
@@ -51,14 +65,7 @@ export interface DatabaseOperatorHit {
 }
 
 function compareRecords(left: MemoryRecord, right: MemoryRecord): number {
-  if (left.timestamp !== right.timestamp) {
-    if (left.timestamp === undefined) return 1;
-    if (right.timestamp === undefined) return -1;
-    const time = left.timestamp.localeCompare(right.timestamp);
-    if (time !== 0) return time;
-  }
-  const session = left.sessionId.localeCompare(right.sessionId);
-  return session !== 0 ? session : left.turnIndex - right.turnIndex;
+  return compareMemoryChronology(left, right);
 }
 
 const OPERATOR_STOP_WORDS = new Set([
@@ -102,6 +109,7 @@ export class DatabaseEvidenceOperators {
     context: EvidenceOperatorSearchContext,
     seedHits: readonly DatabaseOperatorSeed[],
   ): DatabaseOperatorHit[] {
+    if (request.roles?.length === 0 || request.sessionIds?.length === 0) return [];
     this.ensureScope(scopeId);
     return context.operator === "temporal"
       ? this.expandTimeline(scopeId, request, context, seedHits)
@@ -116,10 +124,13 @@ export class DatabaseEvidenceOperators {
       return false;
     }
     if (request.roles && !request.roles.includes(record.role)) return false;
-    if (request.after && (!record.timestamp || record.timestamp < request.after)) {
+    const time = parseSourceTimestamp(record.timestamp);
+    const after = parseSourceTimestamp(request.after);
+    const before = parseSourceTimestamp(request.before);
+    if (request.after && (time === undefined || after === undefined || time < after)) {
       return false;
     }
-    if (request.before && (!record.timestamp || record.timestamp > request.before)) {
+    if (request.before && (time === undefined || before === undefined || time > before)) {
       return false;
     }
     return true;
@@ -157,7 +168,7 @@ export class DatabaseEvidenceOperators {
       JOIN memories AS m ON m.memory_id = t.memory_id
       WHERE t.scope_id = ? AND t.extractor_version = ?
       ORDER BY t.resolved_date ASC, m.session_id ASC, m.turn_index ASC
-    `).all(scopeId, EVIDENCE_FACT_EXTRACTOR_VERSION) as unknown as TemporalFactRow[];
+    `).iterate(scopeId, EVIDENCE_FACT_EXTRACTOR_VERSION) as unknown as Iterable<TemporalFactRow>;
     const targetDates = new Set([
       ...(context.targetDates ?? []),
       ...request.queries.flatMap((query) =>
@@ -165,6 +176,7 @@ export class DatabaseEvidenceOperators {
       ),
     ]);
     const seedSessions = new Set(seedHits.map((hit) => hit.record.sessionId));
+    const seedPaths = sessionQueryPaths(seedHits);
     const seedMemories = new Set(seedHits.map((hit) => hit.record.memoryId));
     const seedOrder = new Map(seedHits.map((hit, index) => [hit.record.memoryId, index]));
     const grouped = new Map<string, {
@@ -184,7 +196,7 @@ export class DatabaseEvidenceOperators {
     } = request;
 
     for (const row of rows) {
-      const record = memoryRowToRecord(row);
+      const record = grouped.get(row.memory_id)?.record ?? memoryRowToRecord(row);
       // Resolved target dates, not model-supplied bounds, drive this expansion.
       if (!this.matchesRequestFilters(record, timelineFilters)) continue;
       const entry = grouped.get(record.memoryId) ?? {
@@ -240,16 +252,16 @@ export class DatabaseEvidenceOperators {
         if (priority !== 0) return priority;
         const relevance = left.seedOrder - right.seedOrder;
         return relevance !== 0 ? relevance : compareRecords(left.record, right.record);
-      })
-      .slice(0, context.maxCandidates);
+      });
     const query = targetDates.size === 0
       ? "database timeline expansion"
       : `database timeline dates ${[...targetDates].join(",")}`;
-    return ranked.map((entry, index) => ({
+    const hits = ranked.map((entry, index) => ({
       ...this.hit(
         entry.record,
         query,
-        request.queries,
+        request.queries.filter((query) => seedPaths.get(entry.record.sessionId)?.has(query) ||
+          (query.match(/\b\d{4}-\d{2}-\d{2}\b/gu) ?? []).some((date) => entry.dates.has(date))),
         "pimem-timeline-db",
         index + 1,
       ),
@@ -258,6 +270,7 @@ export class DatabaseEvidenceOperators {
         ? {}
         : { operatorSourceSpans: [...entry.sourceSpans.values()] }),
     }));
+    return finalizeSearchHits(hits, request, context.maxCandidates);
   }
 
   private expandAggregate(
@@ -276,10 +289,12 @@ export class DatabaseEvidenceOperators {
       WHERE n.scope_id = ? AND n.extractor_version = ?
       ORDER BY m.timestamp IS NULL ASC, m.timestamp ASC,
                m.session_id ASC, m.turn_index ASC, n.fact_index ASC
-    `).all(scopeId, EVIDENCE_FACT_EXTRACTOR_VERSION) as unknown as NumericFactRow[];
+    `).iterate(scopeId, EVIDENCE_FACT_EXTRACTOR_VERSION) as unknown as Iterable<NumericFactRow>;
     const seedSessions = new Set(seedHits.map((hit) => hit.record.sessionId));
+    const seedPaths = sessionQueryPaths(seedHits);
     const seedMemories = new Set(seedHits.map((hit) => hit.record.memoryId));
     const tokens = operatorTokens(request.queries);
+    const queryTokens = request.queries.map((query) => ({ query, tokens: operatorTokens([query]) }));
     const grouped = new Map<string, {
       record: MemoryRecord;
       factIndexes: number[];
@@ -287,10 +302,11 @@ export class DatabaseEvidenceOperators {
       overlap: number;
       seedMemory: boolean;
       seedSession: boolean;
+      queryPaths: Set<string>;
     }>();
 
     for (const row of rows) {
-      const record = memoryRowToRecord(row);
+      const record = grouped.get(row.memory_id)?.record ?? memoryRowToRecord(row);
       if (!this.matchesRequestFilters(record, request)) continue;
       const localContext = record.content
         .slice(
@@ -310,7 +326,11 @@ export class DatabaseEvidenceOperators {
         overlap: 0,
         seedMemory,
         seedSession,
+        queryPaths: new Set(request.queries.filter((query) => seedPaths.get(record.sessionId)?.has(query))),
       };
+      for (const path of queryTokens) {
+        if (path.tokens.some((token) => localContext.includes(token))) entry.queryPaths.add(path.query);
+      }
       entry.factIndexes.push(row.fact_index);
       entry.sourceSpans.set(`${String(row.span_start)}:${String(row.span_end)}`, {
         start: row.span_start,
@@ -339,19 +359,19 @@ export class DatabaseEvidenceOperators {
         const role = (left.record.role === "user" ? 0 : 1) -
           (right.record.role === "user" ? 0 : 1);
         return role !== 0 ? role : compareRecords(left.record, right.record);
-      })
-      .slice(0, context.maxCandidates);
+      });
 
-    return ranked.map((entry, index) => ({
+    const hits = ranked.map((entry, index) => ({
       ...this.hit(
         entry.record,
         `database numeric facts for ${request.queries.join(" | ")}`,
-        request.queries,
+        request.queries.filter((query) => entry.queryPaths.has(query)),
         "pimem-aggregate-db",
         index + 1,
       ),
       operatorNumericFactIndexes: entry.factIndexes,
       operatorSourceSpans: [...entry.sourceSpans.values()],
     }));
+    return finalizeSearchHits(hits, request, context.maxCandidates);
   }
 }

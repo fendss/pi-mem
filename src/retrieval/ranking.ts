@@ -38,6 +38,7 @@ const NLTK_ENGLISH_STOPWORDS = new Set([
 /** Tokenizes candidate text for PiMem hybrid BM25 after \W+ cleanup. */
 export function tokenizeForPiMemHybrid(text: string): string[] {
   return text
+    .normalize("NFKC")
     .replace(/[^\p{L}\p{N}_]+/gu, " ")
     .toLowerCase()
     .trim()

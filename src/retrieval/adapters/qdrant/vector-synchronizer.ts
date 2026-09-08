@@ -182,9 +182,9 @@ export class QdrantVectorSynchronizer {
     return status;
   }
 
-  private async worker(signal?: AbortSignal): Promise<number> {
+  private async worker(signal: AbortSignal | undefined, shouldStop: () => boolean, onFailure: (error: unknown) => void): Promise<number> {
     let synchronized = 0;
-    while (true) {
+    while (!shouldStop()) {
       if (signal?.aborted) throw new Error("Vector synchronization aborted");
       const claims = this.options.store.claimVectorSyncBatch(
         this.options.generationId,
@@ -203,6 +203,7 @@ export class QdrantVectorSynchronizer {
         this.options.store.completeVectorSyncBatch(this.options.generationId, ids);
         synchronized += claims.length;
       } catch (error) {
+        onFailure(error);
         this.options.store.releaseVectorSyncBatch(this.options.generationId, ids, error);
         if (permanentFailure(error)) {
           this.options.store.failVectorIndexGeneration(this.options.generationId, error);
@@ -210,14 +211,26 @@ export class QdrantVectorSynchronizer {
         throw error;
       }
     }
+    return synchronized;
   }
 
   async synchronizeAvailable(signal?: AbortSignal): Promise<number> {
     const status = await this.initialize(signal);
     if (status.state !== "ingesting" && status.state !== "draining") return 0;
-    const counts = await Promise.all(
-      Array.from({ length: this.concurrency }, () => this.worker(signal)),
-    );
+    let failed = false;
+    let firstError: unknown;
+    const onFailure = (error: unknown): void => {
+      if (!failed) firstError = error;
+      failed = true;
+    };
+    const counts = await Promise.all(Array.from({ length: this.concurrency }, async () => {
+      try { return await this.worker(signal, () => failed, onFailure); }
+      catch (error) {
+        onFailure(error);
+        return 0;
+      }
+    }));
+    if (failed) throw firstError;
     return counts.reduce((sum, value) => sum + value, 0);
   }
 

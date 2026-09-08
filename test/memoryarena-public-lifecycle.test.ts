@@ -290,7 +290,6 @@ describe("MemoryArena Public memory lifecycle", () => {
           runId: "projected-run",
           status: "sufficient",
           citations: [{ memoryId: evidence.memoryId, supports: "two facts" }],
-          evidenceSummary: "Two passages jointly answer the question.",
           evidence: [evidence],
           trace: [],
           usage: ZERO_USAGE,
@@ -384,6 +383,18 @@ describe("MemoryArena Public memory lifecycle", () => {
     expect(budgetedPrompt).toBe(excerptPrompt);
     expect(budgetedPrompt).toContain("First exact fact.");
     expect(budgetedPrompt).not.toContain("PARENT_ONLY_SECRET");
+  });
+
+  it("does not replace committed evidence with a stale full parent", () => {
+    const source = "original exact fact and unused context";
+    const evidence = projectedEvidence("m1", source, [{ start: 0, end: 19 }]);
+    const retrieval = { runId: "stale-parent", status: "sufficient" as const,
+      citations: [{ memoryId: "m1", supports: "fact" }], evidence: [evidence],
+      trace: [], usage: ZERO_USAGE };
+    const prompt = renderMemoryArenaEvidencePrompt("Question", retrieval, new Map([["m1", "different fact"]]));
+    expect(prompt).toBe(renderMemoryArenaEvidencePrompt("Question", retrieval));
+    expect(prompt).toContain(evidence.excerpts[0]!.content);
+    expect(prompt).not.toContain("different fact");
   });
 
   it("rejects a committed passage whose exact-content hash was altered", async () => {

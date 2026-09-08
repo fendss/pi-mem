@@ -1,3 +1,4 @@
+import { fetchWithHttpTimeout, transportErrorMessage } from "../http/runtime-fetch.js";
 import type { StreamFn } from "@earendil-works/pi-agent-core";
 import {
   calculateCost,
@@ -560,19 +561,12 @@ export const openAINonStreamingStreamFn: StreamFn = (
           options?.timeoutMs,
         );
         try {
-          response = await fetch(requestUrl, {
+          response = await fetchWithHttpTimeout(requestUrl, {
             ...requestInit,
             ...(attemptAbort.signal === undefined
               ? {}
               : { signal: attemptAbort.signal }),
-          });
-          await options?.onResponse?.(
-            {
-              status: response.status,
-              headers: Object.fromEntries(response.headers.entries()),
-            },
-            model,
-          );
+          }, options?.timeoutMs);
           bodyText = await response.text();
         } catch (error) {
           const requestError = attemptAbort.timeoutError() ?? error;
@@ -590,6 +584,22 @@ export const openAINonStreamingStreamFn: StreamFn = (
           continue;
         } finally {
           attemptAbort.cleanup();
+        }
+        // Application callbacks are not network operations. Their failures must
+        // never dispatch another completion; retain usage from an already read body.
+        try {
+          await options?.onResponse?.({
+            status: response.status,
+            headers: Object.fromEntries(response.headers.entries()),
+          }, model);
+        } catch (error) {
+          try {
+            const completed = JSON.parse(bodyText) as ChatCompletionResponse;
+            message.usage = responseUsage(model, completed?.usage);
+            if (typeof completed?.id === "string") message.responseId = completed.id;
+            if (typeof completed?.model === "string") message.responseModel = completed.model;
+          } catch { /* The callback error remains the primary failure. */ }
+          throw error;
         }
         if (
           !response.ok && transientHttpStatus(response.status) &&
@@ -621,6 +631,12 @@ export const openAINonStreamingStreamFn: StreamFn = (
         parsed,
         "chat completion response",
       ) as ChatCompletionResponse;
+      // A rejected completion was still generated and billed by the provider.
+      message.usage = responseUsage(model, completion.usage);
+      if (typeof completion.id === "string") message.responseId = completion.id;
+      if (typeof completion.model === "string" && completion.model) {
+        message.responseModel = completion.model;
+      }
       if (
         typeof completion.model !== "string" ||
         !responseModelMatchesRequested(model.id, completion.model)
@@ -658,21 +674,12 @@ export const openAINonStreamingStreamFn: StreamFn = (
       if (mapped.errorMessage !== undefined) {
         message.errorMessage = mapped.errorMessage;
       }
-      if (typeof completion.id === "string") {
-        message.responseId = completion.id;
-      }
-      if (typeof completion.model === "string" && completion.model) {
-        message.responseModel = completion.model;
-      }
-      message.usage = responseUsage(model, completion.usage);
       emitCompletedMessage(stream, message);
     } catch (error) {
       message.stopReason = options?.signal?.aborted ? "aborted" : "error";
       message.errorMessage = options?.signal?.aborted
         ? "Request was aborted"
-        : error instanceof Error
-          ? error.message
-          : String(error);
+        : transportErrorMessage(error);
       stream.push({
         type: "error",
         reason: message.stopReason,

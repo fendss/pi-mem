@@ -40,6 +40,41 @@ function evidence(records: readonly MemoryRecord[]) {
 }
 
 describe("MemoryLedger", () => {
+  it("assigns one stable evidence reference per parent within a repeated batch", () => {
+    const ledger = new MemoryLedger("scope-1");
+    const first = record("m1", 0);
+    const second = record("m2", 1);
+    ledger.recordInspect(evidence([first, first, second]));
+    expect(ledger.evidenceRef("m1")).toBe("E1");
+    expect(ledger.evidenceRef("m2")).toBe("E2");
+    expect(ledger.inspectedEvidence).toHaveLength(2);
+  });
+
+  it.each(["search", "bash"] as const)("rejects a mixed-scope %s batch without keeping a partial result", (tool) => {
+    const ledger = new MemoryLedger("scope-1");
+    const records = [record("local", 0), record("foreign", 0, "scope-2")];
+    expect(() => tool === "search"
+      ? ledger.recordSearchHits(records.map(hit))
+      : ledger.recordBashDiscoveries(records, "offline test")).toThrow("expected scope-1");
+    expect(ledger.candidates).toEqual([]);
+    ledger.recordSearchHits([hit(records[0]!, 1)]);
+    expect(ledger.candidateRef("local")).toBe("C1");
+  });
+
+  it("isolates nested source metadata from callers and returned evidence", () => {
+    const ledger = new MemoryLedger("scope-1");
+    const source = record("m1", 0);
+    source.metadata = { provenance: { tags: ["original"] } };
+    const [input] = evidence([source]);
+    const [returned] = ledger.recordInspect([input!]);
+    const tags = (value: { metadata: Record<string, unknown> }) =>
+      (value.metadata.provenance as { tags: string[] }).tags;
+    tags(input!).push("input mutation");
+    tags(returned!).push("result mutation");
+    tags(ledger.inspectedEvidence[0]!).push("getter mutation");
+    expect(tags(ledger.inspectedEvidence[0]!)).toEqual(["original"]);
+  });
+
   it("keeps committed citations equal to read evidence within candidates", () => {
     const ledger = new MemoryLedger("scope-1");
     const first = record("m1", 0);

@@ -1,3 +1,4 @@
+import { finalizeSearchHits } from "../../finalize-search-hits.js";
 import {
   resolveTemporalQuestion,
   temporalAuxiliaryRequest,
@@ -11,8 +12,9 @@ import type {
 import type { SearchOperatorInput } from "../../model/operator.js";
 import type { SearchOperatorStore } from "../../ports/memory-tool-store.js";
 import type { SearchOperator } from "../../ports/search-operator.js";
+import { mergeHitProvenance } from "../../model/hit-provenance.js";
 
-const VERSION = "3";
+const VERSION = "4";
 
 function makeSearchRequest(
   input: SearchOperatorInput,
@@ -36,8 +38,9 @@ function mergeHits(
 ): RetrievalHit[] {
   const merged = new Map<string, RetrievalHit>();
   for (const hit of [...preferred, ...fallback]) {
-    if (!merged.has(hit.record.memoryId)) merged.set(hit.record.memoryId, hit);
-    if (merged.size >= limit) break;
+    const previous = merged.get(hit.record.memoryId);
+    if (previous !== undefined) merged.set(hit.record.memoryId, mergeHitProvenance(previous, hit));
+    else if (merged.size < limit) merged.set(hit.record.memoryId, hit);
   }
   return [...merged.values()].map((hit, index) => ({
     ...hit,
@@ -162,9 +165,11 @@ function evidenceIndexOperator(
           );
       return {
         request,
-        hits: indexedHits.length === 0
-          ? seedHits
-          : mergeHits(indexedHits, seedHits, maxCandidates),
+        hits: finalizeSearchHits(
+          mergeHits(indexedHits, seedHits, indexedHits.length + seedHits.length),
+          request,
+          Math.min(input.limit, maxCandidates),
+        ),
       };
     },
   };

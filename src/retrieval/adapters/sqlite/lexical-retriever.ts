@@ -25,25 +25,22 @@ function quoteFtsToken(token: string): string {
 }
 
 function rawFtsTokens(text: string): string[] {
-  return [...new Set(
+  return (
     text
       .normalize("NFKC")
       .match(/[\p{L}\p{N}][\p{L}\p{N}_'-]*/gu)
-      ?.filter((token) => token.length > 1)
-      .slice(0, 24) ?? [],
-  )];
+      ?.slice(0, 24) ?? []
+  );
 }
 
 /** Builds strict-to-broad FTS plans from query text alone. */
 function ftsQueryPlans(text: string): FtsQueryPlan[] {
   const rawTokens = rawFtsTokens(text);
   if (rawTokens.length === 0) return [];
-  const informativeTokens = tokenizeForPiMemHybrid(text)
-    .filter((token) => token.length > 1)
-    .slice(0, 24);
-  const recallTokens = informativeTokens.length === 0
+  const informativeTokens = tokenizeForPiMemHybrid(text).slice(0, 24);
+  const recallTokens = [...new Set(informativeTokens.length === 0
     ? rawTokens.map((token) => token.toLowerCase())
-    : informativeTokens;
+    : informativeTokens)];
   const plans: FtsQueryPlan[] = [];
   if (rawTokens.length > 1) {
     plans.push({
@@ -74,10 +71,10 @@ export class SqliteLexicalRetriever {
   constructor(private readonly db: DatabaseSync) {}
 
   search(scopeId: string, request: SearchRequest): RetrievalHit[] {
+    if (request.roles?.length === 0 || request.sessionIds?.length === 0) return [];
     const limit = Math.min(Math.max(request.limit ?? 20, 1), 100);
-    const fetchLimit = request.maxPerSession === undefined
-      ? limit
-      : Math.min(100, Math.max(limit, limit * 4));
+    // Fusion needs the same bounded physical pool regardless of visible depth.
+    const fetchLimit = 100;
     const merged = new Map<string, {
       hit: RetrievalHit;
       bestScore: number;
@@ -106,11 +103,11 @@ export class SqliteLexicalRetriever {
           params.push(...request.roles);
         }
         if (request.after) {
-          where.push("m.timestamp >= ?");
+          where.push("julianday(m.timestamp) >= julianday(?)");
           params.push(request.after);
         }
         if (request.before) {
-          where.push("m.timestamp <= ?");
+          where.push("julianday(m.timestamp) <= julianday(?)");
           params.push(request.before);
         }
         params.push(fetchLimit);
@@ -123,7 +120,7 @@ export class SqliteLexicalRetriever {
           FROM memory_fts
           JOIN memories AS m ON m.memory_id = memory_fts.memory_id
           WHERE ${where.join(" AND ")}
-          ORDER BY rank ASC
+          ORDER BY rank ASC, m.memory_id ASC
           LIMIT ?
         `).all(...params) as unknown as SearchRow[];
         rows.forEach((row, index) => {
@@ -187,7 +184,7 @@ export class SqliteLexicalRetriever {
       );
     const reservedCoverage: RetrievalHit[] = [];
     if (request.queries.length > 1) {
-      const reservationLimit = Math.max(1, Math.floor(limit / 2));
+      const reservationLimit = Math.min(10, request.queries.length);
       const reservedIds = new Set<string>();
       for (const queryRanking of queryRankings) {
         const hit = queryRanking.find((candidate) =>

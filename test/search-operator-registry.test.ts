@@ -441,7 +441,7 @@ describe("SearchOperatorRegistry", () => {
       {},
       {
         after: "2023-03-15T00:00:00",
-        before: "2023-03-15T23:59:59",
+        before: "2023-03-15T23:59:59.999",
       },
     ]);
     expect(expansionDates).toEqual([["2023-03-15"]]);

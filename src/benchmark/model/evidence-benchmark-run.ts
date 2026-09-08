@@ -1,5 +1,5 @@
 import type { PiMemResult, PiMemRunError } from "../../evidence-agent/index.js";
-import type { BenchmarkAnswerResult } from "./answer.js";
+import type { BenchmarkAnswerResult, BenchmarkFailureArtifacts } from "./answer.js";
 
 export type EvidenceBenchmarkId = "ama-bench";
 
@@ -34,7 +34,7 @@ export interface EvidenceBenchmarkSuccessRecord {
   answer: BenchmarkAnswerResult;
 }
 
-export interface EvidenceBenchmarkFailureRecord {
+export interface EvidenceBenchmarkFailureRecord extends BenchmarkFailureArtifacts {
   schema_version: 1;
   benchmark: EvidenceBenchmarkId;
   case_id: string;

@@ -1,38 +1,22 @@
 import type { RetrievalHit, SearchRequest } from "./model/search.js";
 
-function timestampValue(hit: RetrievalHit): string {
-  return hit.record.timestamp ?? "9999-99-99T99:99:99";
-}
+import { compareMemoryChronology } from "./model/source-time.js";
 
-export function finalizeSearchHits(
-  relevanceOrderedHits: readonly RetrievalHit[],
+export function finalizeSearchHits<T extends RetrievalHit>(
+  relevanceOrderedHits: readonly T[],
   request: SearchRequest,
   limit: number,
-): RetrievalHit[] {
+): T[] {
+  const chronological = request.order === "chronological" || request.order === "reverse-chronological";
+  const compare = (left: RetrievalHit, right: RetrievalHit) => compareMemoryChronology(
+    left.record, right.record, request.order === "reverse-chronological" ? -1 : 1,
+  );
+  const ordered = chronological ? [...relevanceOrderedHits].sort(compare) : relevanceOrderedHits;
   const selected = request.maxPerSession === undefined
-    ? relevanceOrderedHits.slice(0, limit)
-    : selectSessionBreadth(
-        relevanceOrderedHits,
-        request.maxPerSession,
-        limit,
-      );
-  if (request.order === "chronological") {
-    return selected.sort((left, right) => {
-      const time = timestampValue(left).localeCompare(timestampValue(right));
-      return time !== 0
-        ? time
-        : left.record.memoryId.localeCompare(right.record.memoryId);
-    });
-  }
-  if (request.order === "reverse-chronological") {
-    return selected.sort((left, right) => {
-      const time = timestampValue(right).localeCompare(timestampValue(left));
-      return time !== 0
-        ? time
-        : left.record.memoryId.localeCompare(right.record.memoryId);
-    });
-  }
-  return selected;
+    ? ordered.slice(0, limit)
+    : selectSessionBreadth(ordered, request.maxPerSession, limit);
+  if (chronological) selected.sort(compare);
+  return selected.map((hit, index) => ({ ...hit, rank: index + 1 }));
 }
 
 /**
@@ -41,18 +25,18 @@ export function finalizeSearchHits(
  * particular this does not collapse a conversation to one event unless the
  * caller chose maxPerSession=1.
  */
-function selectSessionBreadth(
-  relevanceOrderedHits: readonly RetrievalHit[],
+function selectSessionBreadth<T extends RetrievalHit>(
+  relevanceOrderedHits: readonly T[],
   maxPerSession: number,
   limit: number,
-): RetrievalHit[] {
-  const sessions = new Map<string, RetrievalHit[]>();
+): T[] {
+  const sessions = new Map<string, T[]>();
   for (const hit of relevanceOrderedHits) {
     const session = sessions.get(hit.record.sessionId) ?? [];
     session.push(hit);
     sessions.set(hit.record.sessionId, session);
   }
-  const selected: RetrievalHit[] = [];
+  const selected: T[] = [];
   for (let depth = 0; depth < maxPerSession; depth += 1) {
     let progressed = false;
     for (const session of sessions.values()) {

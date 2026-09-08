@@ -22,21 +22,23 @@ export function renderEvidenceOperator(
   const heading = result.operator === "temporal"
     ? "Temporal evidence:"
     : "Numeric evidence:";
+  const displayTruncated = result.rows.length > 16;
   const rows = result.rows.slice(0, 16).map((row) => {
     const temporal = row.eventTime === undefined ? "" : ` | event_time=${row.eventTime}`;
     const mentions = row.mentionedDates === undefined
       ? ""
       : ` | mentioned_dates=${row.mentionedDates.join(",")}`;
+    const occurrence = row.sourceSpan === undefined ? "" : `:chars:${row.sourceSpan.start}-${row.sourceSpan.end}`;
     const numeric = row.value === undefined
       ? ""
-      : ` | value=${String(row.value)} ${row.unit ?? ""} | value_kind=${row.valueKind ?? "unknown"} | occurrence_ref=candidate:${String(ledger.candidateRefForQuote(row.memoryId, row.quote))}`;
+      : ` | value=${String(row.value)} ${row.unit ?? ""} | value_kind=${row.valueKind ?? "unknown"} | occurrence_ref=candidate:${String(ledger.candidateRefForQuote(row.memoryId, row.quote))}${occurrence}`;
     const candidateRef = ledger.candidateRefForQuote(row.memoryId, row.quote);
     return `- [candidate:${String(candidateRef ?? "unavailable")}] | slot=${JSON.stringify(row.slot)}${temporal}${mentions}${numeric} | ${row.quote}`;
   });
   const plan = result.temporalPlan === undefined
     ? []
     : [`temporal_plan=${JSON.stringify(result.temporalPlan)}`];
-  const derivedForAgent = result.derived === undefined
+  const derivedForAgent = result.derived === undefined || displayTruncated || result.coverage.truncated
     ? undefined
     : Object.fromEntries(Object.entries(result.derived).map(([key, value]) => {
         if (key === "latestMemoryId" && typeof value === "string") {
@@ -60,7 +62,7 @@ export function renderEvidenceOperator(
     ...plan,
     ...rows,
     ...derived,
-    `coverage=${JSON.stringify(result.coverage)}`,
+    `coverage=${JSON.stringify({ ...result.coverage, truncated: result.coverage.truncated || displayTruncated })}`,
   ].join("\n");
 }
 

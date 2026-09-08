@@ -165,6 +165,10 @@ export class QdrantDenseRetriever implements DenseRetriever {
   }
 
   async search(request: DenseSearchBatchRequest): Promise<DenseSearchHit[][]> {
+    request.signal?.throwIfAborted();
+    if (request.filters?.roles?.length === 0 || request.filters?.sessionIds?.length === 0) {
+      return request.queryVectors.map(() => []);
+    }
     const generation = await this.options.store.assertVectorIndexGenerationReady(
       this.vectorGenerationId,
     );

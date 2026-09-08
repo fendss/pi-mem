@@ -1,5 +1,6 @@
-import { mkdir, mkdtemp, rename, rm, writeFile } from "node:fs/promises";
-import { dirname, join } from "node:path";
+import { mkdir } from "node:fs/promises";
+import { dirname } from "node:path";
+import { exportMemoryScope } from "../filesystem/export-memory-scope.js";
 import { DatabaseSync } from "node:sqlite";
 import { DatabaseEvidenceOperators } from "../../retrieval/adapters/sqlite/database-evidence-operators.js";
 import type { EvidenceFactIndexStatus } from "../../retrieval/adapters/sqlite/evidence-fact-index.js";
@@ -31,7 +32,6 @@ import type {
   VectorSyncClaim,
 } from "../../retrieval/model/embedding.js";
 import {
-  safePathSegment,
   sha256,
   stableMemoryId,
 } from "../../util.js";
@@ -107,14 +107,6 @@ function recordFingerprint(record: MemoryRecord): string {
     record.contentHash,
     record.metadata,
   ]);
-}
-
-function isExistingTargetError(error: unknown): boolean {
-  return (
-    error instanceof Error &&
-    "code" in error &&
-    (error.code === "EEXIST" || error.code === "ENOTEMPTY")
-  );
 }
 
 function validateEmbeddingProfile(profile: EmbeddingProfile): void {
@@ -924,6 +916,7 @@ export class MemoryStore implements
     profile: EmbeddingProfile,
     request: Omit<SearchRequest, "queries" | "limit"> = {},
   ): StoredEmbeddingRecord[] {
+    if (request.roles?.length === 0 || request.sessionIds?.length === 0) return [];
     this.getEmbeddingIndexStatus(scopeId, profile);
     const where = [
       "m.scope_id = ?",
@@ -949,11 +942,11 @@ export class MemoryStore implements
       params.push(...request.roles);
     }
     if (request.after) {
-      where.push("m.timestamp >= ?");
+      where.push("julianday(m.timestamp) >= julianday(?)");
       params.push(request.after);
     }
     if (request.before) {
-      where.push("m.timestamp <= ?");
+      where.push("julianday(m.timestamp) <= julianday(?)");
       params.push(request.before);
     }
     const rows = this.db.prepare(`
@@ -978,80 +971,7 @@ export class MemoryStore implements
   }
 
   async exportScope(scopeId: string, exportRoot: string): Promise<ScopeExport> {
-    const records = this.listScopeRecords(scopeId);
-    if (records.length === 0) {
-      throw new Error(`Cannot export empty memory scope: ${scopeId}`);
-    }
-    const scopePath = join(exportRoot, safePathSegment(scopeId));
-    await mkdir(exportRoot, { recursive: true });
-    const stagingPath = await mkdtemp(join(exportRoot, ".scope-"));
-    await mkdir(join(stagingPath, "sessions"), { recursive: true });
-
-    const bySession = new Map<string, MemoryRecord[]>();
-    for (const record of records) {
-      const bucket = bySession.get(record.sessionId) ?? [];
-      bucket.push(record);
-      bySession.set(record.sessionId, bucket);
-    }
-
-    const manifest = {
-      schemaVersion: 1,
-      scopeId,
-      memoryCount: records.length,
-      sessions: [...bySession.keys()],
-    };
-    let published = false;
-    try {
-      await writeFile(
-        join(stagingPath, "manifest.json"),
-        `${JSON.stringify(manifest, null, 2)}\n`,
-        "utf8",
-      );
-      await writeFile(
-        join(stagingPath, "memory.jsonl"),
-        records.map((record) => JSON.stringify(record)).join("\n") + "\n",
-        "utf8",
-      );
-      await writeFile(
-        join(stagingPath, "timeline.tsv"),
-        [
-          "timestamp\tsession_id\tturn_index\tmemory_id\trole",
-          ...records.map((record) =>
-            [
-              record.timestamp ?? "",
-              record.sessionId,
-              record.turnIndex,
-              record.memoryId,
-              record.role,
-            ].join("\t"),
-          ),
-        ].join("\n") + "\n",
-        "utf8",
-      );
-      for (const [sessionId, sessionRecords] of bySession) {
-        await writeFile(
-          join(
-            stagingPath,
-            "sessions",
-            `${safePathSegment(sessionId)}.jsonl`,
-          ),
-          sessionRecords.map((record) => JSON.stringify(record)).join("\n") +
-            "\n",
-          "utf8",
-        );
-      }
-      try {
-        await rename(stagingPath, scopePath);
-        published = true;
-      } catch (error) {
-        if (!isExistingTargetError(error)) throw error;
-      }
-    } finally {
-      if (!published) {
-        await rm(stagingPath, { recursive: true, force: true });
-      }
-    }
-    return { scopeId, path: scopePath, memoryCount: records.length };
+    return exportMemoryScope(scopeId, this.listScopeRecords(scopeId), exportRoot);
   }
 
   static async create(databasePath: string): Promise<MemoryStore> {

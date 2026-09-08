@@ -99,6 +99,14 @@ class YamlStageConcurrencyTests(unittest.TestCase):
         path.chmod(0o600)
         return path
 
+    def test_fact_mh_262k_is_accepted_by_yaml_and_forwarded_to_adapter(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = self._write(directory, "minimum: 1\ninitial: 1\nsuccesses_per_increase: 8")
+            path.write_text(path.read_text().replace("task: longmemeval-s", "task: fact-mh-262k"))
+            loaded = _load(path)
+        index = loaded["args"].index("--task")
+        self.assertEqual(loaded["args"][index + 1], "fact-mh-262k")
+
     def test_flat_policy_remains_backward_compatible(self):
         with tempfile.TemporaryDirectory() as directory:
             loaded = _load(

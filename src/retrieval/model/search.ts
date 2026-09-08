@@ -33,6 +33,7 @@ export interface EvidenceOperatorRow {
   valueKind?: NumericValueKind;
   dedupeKey?: string;
   rawValue?: string;
+  sourceSpan?: { start: number; end: number };
 }
 
 export interface EvidenceOperatorResult {
@@ -178,4 +179,14 @@ export interface RetrievalMetricsSnapshot {
   denseCandidateCount: number;
   rerankCandidateCount: number;
   denseFallbackCount: number;
+}
+
+/** Shared identity for repeated queries and per-query coverage accounting. */
+export function searchQueryFingerprint(query: string): string {
+  return query
+    .normalize("NFKC")
+    .toLowerCase()
+    .replace(/[\p{P}\p{S}]+/gu, " ")
+    .replace(/\s+/gu, " ")
+    .trim();
 }

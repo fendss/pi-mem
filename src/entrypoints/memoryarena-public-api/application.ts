@@ -265,17 +265,17 @@ export class MemoryArenaPublicApplication {
     input: MemoryArenaInitializeInput,
   ): Promise<MemoryArenaInitializeResult> {
     return this.lifecycle.runWrite(input.userId, async () => {
-      const result = await this.backend.initialize(input);
+      // Persistence can succeed before indexing/auditing fails. Cached reads
+      // must not survive a write attempt whose effects cannot be rolled back.
       this.wraps.invalidateUser(input.userId);
-      return result;
+      return this.backend.initialize(input);
     });
   }
 
   add(input: MemoryArenaAddInput): Promise<MemoryArenaAddResult> {
     return this.lifecycle.runWrite(input.userId, async () => {
-      const result = await this.backend.add(input);
       this.wraps.invalidateUser(input.userId);
-      return result;
+      return this.backend.add(input);
     });
   }
 

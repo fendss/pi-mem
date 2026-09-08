@@ -1,30 +1,5 @@
-const SOURCE_TIME =
-  /^(\d{4})[-/](\d{2})[-/](\d{2})(?:\s*\([A-Za-z]{3}\))?[T ](\d{2}):(\d{2})(?::(\d{2}))?$/u;
-
-export function parseSourceTimestamp(value: string | undefined): number | undefined {
-  if (!value) return undefined;
-  const match = SOURCE_TIME.exec(value.trim());
-  if (!match) return undefined;
-  const year = Number(match[1]);
-  const month = Number(match[2]);
-  const day = Number(match[3]);
-  const hour = Number(match[4]);
-  const minute = Number(match[5]);
-  const second = Number(match[6] ?? 0);
-  const timestamp = Date.UTC(year, month - 1, day, hour, minute, second);
-  const date = new Date(timestamp);
-  if (
-    date.getUTCFullYear() !== year ||
-    date.getUTCMonth() !== month - 1 ||
-    date.getUTCDate() !== day ||
-    date.getUTCHours() !== hour ||
-    date.getUTCMinutes() !== minute ||
-    date.getUTCSeconds() !== second
-  ) {
-    return undefined;
-  }
-  return timestamp;
-}
+import { parseSourceTimestamp, sourceCalendarTimestamp } from "./model/source-time.js";
+export { parseSourceTimestamp } from "./model/source-time.js";
 
 function durationParts(milliseconds: number): string {
   const totalMinutes = Math.round(Math.abs(milliseconds) / 60_000);
@@ -46,7 +21,7 @@ export function temporalAnnotation(
 ): string | undefined {
   const memoryTime = parseSourceTimestamp(memoryTimestamp);
   if (memoryTime === undefined) return undefined;
-  const date = new Date(memoryTime);
+  const date = new Date(sourceCalendarTimestamp(memoryTimestamp)!);
   const weekday = new Intl.DateTimeFormat("en-US", {
     weekday: "short",
     timeZone: "UTC",

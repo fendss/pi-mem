@@ -1,5 +1,6 @@
 import {
   createSearchMemory,
+  searchQueryFingerprint,
   renderSearchOperatorCatalog,
   retrievalHitIdentity,
   type EvidenceOperatorResult,
@@ -14,6 +15,7 @@ import type { CreatePiMemToolsOptions, PiMemTools, SearchToolDetails } from "./c
 import { renderCandidates, renderEvidenceOperator } from "./render-tool-result.js";
 import { createSearchParameters, SearchMoreParameters } from "./schemas.js";
 import { candidateToolDetails } from "./candidate-details.js";
+import { candidatePreview } from "../../../model/source-preview-spans.js";
 
 function renderPlanTrace(trace: SearchOperatorCompositionTrace | undefined): string | undefined {
   if (trace === undefined) return undefined;
@@ -39,17 +41,8 @@ function renderPlanTrace(trace: SearchOperatorCompositionTrace | undefined): str
   }).join("\n");
 }
 
-function queryFingerprint(query: string): string {
-  return query
-    .normalize("NFKC")
-    .toLowerCase()
-    .replace(/[\p{P}\p{S}]+/gu, " ")
-    .replace(/\s+/gu, " ")
-    .trim();
-}
-
 function hitQueryFingerprints(hit: RetrievalHit): Set<string> {
-  return new Set((hit.matchedQueries ?? [hit.query]).map(queryFingerprint));
+  return new Set((hit.matchedQueries ?? [hit.query]).map(searchQueryFingerprint));
 }
 
 function coverageProgress(input: {
@@ -90,7 +83,7 @@ function coverageProgress(input: {
     uniqueHits.map((hit) => [retrievalHitIdentity(hit), hitQueryFingerprints(hit)]),
   );
   const queries = input.executedQueries.map((query) => {
-    const fingerprint = queryFingerprint(query);
+    const fingerprint = searchQueryFingerprint(query);
     const matching = uniqueHits.filter((hit) =>
       queryMatches.get(retrievalHitIdentity(hit))!.has(fingerprint)
     );
@@ -399,7 +392,7 @@ export function createSearchTools(
     const previewById = new Map(
       [...uniqueHits, ...uniqueDirectoryHits].map((hit) => [
         retrievalHitIdentity(hit),
-        hit.preview,
+        candidatePreview(hit),
       ]),
     );
     const latestFindings = candidates.map((candidate) => ({

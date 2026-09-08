@@ -14,8 +14,11 @@ import {
   MAX_INSPECTED_EVIDENCE_COUNT,
   MAX_INSPECTED_EVIDENCE_CHARS,
   mergeMemoryEvidence,
+  mergeSpans,
   type MemoryEvidence,
+  type SourceSpan,
 } from "./source-evidence.js";
+import { candidatePreview, sourcePreviewSpans } from "./source-preview-spans.js";
 import { compactPreview } from "../../util.js";
 
 function cloneCandidate(candidate: MemoryCandidate): MemoryCandidate {
@@ -38,11 +41,7 @@ function cloneCandidate(candidate: MemoryCandidate): MemoryCandidate {
 }
 
 function cloneEvidence(evidence: MemoryEvidence): MemoryEvidence {
-  return {
-    ...evidence,
-    excerpts: evidence.excerpts.map((excerpt) => ({ ...excerpt })),
-    metadata: { ...evidence.metadata },
-  };
+  return structuredClone(evidence);
 }
 
 function cloneSelection(selection: PiMemSelection): PiMemSelection {
@@ -76,7 +75,11 @@ export class MemoryLedger {
 
   private readonly candidatesById = new Map<string, MemoryCandidate>();
   private readonly candidateIdsByMemoryId = new Map<string, Set<string>>();
-  private readonly evidenceById = new Map<string, MemoryEvidence>();
+  private sourceSpansByCandidateId = new Map<string, {
+    sourceContentHash: string;
+    spans: SourceSpan[];
+  }>();
+  private evidenceById = new Map<string, MemoryEvidence>();
   private readonly candidateRefById = new Map<string, string>();
   private readonly candidateIdByRef = new Map<string, string>();
   private readonly evidenceRefById = new Map<string, string>();
@@ -206,18 +209,48 @@ export class MemoryLedger {
     return selected;
   }
 
+  /** Source-bound search fragments survive later searches and preview changes. */
+  sourceSpansFor(record: MemoryRecord): SourceSpan[] {
+    return mergeSpans(this.selectMemoryCandidates([record.memoryId]).flatMap((candidate) => {
+      const source = this.sourceSpansByCandidateId.get(candidate.candidateId);
+      if (source === undefined) return [];
+      if (source.sourceContentHash !== record.contentHash) {
+        throw new Error(`Candidate source changed before read: ${record.memoryId}`);
+      }
+      return source.spans;
+    }));
+  }
+
   recordSearchHits(
     hits: readonly RetrievalHit[],
     step = this.nextStep(),
   ): MemoryCandidate[] {
+    for (const hit of hits) this.assertScope(hit.record);
+    const nextSpans = new Map(this.sourceSpansByCandidateId);
     for (const hit of hits) {
-      this.assertScope(hit.record);
+      const id = retrievalHitIdentity(hit);
+      const existing = nextSpans.get(id);
+      if (existing !== undefined && existing.sourceContentHash !== hit.record.contentHash) {
+        throw new Error(`Immutable candidate source changed during search: ${hit.record.memoryId}`);
+      }
+      const spans = hit.passage === undefined
+        ? sourcePreviewSpans(hit.record.content, candidatePreview(hit))
+        : hit.passage.end > hit.passage.start
+          ? [{ start: hit.passage.start, end: hit.passage.end }]
+          : [];
+      nextSpans.set(id, {
+        sourceContentHash: hit.record.contentHash,
+        spans: mergeSpans([...(existing?.spans ?? []), ...spans]),
+      });
+    }
+    this.sourceSpansByCandidateId = nextSpans;
+    for (const hit of hits) {
       const candidateId = retrievalHitIdentity(hit);
       for (const query of hit.matchedQueries ?? [hit.query]) {
         const metadataFilters = hit.matchedMetadataFilters?.filter(
           (filter) => filter.query === query,
         );
-        this.upsertCandidate(candidateId, hit.record, hit.preview, {
+        this.upsertCandidate(candidateId, hit.record, candidatePreview(hit), {
           step,
           tool: "search",
           query,
@@ -303,18 +336,12 @@ export class MemoryLedger {
           tool: "read_expansion",
         });
       }
-      if (!this.evidenceById.has(evidence.memoryId)) {
+      if (!this.evidenceRefById.has(evidence.memoryId)) {
         const evidenceRef = `E${String(this.evidenceRefById.size + 1)}`;
         this.evidenceRefById.set(evidence.memoryId, evidenceRef);
       }
-      const existingEvidence = this.evidenceById.get(evidence.memoryId);
-      this.evidenceById.set(
-        evidence.memoryId,
-        existingEvidence === undefined
-          ? cloneEvidence(evidence)
-          : mergeMemoryEvidence(existingEvidence, evidence),
-      );
     }
+    this.evidenceById = nextEvidenceById;
     const inspectedMemoryIds = new Set(
       evidenceRecords.map((evidence) => evidence.memoryId),
     );
@@ -337,8 +364,8 @@ export class MemoryLedger {
     command: string,
     step = this.nextStep(),
   ): MemoryCandidate[] {
+    for (const record of records) this.assertScope(record);
     for (const record of records) {
-      this.assertScope(record);
       this.upsertCandidate(record.memoryId, record, compactPreview(record.content), {
         step,
         tool: "bash_ro",
@@ -351,11 +378,11 @@ export class MemoryLedger {
   }
 
   finish(input: PiMemSelection): PiMemSelection {
-    const evidenceSummary = input.evidenceSummary.trim();
+    const evidenceSummary = input.evidenceSummary?.trim();
     if (input.status === "sufficient" && input.citations.length === 0) {
       throw new Error("A sufficient selection must cite at least one memory");
     }
-    if (!evidenceSummary) {
+    if (evidenceSummary !== undefined && !evidenceSummary) {
       throw new Error("evidenceSummary must not be empty");
     }
     const seenCitationIds = new Set<string>();
@@ -417,7 +444,7 @@ export class MemoryLedger {
     const selection: PiMemSelection = {
       status: input.status,
       citations,
-      evidenceSummary,
+      ...(evidenceSummary === undefined ? {} : { evidenceSummary }),
       ...(input.count === undefined ? {} : { count: input.count }),
       ...(inventory === undefined ? {} : { inventory }),
     };

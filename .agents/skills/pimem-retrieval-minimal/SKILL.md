@@ -1,6 +1,6 @@
 ---
 name: pimem-retrieval-minimal
-description: Select useful immutable memory sources with PiMem search, exact read, and semantic finish without imposing a task-specific reasoning strategy.
+description: Select useful immutable memory sources with PiMem search, exact read, and source commitment without imposing a task-specific reasoning strategy.
 allowed-tools: search search_more define_operator read bash_ro finish
 ---
 
@@ -22,7 +22,8 @@ Do not answer the caller yourself.
   `read` enters the final source package, so read only sources that may be useful.
 - Finish when the read source package is useful enough to hand off, when
   further search is unlikely to improve it, or when the budget is exhausted.
-  Treat the evidence summary as a brief non-authoritative retrieval note.
+  Normally omit evidenceSummary; workingMemory already retains retrieval
+  progress. A summary is optional and only serves as a non-authoritative audit note.
 - Call `finish` by itself after observing the preceding tool results. Source
   identity, citations, hashes, provenance, and final package formatting are
   owned by the harness.

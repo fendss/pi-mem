@@ -1,3 +1,4 @@
+import { calendarTimestamp } from "./model/source-time.js";
 import type { RetrievalMetadataFilter } from "./model/search.js";
 
 const STRUCTURED_DATE = /(?<!\d)(\d{4})[-/](\d{1,2})[-/](\d{1,2})(?!\d)/gu;
@@ -10,12 +11,7 @@ function normalizedCalendarDate(
   const year = Number(yearText);
   const month = Number(monthText);
   const day = Number(dayText);
-  const parsed = new Date(Date.UTC(year, month - 1, day));
-  if (
-    parsed.getUTCFullYear() !== year ||
-    parsed.getUTCMonth() !== month - 1 ||
-    parsed.getUTCDate() !== day
-  ) return undefined;
+  if (calendarTimestamp(year, month, day) === undefined) return undefined;
   return [
     String(year).padStart(4, "0"),
     String(month).padStart(2, "0"),
@@ -45,6 +41,6 @@ export function explicitQueryDateFilter(
     query,
     expression: date,
     after: `${date}T00:00:00`,
-    before: `${date}T23:59:59`,
+    before: `${date}T23:59:59.999`,
   };
 }

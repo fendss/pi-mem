@@ -17,7 +17,7 @@ import type {
 import type { HybridSearchStore } from "../ports/hybrid-search-store.js";
 import type { MemoryRecord } from "../../memory/index.js";
 import { queryCenteredEpisodicPreview } from "../../util.js";
-import { explicitQueryDateFilter } from "../structured-query-constraints.js";
+import { searchExplicitDateRoutes } from "../search-explicit-date-routes.js";
 
 interface RankedHybridHit extends RetrievalHit {
   denseRank: number;
@@ -65,10 +65,11 @@ function reserveMetadataRoutes<T extends RetrievalHit>(
     let progressed = false;
     for (const ranking of rankings) {
       const hit = ranking[depth];
-      if (hit === undefined || seen.has(hit.record.memoryId)) continue;
+      if (hit === undefined) continue;
+      progressed = true;
+      if (seen.has(hit.record.memoryId)) continue;
       reserved.push(hit);
       seen.add(hit.record.memoryId);
-      progressed = true;
       if (reserved.length >= MAX_METADATA_ROUTE_RESERVATIONS) break;
     }
     if (!progressed) break;
@@ -138,6 +139,8 @@ export class HybridRetriever {
     request: SearchRequest,
     signal?: AbortSignal,
   ): Promise<RetrievalHit[]> {
+    signal?.throwIfAborted();
+    if (request.roles?.length === 0 || request.sessionIds?.length === 0) return [];
     const profile = embeddingProfile(this.embedder);
     const status = this.rawStore.getEmbeddingIndexStatus(scopeId, profile);
     if (status.total === 0) {
@@ -190,11 +193,13 @@ export class HybridRetriever {
         return rankings;
       },
     );
+    const dateRoutes = searchExplicitDateRoutes(
+      this.denseRetriever, denseRequest, request.queries,
+    );
     const rankedQueries = await Promise.all(request.queries.map(async (
       query,
       queryIndex,
     ) => {
-      const queryVector = queryVectors[queryIndex]!;
       const {
         maxPerSession: _ignoredMaxPerSession,
         order: _ignoredOrder,
@@ -271,9 +276,8 @@ export class HybridRetriever {
         },
         baseDenseRankings.then((rankings) => rankings[queryIndex]!),
       );
-      const dateFilter = request.after === undefined && request.before === undefined
-        ? explicitQueryDateFilter(query)
-        : undefined;
+      const dateRoute = dateRoutes.get(queryIndex);
+      const dateFilter = dateRoute?.filter;
       const dateRankingPromise = dateFilter === undefined
         ? Promise.resolve<RankedHybridHit[] | undefined>(undefined)
         : rankRoute(
@@ -285,23 +289,7 @@ export class HybridRetriever {
               after: dateFilter.after,
               before: dateFilter.before,
             },
-            this.denseRetriever.search({
-              scopeId,
-              profile,
-              queryVectors: [queryVector],
-              limit: headroom,
-              filters: {
-                ...(request.sessionIds === undefined
-                  ? {}
-                  : { sessionIds: request.sessionIds }),
-                ...(request.roles === undefined
-                  ? {}
-                  : { roles: request.roles }),
-                after: dateFilter.after,
-                before: dateFilter.before,
-              },
-              ...(signal === undefined ? {} : { signal }),
-            }).then((rankings) => rankings[0] ?? []),
+            dateRoute!.ranking,
             dateFilter,
           );
       const [baseRanking, dateRanking] = await Promise.all([

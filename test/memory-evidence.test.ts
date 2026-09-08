@@ -21,6 +21,54 @@ function record(content: string, memoryId = "m-large"): MemoryRecord {
 }
 
 describe("bounded memory evidence", () => {
+  it.each([
+    [17_000, 16_000, 18_000],
+    [60_000, 500, 1_000],
+    [MAX_READ_RESULT_CHARS],
+    [MAX_READ_RESULT_CHARS - 2, 2, 0],
+  ])("preserves complete sources when batch lengths %j fit, regardless of per-parent size", (...lengths) => {
+    const records = lengths.map((length, i) => record("x".repeat(length), `m-${i}`));
+    const evidence = projectMemoryEvidenceBatch(records, () => ["unmatched query"]);
+    expect(evidence.map(e => e.content)).toEqual(records.map(r => r.content));
+    expect(evidence.every(e => !e.truncated && e.contentHash === e.sourceContentHash)).toBe(true);
+  });
+
+  it("uses the caller's remaining batch budget including previously reserved passage space", () => {
+    const source = record("🙂".repeat(5_000));
+    const exact = projectMemoryEvidenceBatch([source], () => [], 10_000);
+    expect(exact[0]!.content).toBe(source.content);
+    const bounded = projectMemoryEvidenceBatch([source], () => [], 9_999);
+    expect(bounded[0]!.truncated).toBe(true);
+    expect(bounded[0]!.content.length).toBeLessThanOrEqual(9_999);
+  });
+
+  it("preserves required spans beyond the old parent cap and still validates their offsets", () => {
+    const source = record("x".repeat(20_000));
+    const evidence = projectMemoryEvidenceBatch([source], () => [], 20_000,
+      () => [{ start: 2_000, end: 15_000 }]);
+    expect(evidence[0]!.content).toBe(source.content);
+    expect(() => projectMemoryEvidenceBatch([source], () => [], 20_000,
+      () => [{ start: -1, end: 15_000 }])).toThrow(/Invalid required source span/);
+  });
+
+  it("keeps the existing bounded fallback when the complete batch exceeds the total limit", () => {
+    const records = Array.from({ length: 4 }, (_, i) => record("x".repeat(20_000), `m-${i}`));
+    const evidence = projectMemoryEvidenceBatch(records, () => []);
+    expect(evidence.every(e => e.truncated && e.content.length <= 8_192)).toBe(true);
+    expect(evidence.reduce((sum, e) => sum + e.content.length, 0)).toBeLessThanOrEqual(MAX_READ_RESULT_CHARS);
+  });
+
+  it("spends the excerpt budget on unique source positions instead of overlapping windows", () => {
+    const source = record(`${"_".repeat(2500)}targetOne targetOne${"_".repeat(12000)}targetTwo${"_".repeat(12000)}`);
+    const evidence = projectMemoryEvidence(source, ["targetOne targetTwo"], 8192);
+    expect(evidence.content).toContain("targetOne");
+    expect(evidence.content).toContain("targetTwo");
+    expect(evidence.excerpts.reduce((sum, item) => sum + item.content.length, 0)).toBeLessThanOrEqual(8192);
+    for (const excerpt of evidence.excerpts) {
+      expect(source.content.slice(excerpt.start, excerpt.end)).toBe(excerpt.content);
+    }
+  });
+
   it("keeps small source memories byte-exact", () => {
     const source = record("Step 1:\nAction: inspect\nObservation: blue key");
     const evidence = projectMemoryEvidence(source, ["blue key"], 4_096);
@@ -70,8 +118,15 @@ describe("bounded memory evidence", () => {
     const renderedChars = evidence.reduce((sum, item) => sum + item.content.length, 0);
 
     expect(exactChars).toBeLessThanOrEqual(MAX_READ_RESULT_CHARS);
-    expect(renderedChars).toBeLessThan(72 * 1024);
+    expect(renderedChars).toBeLessThanOrEqual(MAX_READ_RESULT_CHARS);
     expect(evidence.every((item) => item.truncated)).toBe(true);
+  });
+
+  it("reserves the caller's remaining read budget including omission markers", () => {
+    const records = [record("x".repeat(20_000))];
+    const evidence = projectMemoryEvidenceBatch(records, () => [], 2_000);
+    expect(evidence[0]!.content.length).toBeLessThanOrEqual(2_000);
+    expect(evidence[0]!.excerpts.length).toBeGreaterThan(0);
   });
 
   it("keeps exact excerpts within the batch budget beyond 256 memories", () => {

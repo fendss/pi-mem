@@ -1,3 +1,4 @@
+import { compareMemoryChronology, parseSourceTimestamp } from "../model/source-time.js";
 import type { RetrievalHit } from "../model/search.js";
 import type {
   EvidenceOperatorResult,
@@ -20,9 +21,11 @@ const CURRENCY: Record<string, string> = {
   "€": "EUR",
 };
 
-const NUMBER_WITH_UNIT = /\b(\d[\d,]*(?:\.\d+)?)\s+(comments?|followers?|bikes?|items?|products?|sales?|visits?|times?|restaurants?|books?|videos?|views?)\b/giu;
-const CURRENCY_VALUE = /([$£€])\s*(\d[\d,]*(?:\.\d+)?)/gu;
-const VALUE_CURRENCY = /\b(\d[\d,]*(?:\.\d+)?)\s*(dollars?|usd|pounds?|gbp|euros?|eur)\b/giu;
+const DECIMAL = String.raw`[+-]?(?:\d{1,3}(?:,\d{3})+|\d+)(?:\.\d+)?`;
+const NUMBER_BOUNDARY = String.raw`(?<![\p{L}\p{N}_.,+-])`;
+const NUMBER_WITH_UNIT = new RegExp(`${NUMBER_BOUNDARY}(${DECIMAL})\\s+(comments?|followers?|bikes?|items?|products?|sales?|visits?|times?|restaurants?|books?|videos?|views?)\\b`, "giu");
+const CURRENCY_VALUE = new RegExp(`([+-]?[$£€])\\s*(${DECIMAL})(?!\\d|[,.]\\d)`, "gu");
+const VALUE_CURRENCY = new RegExp(`${NUMBER_BOUNDARY}(${DECIMAL})\\s*(dollars?|usd|pounds?|gbp|euros?|eur)\\b`, "giu");
 
 function numericValue(raw: string): number | undefined {
   const value = Number(raw.replaceAll(",", ""));
@@ -32,9 +35,13 @@ function numericValue(raw: string): number | undefined {
 function extractNumericMentions(content: string): Omit<NumericFact, "valueKind">[] {
   const mentions: Omit<NumericFact, "valueKind">[] = [];
   for (const match of content.matchAll(CURRENCY_VALUE)) {
-    const value = numericValue(match[2]!);
-    if (value === undefined) continue;
-    const index = match.index ?? 0;
+    // Two signs across the currency symbol are ambiguous, not multiplication.
+    if (/^[+-]/u.test(match[1]!) && /^[+-]/u.test(match[2]!)) continue;
+    const parsed = numericValue(match[2]!);
+    if (parsed === undefined) continue;
+    const value = match[1]![0] === "-" ? -parsed : parsed;
+    let index = match.index ?? 0;
+    let end = index + match[0].length;
     const after = content.slice(index + match[0].length, index + match[0].length + 24);
     const sentenceStart = Math.max(
       content.lastIndexOf(".", index),
@@ -42,19 +49,23 @@ function extractNumericMentions(content: string): Omit<NumericFact, "valueKind">
       content.lastIndexOf("?", index),
     );
     const before = content.slice(sentenceStart + 1, index);
-    const quantities = [...before.matchAll(/\b(\d[\d,]*)\b/gu)];
-    const quantity = quantities.length === 0
-      ? undefined
-      : numericValue(quantities.at(-1)![1]!);
-    const perUnit = /^\s*(?:each|per\s+(?:item|unit|piece|plant|jar|product))\b/iu.test(after);
+    // Only an explicit adjacent quantity/price construction permits arithmetic.
+    // A year or unrelated number earlier in the sentence is not a quantity.
+    const quantityMatch = /\b(\d[\d,]*)\s+(?:[a-z-]+\s+){1,3}(?:for|at)\s*$/iu.exec(before);
+    const quantity = quantityMatch === null ? undefined : numericValue(quantityMatch[1]!);
+    const perUnit = /^\s*(?:each|per\s+(?:item|unit|piece|plant|jar|product))\b/iu.exec(after);
+    const total = perUnit !== null && quantity !== undefined ? value * quantity : undefined;
+    const explicitTotal = total !== undefined && Number.isFinite(total);
+    if (explicitTotal) {
+      index = sentenceStart + 1 + quantityMatch!.index;
+      end += perUnit![0].length;
+    }
     mentions.push({
-      raw: perUnit && quantity !== undefined
-        ? `${match[0]} each × ${String(quantity)}`
-        : match[0],
-      value: perUnit && quantity !== undefined ? value * quantity : value,
-      unit: CURRENCY[match[1]!] ?? match[1]!,
+      raw: content.slice(index, end),
+      value: explicitTotal ? total! : value,
+      unit: CURRENCY[match[1]!.slice(-1)]!,
       index,
-      end: index + match[0].length,
+      end,
     });
   }
   for (const match of content.matchAll(VALUE_CURRENCY)) {
@@ -99,9 +110,13 @@ function classifyValue(
   content: string,
   mention: Omit<NumericFact, "valueKind">,
 ): NumericValueKind {
-  const context = content
-    .slice(Math.max(0, mention.index - 80), mention.index + mention.raw.length + 80)
-    .toLowerCase();
+  let start = 0;
+  let end = content.length;
+  for (const boundary of content.matchAll(/[.!?;](?=\s|$)|\n/gu)) {
+    if (boundary.index < mention.index) start = boundary.index + boundary[0].length;
+    else if (boundary.index >= mention.end) { end = boundary.index; break; }
+  }
+  const context = content.slice(Math.max(start, mention.index - 80), Math.min(end, mention.end + 80)).toLowerCase();
   if (/\b(?:hope|goal|aim|target|budget|plan(?:ning)? to|want to|expect(?:ed)? to|would like to)\b/u.test(context)) {
     return "target";
   }
@@ -122,12 +137,15 @@ export function extractNumericFacts(content: string): NumericFact[] {
 }
 
 function rowKey(hit: RetrievalHit, mention: NumericFact): string {
-  return `${hit.record.sessionId}|${mention.unit}|${String(mention.value)}`;
+  return `${hit.record.memoryId}|${mention.index}:${mention.end}|${mention.unit}`;
 }
 
 export function buildAggregateOperatorResult(
   hits: readonly RetrievalHit[],
 ): EvidenceOperatorResult {
+  const records = new Map(hits.map((hit) => [hit.record.memoryId, hit.record]));
+  const compareRows = (left: EvidenceOperatorRow, right: EvidenceOperatorRow): number =>
+    compareMemoryChronology(records.get(left.memoryId)!, records.get(right.memoryId)!);
   const rows: EvidenceOperatorRow[] = [];
   for (const hit of hits) {
     const extracted = extractNumericFacts(hit.record.content);
@@ -151,6 +169,7 @@ export function buildAggregateOperatorResult(
         valueKind: mention.valueKind,
         dedupeKey: rowKey(hit, mention),
         rawValue: mention.raw,
+        sourceSpan: { start: mention.index, end: mention.end },
         ...(hit.record.timestamp === undefined ? {} : { eventTime: hit.record.timestamp.slice(0, 10) }),
       });
     }
@@ -158,8 +177,7 @@ export function buildAggregateOperatorResult(
   rows.sort((left, right) => {
     const role = (left.role === "user" ? 0 : 1) - (right.role === "user" ? 0 : 1);
     if (role !== 0) return role;
-    const time = (left.eventTime ?? "9999-99-99").localeCompare(right.eventTime ?? "9999-99-99");
-    return time !== 0 ? time : left.memoryId.localeCompare(right.memoryId);
+    return compareRows(left, right);
   });
 
   const directRows = rows.filter((row) => row.role === "user");
@@ -172,7 +190,8 @@ export function buildAggregateOperatorResult(
   }
   const cumulative = [...unique.values()]
     .filter((row) => row.valueKind === "cumulative" || row.valueKind === "snapshot")
-    .sort((left, right) => (left.eventTime ?? "").localeCompare(right.eventTime ?? ""));
+    .filter((row) => parseSourceTimestamp(records.get(row.memoryId)!.timestamp) !== undefined)
+    .sort(compareRows);
   const latest = cumulative.at(-1);
 
   return {

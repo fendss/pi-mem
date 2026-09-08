@@ -2145,6 +2145,23 @@ class HttpRunnerTests(unittest.TestCase):
         with self.assertRaisesRegex(RemoteError, "violates the contract"):
             client.runtime_identity()
 
+    def test_runtime_contract_accepts_disabled_retries_but_rejects_invalid_limits(self):
+        client = MemoryClient(JsonHttpClient(self.base_url, retries=0))
+        for field in ("request_max_retries", "request_max_retry_delay_ms"):
+            for value in (0, -1, True):
+                with self.subTest(field=field, value=value):
+                    MockHandler.runtime_contract = {
+                        **MOCK_RUNTIME_CONTRACT,
+                        "limits": {**MOCK_RUNTIME_CONTRACT["limits"], field: value},
+                    }
+                    if value == 0:
+                        contract, _, _ = client.runtime_identity()
+                        self.assertEqual(contract["limits"][field], 0)
+                    else:
+                        with self.assertRaisesRegex(RemoteError, "violates the contract"):
+                            client.runtime_identity()
+
+
     def test_resume_rejects_changed_answer_handoff_contract_before_http(self):
         task = replace(task_config("ruler-qa1"), expected_contexts=1, expected_questions=1)
         contexts = (

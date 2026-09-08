@@ -1,3 +1,4 @@
+import { searchQueryFingerprint } from "../model/search.js";
 import type {
   EvidenceOperatorResult,
   RetrievalHit,
@@ -71,15 +72,6 @@ function normalizeStrings(values: readonly string[], label: string): string[] {
     throw new Error(`${label} must contain at least one non-empty value`);
   }
   return normalized;
-}
-
-function searchQueryFingerprint(query: string): string {
-  return query
-    .normalize("NFKC")
-    .toLowerCase()
-    .replace(/[\p{P}\p{S}]+/gu, " ")
-    .replace(/\s+/gu, " ")
-    .trim();
 }
 
 function operatorSourceQuotes(
@@ -193,6 +185,8 @@ export function createSearchMemory(options: SearchMemoryOptions): (
   return async (params, signal) => {
     const operator = params.operator ?? options.operatorRegistry.defaultOperatorId;
     const queries = normalizeStrings(params.queries, "queries");
+    const order = params.order ?? options.searchDefaults?.order;
+    params = { ...params, queries, ...(order === undefined ? {} : { order }) };
     const context = {
       scopeId: options.scopeId,
       ...(options.question === undefined
@@ -204,6 +198,9 @@ export function createSearchMemory(options: SearchMemoryOptions): (
       ...(signal === undefined ? {} : { signal }),
     };
     const visibleLimit = params.limit ?? options.searchDefaults?.limit ?? 20;
+    if (!Number.isSafeInteger(visibleLimit) || visibleLimit < 1 || visibleLimit > 100) {
+      throw new Error("Search limit must be an integer between 1 and 100");
+    }
     const reservoirLimit = options.candidateReservoirLimit === undefined
       ? visibleLimit
       : Math.min(
@@ -284,7 +281,7 @@ export function createSearchMemory(options: SearchMemoryOptions): (
           operatorSourceQuotes(executed.operatorResult),
           executed.request.maxPerSession,
         )
-      : parentHits;
+      : parentHits.slice(0, reservoirLimit);
     const hits = reservoirHits.slice(0, visibleLimit);
     return {
       request: { ...executed.request, limit: visibleLimit },

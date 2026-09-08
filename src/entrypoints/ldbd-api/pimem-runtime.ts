@@ -119,9 +119,11 @@ export class PiMemLdbdApplication implements LdbdMemoryApplication {
     });
   }
 
-  async search(request: LdbdSearchRequest, _signal?: AbortSignal): Promise<LdbdSearchItem[]> {
+  async search(request: LdbdSearchRequest, signal?: AbortSignal): Promise<LdbdSearchItem[]> {
+    signal?.throwIfAborted();
     const scopeId = onlineScopeId(request.userId);
     await this.serial.run(scopeId, async () => {
+      signal?.throwIfAborted();
       try {
         this.store.sealOnlineScope(scopeId);
       } catch (error) {
@@ -144,6 +146,7 @@ export class PiMemLdbdApplication implements LdbdMemoryApplication {
       }
     });
 
+    signal?.throwIfAborted();
     const retrieval = this.scopedQdrant === undefined
       ? createRetrievalContext(
           this.store,
@@ -161,6 +164,7 @@ export class PiMemLdbdApplication implements LdbdMemoryApplication {
       maxRunMs: 120_000,
       maxTurns: 16,
       maxToolCalls: 40,
+      ...(signal === undefined ? {} : { signal }),
     });
     const evidence = new Map(result.evidence.map((memory) => [memory.memoryId, memory]));
     const output: LdbdSearchItem[] = [];

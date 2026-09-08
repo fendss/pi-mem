@@ -220,14 +220,19 @@ async function startMockProvider(): Promise<{
   baseUrl: string;
   requests: MockRequest[];
   errors: Error[];
+  returnEmptyAnswers: () => void;
 }> {
   const requests: MockRequest[] = [];
   const errors: Error[] = [];
   let responseIndex = 0;
+  let emptyAnswers = false;
   const server = createServer(async (request, response) => {
     try {
       const payload = await requestBody(request);
       const scripted = scriptedChoice(payload);
+      if (emptyAnswers && scripted.stage === "answer") {
+        scripted.choice.message = { content: "" };
+      }
       requests.push({
         stage: scripted.stage,
         path: request.url ?? "",
@@ -266,6 +271,7 @@ async function startMockProvider(): Promise<{
     baseUrl: `http://127.0.0.1:${address.port}/v1`,
     requests,
     errors,
+    returnEmptyAnswers: () => { emptyAnswers = true; },
   };
 }
 
@@ -548,6 +554,33 @@ describe("evidence benchmark command offline workflow", () => {
         `${scorePath}.judge-records`,
         `${safePathSegment(questionId)}.json`,
       ))).resolves.toBeUndefined();
+      expect(provider.errors).toEqual([]);
+
+      // The persisted failure must retain work already billed by both stages.
+      provider.returnEmptyAnswers();
+      const failedOutput = join(root, "failed-answer-run");
+      await benchmarkEvidence(parseCommand([
+        "benchmark", "--benchmark", "ama-bench",
+        "--data-dir", dataDirectory, "--output-dir", failedOutput,
+        "--slots", "1", "--skill", "pimem-v0",
+        "--agent-dir", agentDirectory, "--transport", "non-stream",
+      ]));
+      expect(process.exitCode).toBe(1);
+      const failed = parseJsonLine<JsonObject>(
+        await readFile(join(failedOutput, "failures.jsonl"), "utf8"),
+      );
+      expect(failed).toMatchObject({
+        case_id: questionId,
+        error: "Benchmark answer stage returned empty text",
+        retrieval: {
+          evidence: [{ memoryId }],
+          usage: { input: 30, output: 9, totalTokens: 39 },
+        },
+        answerDiagnostics: { usage: { input: 10, output: 3, totalTokens: 13 } },
+      });
+      expect(JSON.parse(await readFile(join(
+        failedOutput, "failure-records", `${safePathSegment(questionId)}.json`,
+      ), "utf8"))).toEqual(failed);
       expect(provider.errors).toEqual([]);
     } finally {
       stdout.mockRestore();

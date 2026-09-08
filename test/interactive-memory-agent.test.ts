@@ -300,7 +300,7 @@ describe("interactive PiMem agent runtime", () => {
       operatorCatalog: { revision: 1 },
     });
     expect(prompts[0]).toContain(PIMEM_ACTION_SKILL_TEXT);
-    expect(prompts[0]).toContain("id=lexical | version=3");
+    expect(prompts[0]).toContain("id=lexical | version=4");
     expect(prompts[0]).not.toContain("lexical@1");
     expect(() => registry.get("policy-recall")).toThrow(/unknown/iu);
 

@@ -1,4 +1,4 @@
-import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
@@ -53,6 +53,22 @@ afterEach(async () => {
 });
 
 describe("deterministic ingest and source store", () => {
+  it.each(["memory.jsonl", "unexpected.txt"])("refuses to reuse an export containing a changed or extra %s", async (file) => {
+    const { root, store } = await temporaryStore();
+    try {
+      await ingestMemorySessions(store, sessions());
+      const exportRoot = join(root, "sanitized");
+      const published = await store.exportScope("scope-1", exportRoot);
+      await expect(store.exportScope("scope-1", exportRoot)).resolves.toEqual(published);
+      await writeFile(join(published.path, file), "unrelated source content");
+      await expect(store.exportScope("scope-1", exportRoot)).rejects.toThrow("does not match");
+      expect(await readFile(join(published.path, file), "utf8")).toBe("unrelated source content");
+      expect((await readdir(exportRoot)).some((name) => name.startsWith(".scope-"))).toBe(false);
+    } finally {
+      store.close();
+    }
+  });
+
   it("indexes exact source text and exports a bash-visible corpus", async () => {
     const { root, store } = await temporaryStore();
     try {
@@ -296,7 +312,8 @@ describe("deterministic ingest and source store", () => {
       expect(targetDateTimeline[0]).toMatchObject({
         record: { memoryId: "m-100000000000000000000001" },
         query: "database timeline dates 2024-01-10",
-        matchedQueries: ["unknown source wording"],
+      // The context date admits this source; the text query did not match it.
+      matchedQueries: [],
         operatorTemporalFacts: [expect.objectContaining({
           resolvedDate: "2024-01-10",
         })],

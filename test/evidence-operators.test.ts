@@ -57,7 +57,7 @@ describe("timeline evidence operator", () => {
     expect(temporalAuxiliaryRequest(request, plan)).toEqual({
       ...request,
       after: "2023-03-15T00:00:00",
-      before: "2023-03-15T23:59:59",
+      before: "2023-03-15T23:59:59.999",
       order: "chronological",
     });
     expect(temporalAuxiliaryRequest({

@@ -1,5 +1,7 @@
+import { WORK_PROGRESS_PROMPT } from "./work-progress-contract.js";
 import { Agent } from "@earendil-works/pi-agent-core";
 import { createEphemeralMemoryContext } from "./ephemeral-context.js";
+import { createWorkingMemoryContext, WORKING_MEMORY_POLICY_PROMPT, REWRITE_WORKING_MEMORY_PROMPT } from "./working-memory-context.js";
 import {
   aggregateAssistantUsage,
   assistantMessageText,
@@ -58,8 +60,11 @@ export interface RunPiMemOptions {
   maxSearchCalls?: number;
   maxProtocolNudges?: number;
   maxRunMs?: number;
+  signal?: AbortSignal;
   systemPrompt?: string;
   skill?: PiMemSkill;
+  /** Opt-in note-driven context with acknowledged tool-result expiry. */
+  contextPolicy?: "current-window" | "working-memory-rewrite" | "working-memory-v2" | "working-memory-v3";
   /** Approved declarative operators loaded into this run before the Agent starts. */
   operatorDefinitions?: readonly SearchOperatorDefinition[];
   /** Total preloaded plus Agent-created retrieval plans. Defaults to 4. */
@@ -75,6 +80,7 @@ export interface PiMemFailureDiagnostics {
   candidates: PiMemResult["candidates"];
   evidence: PiMemResult["evidence"];
   trace: ToolTraceEntry[];
+  workingMemory?: PiMemResult["workingMemory"];
   operatorCatalog?: SearchOperatorCatalogIdentity;
   operatorDefinitions?: SearchOperatorDefinitionSnapshot[];
   providerFailureKind?: PiMemProviderFailureKind;
@@ -157,7 +163,7 @@ function questionPrompt(question: string, questionDate?: string): string {
       "evidence. Keep workingMemory current. For an open set, use honest " +
       "frontier saturation rather than claiming ground-truth completeness. " +
       "After observing the final search or read result, call finish alone in a " +
-      "later assistant turn with status and a source-grounded evidenceSummary. " +
+      "later assistant turn with status; evidenceSummary is optional. " +
       "Every exact source returned by read enters the final source package. " +
       "Do not answer the question.",
   ].join("\n");
@@ -170,6 +176,11 @@ function questionPrompt(question: string, questionDate?: string): string {
 export async function runPiMem(
   options: RunPiMemOptions,
 ): Promise<PiMemResult> {
+  options.signal?.throwIfAborted();
+  if (options.contextPolicy !== undefined && options.contextPolicy !== "current-window" &&
+      options.contextPolicy !== "working-memory-v2" && options.contextPolicy !== "working-memory-v3" && options.contextPolicy !== "working-memory-rewrite") {
+    throw new Error("Unsupported contextPolicy. Use working-memory-rewrite for a single note, working-memory-v2 for entries or working-memory-v3 for current task progress; the old working-memory-v1 replacement policy is available only in its frozen experiment snapshot.");
+  }
   const scopeId = assertNonEmpty(options.scopeId, "scopeId");
   const question = assertNonEmpty(options.question, "question");
   const runId = newRunId();
@@ -204,7 +215,15 @@ export async function runPiMem(
   };
   const retrievalMetricsBefore =
     options.store.snapshotRetrievalMetrics?.() ?? zeroRetrievalMetrics;
-  const ephemeralContext = createEphemeralMemoryContext();
+  const workingMode = options.contextPolicy === "working-memory-rewrite" ? "rewrite"
+    : options.contextPolicy === "working-memory-v3" ? "progress"
+    : options.contextPolicy === "working-memory-v2" ? "entries" : undefined;
+  const workingContext = workingMode === undefined ? undefined
+    : createWorkingMemoryContext(ledger, options.maxSearchCalls, workingMode);
+  const workingPrompt = workingMode === "rewrite" ? REWRITE_WORKING_MEMORY_PROMPT
+    : workingMode === "progress" ? WORK_PROGRESS_PROMPT : WORKING_MEMORY_POLICY_PROMPT;
+  const adaptiveTools = workingMode === "progress" || workingMode === "rewrite";
+  const ephemeralContext = workingContext ?? createEphemeralMemoryContext();
   const operatorCatalog = options.operatorRegistry.forkForRun(
     options.maxOperatorDefinitions ?? 4,
   );
@@ -218,6 +237,7 @@ export async function runPiMem(
     scopeId,
     ledger,
     question,
+    ...(workingContext === undefined ? {} : { observation: workingContext.observation }),
     ...(options.questionDate === undefined
       ? {}
       : { questionDate: options.questionDate }),
@@ -238,6 +258,7 @@ export async function runPiMem(
         }),
 
   });
+  const agentTools = workingContext?.wrapTools(tools.all) ?? tools.all;
   const enforceToolProtocol = createToolProtocolBeforeToolCall();
   const agent = new Agent({
     initialState: {
@@ -245,11 +266,14 @@ export async function runPiMem(
         options.skill ?? "pimem-v0",
         options.systemPrompt ?? PI_MEM_TOOL_SYSTEM_PROMPT,
         operatorCatalog.list(),
-      ),
+      ) + (workingContext === undefined ? "" : workingPrompt),
       model: options.modelRuntime.model,
       thinkingLevel: options.modelRuntime.thinkingLevel,
-      tools: tools.all,
+      tools: workingContext?.availableTools(agentTools) ?? agentTools,
     },
+    ...(!adaptiveTools ? {} : {
+      prepareNextTurnWithContext: ({ context }: import("@earendil-works/pi-agent-core").PrepareNextTurnContext) => ({ context: { ...context, tools: workingContext!.availableTools(agentTools) } }),
+    }),
     streamFn: options.modelRuntime.streamFn,
     getApiKey: options.modelRuntime.getApiKey,
     transformContext: ephemeralContext.transformContext,
@@ -293,6 +317,11 @@ export async function runPiMem(
       return;
     }
     if (event.type === "tool_execution_end") {
+      // The next-turn hook updates an active loop; state also feeds fresh loops
+      // started by protocol nudges, which do not run that hook before turn one.
+      if (adaptiveTools) {
+        agent.state.tools = workingContext!.availableTools(agentTools);
+      }
       trace.push({
         step: trace.length + 1,
         toolCallId: event.toolCallId,
@@ -352,6 +381,7 @@ export async function runPiMem(
       candidates: ledger.candidates,
       evidence: ledger.inspectedEvidence,
       trace: [...trace],
+      ...(workingContext ? { workingMemory: workingContext.workingMemorySnapshot() } : {}),
       operatorCatalog: operatorCatalog.identity(),
       operatorDefinitions: operatorCatalog.snapshots(),
       ...(code === "provider_error"
@@ -367,6 +397,9 @@ export async function runPiMem(
   };
 
   const guardFailure = (): PiMemRunError | undefined => {
+    if (options.signal?.aborted) {
+      return failure("runtime_error", "PiMem was cancelled by its caller");
+    }
     if (timedOut) {
       return failure(
         "run_timeout",
@@ -387,6 +420,8 @@ export async function runPiMem(
     agent.abort();
   }, maxRunMs);
   runTimer.unref();
+  const abortFromCaller = (): void => agent.abort();
+  options.signal?.addEventListener("abort", abortFromCaller, { once: true });
   try {
     try {
       await agent.prompt(questionPrompt(question, options.questionDate));
@@ -421,7 +456,7 @@ export async function runPiMem(
           "Protocol reminder: do not answer the question. Continue retrieval " +
             "if a useful evidence need or frontier remains; otherwise call " +
             "finish as the only tool call in this turn, with an honest status " +
-            "and compact source-grounded evidenceSummary. Read " +
+            "(evidenceSummary is optional). Read " +
             "the preceding search frontier or exact READ_RESULT before " +
             "finishing. Every source returned by read is committed; the harness " +
             "generates its citations and provenance.",
@@ -435,6 +470,7 @@ export async function runPiMem(
     }
   } finally {
     clearTimeout(runTimer);
+    options.signal?.removeEventListener("abort", abortFromCaller);
   }
   const stoppedByGuard = guardFailure();
   if (stoppedByGuard !== undefined) throw stoppedByGuard;
@@ -502,7 +538,7 @@ export async function runPiMem(
     question,
     status: selection.status,
     citations: selection.citations,
-    evidenceSummary: selection.evidenceSummary,
+    ...(selection.evidenceSummary === undefined ? {} : { evidenceSummary: selection.evidenceSummary }),
     ...(selection.count === undefined ? {} : { count: selection.count }),
     ...(selection.inventory === undefined
       ? {}
@@ -510,6 +546,7 @@ export async function runPiMem(
     candidates,
     evidence,
     trace,
+    ...(workingContext ? { workingMemory: workingContext.workingMemorySnapshot() } : {}),
     operatorCatalog: operatorCatalog.identity(),
     operatorDefinitions: operatorCatalog.snapshots(),
     metrics: {

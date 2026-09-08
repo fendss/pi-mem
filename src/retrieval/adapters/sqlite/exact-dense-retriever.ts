@@ -36,6 +36,10 @@ export class SqliteExactDenseRetriever implements DenseRetriever {
   constructor(private readonly store: EmbeddingIndexStore) {}
 
   search(request: DenseSearchBatchRequest): Promise<DenseSearchHit[][]> {
+    request.signal?.throwIfAborted();
+    if (request.filters?.roles?.length === 0 || request.filters?.sessionIds?.length === 0) {
+      return Promise.resolve(request.queryVectors.map(() => []));
+    }
     const records = this.store.listStoredEmbeddings(
       request.scopeId,
       request.profile,

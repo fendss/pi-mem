@@ -344,7 +344,7 @@ export class PiMemMemoryArenaAdapter
         runId: result.runId,
         status: result.status,
         citations: result.citations.map((citation) => ({ ...citation })),
-        evidenceSummary: result.evidenceSummary,
+        ...(result.evidenceSummary === undefined ? {} : { evidenceSummary: result.evidenceSummary }),
         evidence: result.evidence.map((source) => ({
           ...source,
           excerpts: source.excerpts.map((excerpt) => ({ ...excerpt })),
@@ -368,7 +368,7 @@ export class PiMemMemoryArenaAdapter
           responseModels: [...result.retrievalModel.responseModels],
         },
         audit: {
-          evidence_summary: result.evidenceSummary,
+          ...(result.evidenceSummary === undefined ? {} : { evidence_summary: result.evidenceSummary }),
           metrics: result.metrics,
           retrieval: result.retrieval,
           retrieval_model: result.retrievalModel,

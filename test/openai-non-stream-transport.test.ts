@@ -24,6 +24,38 @@ async function close(server: Server): Promise<void> {
 }
 
 describe("OpenAI non-stream transport", () => {
+  it("retains billed usage and response identity when a completion has invalid tool arguments", async () => {
+    const server = createServer((_request, response) => {
+      response.writeHead(200, { "content-type": "application/json" });
+      response.end(JSON.stringify({
+        id: "chatcmpl-invalid-arguments",
+        model: "gpt-4o-mini",
+        usage: { prompt_tokens: 100, completion_tokens: 30 },
+        choices: [{ finish_reason: "tool_calls", message: { content: null, tool_calls: [
+          { id: "call-1", type: "function", function: { name: "read", arguments: "{broken" } },
+        ] } }],
+      }));
+    });
+    const baseUrl = await listen(server);
+    try {
+      const model: Model<"openai-completions"> = {
+        id: "gpt-4o-mini", name: "test", api: "openai-completions", provider: "test", baseUrl,
+        reasoning: false, input: ["text"], contextWindow: 128000, maxTokens: 4096,
+        cost: { input: 1, output: 2, cacheRead: 0, cacheWrite: 0 },
+      };
+      const stream = await openAINonStreamingStreamFn(model, {
+        messages: [{ role: "user", content: "Read", timestamp: 1 }],
+      }, { apiKey: "unit-test-key", maxRetries: 0 });
+      for await (const _event of stream) { /* Drain the rejected completion. */ }
+      expect(await stream.result()).toMatchObject({
+        stopReason: "error", responseId: "chatcmpl-invalid-arguments", responseModel: "gpt-4o-mini",
+        usage: { input: 100, output: 30, totalTokens: 130 },
+      });
+    } finally {
+      await close(server);
+    }
+  });
+
   it("bounds a hung attempt and retries it only within the configured budget", async () => {
     let attempts = 0;
     const server = createServer((_request, response) => {
@@ -482,5 +514,35 @@ describe("OpenAI non-stream transport", () => {
     } finally {
       await close(server);
     }
+  });
+});
+
+
+describe("transport callback isolation", () => {
+  it("does not retry a local callback failure and preserves completed usage", async () => {
+    let requests = 0;
+    const server = createServer((_request, response) => {
+      requests += 1;
+      response.writeHead(200, { "content-type": "application/json" });
+      response.end(JSON.stringify({ id: "completed", model: "test", usage: {
+        prompt_tokens: 10, completion_tokens: 5,
+      }, choices: [{ finish_reason: "stop", message: { content: "OK" } }] }));
+    });
+    const baseUrl = await listen(server);
+    try {
+      const model: Model<"openai-completions"> = {
+        id: "test", name: "test", api: "openai-completions", provider: "test", baseUrl,
+        reasoning: false, input: ["text"], contextWindow: 128000, maxTokens: 4096,
+        cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+      };
+      const result = await (await openAINonStreamingStreamFn(model, {
+        messages: [{ role: "user", content: "test", timestamp: 1 }],
+      }, { apiKey: "test", maxRetries: 2, maxRetryDelayMs: 1, timeoutMs: 5000,
+        onResponse() { throw new Error("LOCAL_CALLBACK_FAILURE"); },
+      })).result();
+      expect(requests).toBe(1);
+      expect(result).toMatchObject({ stopReason: "error", errorMessage: "LOCAL_CALLBACK_FAILURE",
+        responseId: "completed", responseModel: "test", usage: { totalTokens: 15 } });
+    } finally { server.closeAllConnections(); await close(server); }
   });
 });

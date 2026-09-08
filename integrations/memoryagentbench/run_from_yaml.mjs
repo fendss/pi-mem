@@ -57,6 +57,7 @@ const TASK_QUESTION_COUNTS = Object.freeze({
   clinic150: 100,
   "fact-sh-6k": 100,
   "fact-mh-6k": 100,
+  "fact-mh-262k": 100,
   "eventqa-64k": 500,
 });
 

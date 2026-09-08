@@ -1,6 +1,6 @@
 # PiMem Declarative Search Operators
 
-Status: implemented v1 design, 2026-08-24
+Status: aligned with v1.3.1 engineering review, 2026-09-06
 
 ## 1. Decision
 
@@ -50,58 +50,107 @@ interface SearchOperator {
 
 ### 2.2 Operator definition
 
-An operator definition is immutable declarative data. Internally it is a small
-topologically ordered graph with two node kinds:
+An operator definition is immutable data: a topologically ordered graph with
+**eight** step kinds. `search` invokes a registered capability; `combine` uses
+`union`, reciprocal-rank fusion (`rrf`, k=60), or `intersect`. Unary steps are
+`filter` (roles), `sort`, `diversify` (session), `dedupe` (content), `limit`, and
+`annotate` (temporal or numeric).
 
-- `search`: run one already registered search capability;
-- `combine`: merge earlier CandidateSets with `union` or reciprocal-rank
-  fusion (`rrf`).
-
-The runtime accepts at most eight nodes, four search nodes, and four inputs to
-one combine node. It rejects unknown dependencies, forward references,
-recursion, duplicate node IDs, invalid output nodes, and oversized graphs before
-registration.
-
-This graph is an internal domain representation. The Agent does not construct
-node IDs or output edges itself.
+The domain accepts at most 12 steps, four search steps, and four inputs to a
+combine step. Limits and per-session caps must be integers from 1 to 100. A
+search step may use the invocation queries or pin 1–16 fixed queries, each at
+most 512 characters. Validation rejects unknown or forward references,
+self-recursion, duplicate IDs or combine inputs, invalid output IDs, unreachable
+steps, invalid kinds, and missing required caps. The domain also accepts
+preloaded definitions; the Agent-facing tool is more restrictive about which
+operators it may invoke.
 
 ### 2.3 Search invocation
 
-A search invocation supplies the current query and limit to a registered
-operator. It is ephemeral and question-specific. An operator definition is
-reusable; the query is not stored inside that definition.
+A search supplies the current queries and visible limit. Optional branches are
+assembled into a temporary graph using the same validator and executor.
+Definitions are reusable; fixed step queries override the invocation queries.
+`executedQueries` records the actual primitive paths, including queries inside
+nested preloaded plans.
 
 ## 3. Agent-facing interface
 
-The normal tools remain:
-
-```text
-search -> read -> finish
-```
-
-One optional tool is available for the exceptional case:
+The tools remain `search -> read -> finish`, with optional `define_operator`:
 
 ```ts
 define_operator({
   id: "dual-recall",
-  summary: "Fuse exact and semantic recall",
-  sources: [
-    { operator: "lexical", limit: 10 },
-    { operator: "hybrid", limit: 10 }
-  ],
-  combine: "rrf"
+  summary: "Fuse exact and semantic recall, preserving session breadth",
+  steps: [
+    { id: "exact", kind: "search", operator: "lexical", limit: 80 },
+    { id: "semantic", kind: "search", operator: "hybrid", limit: 80 },
+    { id: "merged", kind: "combine", inputs: ["exact", "semantic"], method: "rrf" },
+    { id: "spread", kind: "diversify", input: "merged", maxPerGroup: 2 }
+  ]
 })
 ```
 
-The runtime generates graph node IDs, version, guide defaults, and output edge.
-With one source, the result is a simple alias. With multiple sources, `rrf` is
-the default. Duplicate sources and meaningless single-source `combine` values
-are rejected. Agent-created operators may use only the catalog visible when the
-run starts; they cannot nest another definition created later in the same run.
+The Agent supplies step IDs and prior-step references. The harness uses the
+last step as output, sets the version and guide defaults, and fills
+`by: "session"` / `by: "content"`. Agent-created plans may invoke only IDs in
+the initial run catalog, not definitions subsequently created in that run.
+The default definition budget remains two per run.
 
-The Skill tells the Agent to prefer the initial catalog. Defining an operator
-for an ordinary one-off search is explicitly discouraged. The default budget
-is two declarative definitions per run.
+### Execution and discovery constraints
+
+- A role filter directly governing a source can reach the primitive before its
+  candidate cutoff. For shared sources, allowed roles are unioned across
+  consumers and session caps use the largest required cap; an unconstrained
+  consumer prevents that pushdown.
+- `sort`, `limit`, content deduplication, and an explicit combine limit stop
+  downstream constraint propagation. A diversify step pushes only its own
+  session cap. Thus a filter *after* a lossy selection cannot silently change
+  which records that selection chose.
+- Union is a stable round-robin merge. RRF uses each source rank once;
+  intersection retains candidates occurring in every input. Identity is the
+  passage ID when present, otherwise the parent memory ID. Duplicate hits from
+  one primitive are consolidated before fusion.
+- Fusion preserves matched query paths, metadata constraints, fact indexes,
+  exact source spans, and temporal facts. Unary transforms retain annotations
+  only for surviving sources and invalidate derived summaries when narrowed.
+  Combining differently annotated sets requires an explicit later `annotate`.
+- `sort(relevance)` sorts by the current numeric score; RRF supplies a common
+  score scale when combining heterogeneous retrievers. Time sorting compares
+  instants before truncation, with invalid or unknown dates last in either
+  direction. The final result always respects the caller's candidate cap.
+- Primitive results are checked for scope, passage/source identity, conflicting
+  duplicate sources, and cancellation before a later graph step can hide them.
+
+### Existing bounded retrieval budgets
+
+The Agent-visible default remains 20 candidates and the query-local continuation
+reservoir remains 80. Hybrid per-route discovery and lexical physical fetches
+are capped at 100. Numeric and temporal index primitives retain ceilings of 80
+and 60 respectively. Direct lexical calls now use the same physical depth
+regardless of visible page size, so increasing the page size does not reorder
+the existing prefix. This can increase SQLite work on shallow lexical calls;
+it adds no embedding or language-model call. These bounds do not imply complete
+recall over an arbitrarily large corpus.
+
+### Time and numeric sidecars
+
+Timestamp parsing validates calendar dates, supports ISO zones and legacy
+source formats, and interprets zone-free timestamps in UTC. Relative calendar
+expressions and weekday labels use the date written in the source, while
+chronology and elapsed durations compare actual instants. A complete date
+window includes the last millisecond of its final second.
+
+Numeric extraction retains signs, independent occurrences and exact source
+spans. Multiplication requires an adjacent explicit quantity/price expression.
+Classification uses local clause context; it remains a deterministic heuristic,
+not semantic adjudication. An undated value cannot establish the latest
+snapshot. The renderer marks truncated rows and suppresses derived values when
+the visible evidence is incomplete.
+
+The fact extractor version is `pimem-evidence-facts-v2`; trusted primitive
+versions are `4`. Existing v1 facts and immutable memories remain intact. First
+use of a scope builds its missing v2 sidecar locally, without new embeddings;
+this consumes local CPU/storage and is covered by an offline migration test.
 
 ## 4. DDD ownership
 
@@ -177,6 +226,33 @@ source-bound `read` calls are the only way to promote them to Evidence. Each
 read source is retained automatically; `finish` only closes retrieval while
 the harness deduplicates sources and constructs citations.
 
+Search previews are navigation views, not evidence commitments. For legacy
+parent candidates, the ledger privately accumulates exact source spans matching
+the bounded previews from each search, including lower-ranked rediscoveries.
+When that parent is explicitly read, these spans are mandatory; remaining space
+uses the existing query-focused projection. Passage candidates retain their
+original hash and offsets. Selecting a parent and one of its passages together
+honors both selections. Context-only neighbors keep the existing projection.
+
+Legacy previews without offsets are matched verbatim, allowing whitespace
+compaction and omission markers. If text repeats, the first exact occurrence is
+used; this verifies the displayed text, not the retriever's original position.
+Synthetic text with no exact source match is not promoted to an exact span.
+This cannot recover facts that were never present in the preview.
+
+The batch first compares complete source lengths with the remaining read budget
+(64 Ki characters before exact passage reservations). If all fit, every parent
+is returned in full; the 8 Ki per-parent fallback cap does not apply. This also
+handles uneven document lengths without wasting a short document's capacity.
+Oversized batches currently retain the existing focused projection and 8 Ki
+per-parent cap. Source markers count against its budget. If required spans cannot fit, the call fails
+before changing the evidence ledger. Read fewer candidates or choose narrower
+passage candidates; required spans are never silently removed to fit. Repeated
+reads merge exact excerpts, and finish commits every read source. MemoryArena
+full-parent expansion requires matching hashes and excerpts; otherwise the
+committed excerpts remain the handoff. Its 128 KiB threshold limits optional
+full-parent expansion, not the size of an already committed excerpt package.
+
 ```mermaid
 flowchart LR
   Base["Frozen base capabilities"] --> Run["Private run catalog r0"]
@@ -186,7 +262,7 @@ flowchart LR
   Search --> Candidates["Candidates"]
   Candidates --> Read["read exact source"]
   Read --> Evidence["Evidence"]
-  Evidence --> Finish["finish {}"]
+  Evidence --> Finish["finish status + evidenceSummary"]
 ```
 
 ## 7. Reproducibility and safety

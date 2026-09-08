@@ -60,6 +60,11 @@ export function createReadTool(
       const memoriesById = new Map(
         memories.map((memory) => [memory.memoryId, memory]),
       );
+      for (const memoryId of memoryIds) {
+        if (!memoriesById.has(memoryId)) {
+          throw new Error(`Read did not return selected parent memory ${memoryId}`);
+        }
+      }
       const exactPassages: Array<{
         evidence: MemoryEvidence;
         candidateId: string;
@@ -77,9 +82,13 @@ export function createReadTool(
       const passageParentIds = new Set(
         exactPassages.map((item) => item.evidence.memoryId),
       );
+      const selectedParentIds = new Set(selectedCandidates
+        .filter((candidate) => candidate.passage === undefined)
+        .map((candidate) => candidate.memoryId));
       const boundedRecords = memories.filter((memory) =>
-        !passageParentIds.has(memory.memoryId)
+        !passageParentIds.has(memory.memoryId) || selectedParentIds.has(memory.memoryId)
       );
+      const passageChars = exactPassages.reduce((sum, item) => sum + item.evidence.content.length, 0);
       const boundedEvidence = projectMemoryEvidenceBatch(boundedRecords, (memory) => {
         const candidates = options.ledger.selectMemoryCandidates([memory.memoryId]);
         return [
@@ -90,7 +99,9 @@ export function createReadTool(
             discovery.query === undefined ? [] : [discovery.query]
           )),
         ];
-      });
+      }, MAX_READ_RESULT_CHARS - passageChars, (memory) =>
+        selectedParentIds.has(memory.memoryId) ? options.ledger.sourceSpansFor(memory) : []
+      );
       const projected = [
         ...exactPassages.map((item) => item.evidence),
         ...boundedEvidence,

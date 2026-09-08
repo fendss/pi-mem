@@ -13,6 +13,7 @@ export type {
 } from "./model/evidence-benchmark-run.js";
 export {
   BENCHMARK_ANSWER_EXECUTION_CHECKLIST,
+  BenchmarkAnswerError,
   returnedModelMatches,
   type BenchmarkAnswerPrompt,
   type BenchmarkAnswerResult,

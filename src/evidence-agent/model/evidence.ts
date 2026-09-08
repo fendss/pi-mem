@@ -1,5 +1,8 @@
+import type { RewriteMemorySnapshot } from "./rewrite-working-memory.js";
 import type { MemoryRole } from "../../memory/index.js";
 import type { MemoryEvidence } from "./source-evidence.js";
+import type { WorkProgressSnapshot } from "./work-progress.js";
+import type { WorkingMemorySnapshot } from "./working-memory.js";
 import type { MemoryPassage } from "../../retrieval/index.js";
 import type {
   RetrievalMetadata,
@@ -50,7 +53,7 @@ export interface EvidenceInventoryItem {
 export interface PiMemSelection {
   status: "sufficient" | "insufficient";
   citations: Citation[];
-  evidenceSummary: string;
+  evidenceSummary?: string;
   count?: number;
   inventory?: EvidenceInventoryItem[];
 }
@@ -98,7 +101,9 @@ export interface PiMemResult {
   questionDate?: string;
   status: PiMemSelection["status"];
   citations: Citation[];
-  evidenceSummary: string;
+  evidenceSummary?: string;
+  /** Optional Agent notebook and append-only edit audit; not source evidence. */
+  workingMemory?: WorkingMemorySnapshot | WorkProgressSnapshot | RewriteMemorySnapshot;
   count?: number;
   inventory?: EvidenceInventoryItem[];
   candidates: MemoryCandidate[];

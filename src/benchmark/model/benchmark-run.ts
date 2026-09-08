@@ -1,5 +1,5 @@
 import type { PiMemResult, PiMemRunError } from "../../evidence-agent/index.js";
-import type { BenchmarkAnswerResult } from "./answer.js";
+import type { BenchmarkAnswerResult, BenchmarkFailureArtifacts } from "./answer.js";
 
 export interface BenchmarkPrediction {
   question_id: string;
@@ -30,7 +30,7 @@ export interface BenchmarkSuccessRecord {
   answer: BenchmarkAnswerResult;
 }
 
-export interface BenchmarkFailureRecord {
+export interface BenchmarkFailureRecord extends BenchmarkFailureArtifacts {
   schema_version: 1;
   question_id: string;
   slot: number;

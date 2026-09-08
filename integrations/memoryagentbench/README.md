@@ -1,6 +1,6 @@
 # PiMem × MemoryAgentBench
 
-This is a standalone, black-box MemoryAgentBench adapter. It supports ten PiMem
+This is a standalone, black-box MemoryAgentBench adapter. It supports eleven PiMem
 targets:
 
 | Task ID | Official source | Capability | Official metric |
@@ -14,6 +14,7 @@ targets:
 | `clinic150` | `icl_clinic150_7050shot_balance` | test-time learning | `exact_match` |
 | `fact-sh-6k` | `factconsolidation_sh_6k` | conflict resolution | `substring_exact_match` |
 | `fact-mh-6k` | `factconsolidation_mh_6k` | conflict resolution | `substring_exact_match` |
+| `fact-mh-262k` | `factconsolidation_mh_262k` | conflict resolution | `substring_exact_match` |
 | `eventqa-64k` | `eventqa_65536` | accurate retrieval | `substring_exact_match` |
 
 ## Boundary

@@ -91,6 +91,44 @@ function scriptedRuntime(
 }
 
 describe("PiMem offline workflow", () => {
+  it("does not start a model for an already cancelled run", async () => {
+    const store: PiMemRuntimeStore = { search: () => [], read: () => [], findMentionedMemoryIds: () => [], getRecords: () => [] };
+    const controller = new AbortController();
+    const reason = new Error("caller cancelled");
+    controller.abort(reason);
+    const prompts: string[] = [];
+    await expect(runPiMem({
+      store, operatorRegistry: createSearchOperatorRegistry(store), modelRuntime: scriptedRuntime([], prompts),
+      scopeId: "scope-1", question: "Question", signal: controller.signal,
+    })).rejects.toBe(reason);
+    expect(prompts).toEqual([]);
+  });
+
+  it("forwards caller cancellation to the active provider without starting repair turns", async () => {
+    const store: PiMemRuntimeStore = { search: () => [], read: () => [], findMentionedMemoryIds: () => [], getRecords: () => [] };
+    const controller = new AbortController();
+    const runtime = scriptedRuntime([], []);
+    let calls = 0;
+    let providerAborted = false;
+    runtime.streamFn = (_model, _context, options) => {
+      calls += 1;
+      const stream = createAssistantMessageEventStream();
+      options!.signal!.addEventListener("abort", () => {
+        providerAborted = true;
+        const message = assistantMessage([], "aborted");
+        stream.push({ type: "error", reason: "aborted", error: message });
+      }, { once: true });
+      queueMicrotask(() => controller.abort());
+      return stream;
+    };
+    await expect(runPiMem({
+      store, operatorRegistry: createSearchOperatorRegistry(store), modelRuntime: runtime,
+      scopeId: "scope-1", question: "Question", signal: controller.signal, maxRunMs: 200,
+    })).rejects.toMatchObject({ code: "runtime_error", message: "PiMem was cancelled by its caller" });
+    expect(providerAborted).toBe(true);
+    expect(calls).toBe(1);
+  });
+
   it("classifies provider failures without exposing the provider message", async () => {
     const store: PiMemRuntimeStore = {
       search: () => [],
@@ -380,7 +418,6 @@ describe("PiMem offline workflow", () => {
         name: "finish",
         arguments: {
           status: "sufficient",
-          evidenceSummary: "The exact source states that the budget test fact is blue.",
         },
       }], "toolUse"),
     ], []);

@@ -100,7 +100,7 @@ export interface MemoryArenaRetrievalResult {
   status: "sufficient" | "insufficient";
   citations: MemoryArenaCitation[];
   inventory?: MemoryArenaInventoryItem[];
-  evidenceSummary: string;
+  evidenceSummary?: string;
   evidence: MemoryArenaCommittedEvidence[];
   trace: readonly unknown[];
   usage: ModelUsage;

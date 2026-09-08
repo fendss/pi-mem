@@ -53,4 +53,30 @@ describe("runAsyncPool", () => {
       "positive integer",
     );
   });
+
+  it("stops dispatch after a failure and waits for active workers before rejecting", async () => {
+    const release = deferred();
+    const failure = new Error("worker failed");
+    const started: number[] = [];
+    let settled = false;
+    let activeFinished = false;
+    const running = runAsyncPool([0, 1, 2, 3], 2, async (item) => {
+      started.push(item);
+      if (item === 0) throw failure;
+      await release.promise;
+      activeFinished = true;
+      return item;
+    });
+    const outcome = running.then(
+      () => { settled = true; return undefined; },
+      (error: unknown) => { settled = true; return error; },
+    );
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    const settledBeforeRelease = settled;
+    release.resolve();
+    expect(await outcome).toBe(failure);
+    expect(settledBeforeRelease).toBe(false);
+    expect(activeFinished).toBe(true);
+    expect(started).toEqual([0, 1]);
+  });
 });

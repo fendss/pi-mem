@@ -1,13 +1,14 @@
 import type { DatabaseSync } from "node:sqlite";
 import { extractNumericFacts } from "../../operators/numeric-operator.js";
 import { extractTemporalFacts } from "../../operators/temporal-operator.js";
+import { sourceCalendarTimestamp } from "../../model/source-time.js";
 import type { MemoryRecord } from "../../../memory/index.js";
 import {
   type MemoryRow,
   memoryRowToRecord,
 } from "../../../platform/sqlite/memory-row.js";
 
-export const EVIDENCE_FACT_EXTRACTOR_VERSION = "pimem-evidence-facts-v1";
+export const EVIDENCE_FACT_EXTRACTOR_VERSION = "pimem-evidence-facts-v2";
 
 export interface EvidenceFactIndexStatus {
   indexedMemories: number;
@@ -159,8 +160,9 @@ export class EvidenceFactIndex {
     });
 
     let temporalFactIndex = 0;
-    const sourceDate = record.timestamp?.slice(0, 10);
-    if (sourceDate && /^\d{4}-\d{2}-\d{2}$/u.test(sourceDate)) {
+    const sourceTime = sourceCalendarTimestamp(record.timestamp);
+    if (sourceTime !== undefined) {
+      const sourceDate = new Date(sourceTime).toISOString().slice(0, 10);
       insertTemporal.run(
         record.scopeId,
         record.memoryId,

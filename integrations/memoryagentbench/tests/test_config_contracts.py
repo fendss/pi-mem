@@ -14,7 +14,7 @@ from mab_adapter.contracts import ContractError, parse_context  # noqa: E402
 
 
 class ConfigContractTests(unittest.TestCase):
-    def test_supported_set_is_exactly_the_selected_ten_tasks(self):
+    def test_supported_set_includes_the_selected_tasks_and_fact_mh_262k(self):
         self.assertEqual(
             set(TASKS),
             {
@@ -27,10 +27,11 @@ class ConfigContractTests(unittest.TestCase):
                 "clinic150",
                 "fact-sh-6k",
                 "fact-mh-6k",
+                "fact-mh-262k",
                 "eventqa-64k",
             },
         )
-        self.assertEqual(sum(task.expected_questions for task in TASKS.values()), 1600)
+        self.assertEqual(sum(task.expected_questions for task in TASKS.values()), 1700)
 
     def test_icl_templates_keep_literal_label_placeholder(self):
         for task_id in ("trec-coarse", "trec-fine", "banking77", "nlu", "clinic150"):
@@ -82,6 +83,10 @@ class ConfigContractTests(unittest.TestCase):
                 "16dfd7ef2a32eb12197672ebfda42145602a6d214492e0a1f2f629694495f0da",
             ),
             "fact-mh-6k": (
+                "7fb298c148aeea82bb4029b7bd4a55489a9ae5e02ed85ee910d60b1ad33482a6",
+                "16dfd7ef2a32eb12197672ebfda42145602a6d214492e0a1f2f629694495f0da",
+            ),
+            "fact-mh-262k": (
                 "7fb298c148aeea82bb4029b7bd4a55489a9ae5e02ed85ee910d60b1ad33482a6",
                 "16dfd7ef2a32eb12197672ebfda42145602a6d214492e0a1f2f629694495f0da",
             ),

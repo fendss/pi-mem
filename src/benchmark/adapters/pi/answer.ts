@@ -2,6 +2,7 @@ import { Agent } from "@earendil-works/pi-agent-core";
 import type { PiModelRuntime } from "../../../platform/pi/load-model-runtime.js";
 import {
   assistantMessageText,
+  aggregateAssistantUsage,
   lastAssistantMessage,
 } from "../../../evidence-agent/index.js";
 import {
@@ -11,6 +12,7 @@ import {
 } from "../../../util.js";
 import {
   returnedModelMatches,
+  BenchmarkAnswerError,
   type BenchmarkAnswerPrompt,
   type BenchmarkAnswerResult,
 } from "../../model/answer.js";
@@ -32,12 +34,16 @@ export async function runBenchmarkAnswer(options: {
   executionChecklist?: string;
 }): Promise<BenchmarkAnswerResult> {
   const maxRunMs = options.maxRunMs ?? 120_000;
+  const systemPrompt = answerSystemPrompt(options.prompt, options.executionChecklist);
+  const userPrompt = assertNonEmpty(options.prompt.userPrompt, "answer prompt");
+  const promptIdentity = {
+    promptAdapter: options.prompt.adapterId,
+    promptVersion: options.prompt.promptVersion,
+    promptHash: sha256(`${systemPrompt}\0${userPrompt}`),
+  };
   const agent = new Agent({
     initialState: {
-      systemPrompt: answerSystemPrompt(
-        options.prompt,
-        options.executionChecklist,
-      ),
+      systemPrompt,
       model: options.modelRuntime.model,
       thinkingLevel: options.modelRuntime.thinkingLevel,
       tools: [],
@@ -50,6 +56,10 @@ export async function runBenchmarkAnswer(options: {
     getApiKey: options.modelRuntime.getApiKey,
     sessionId: newRunId(),
   });
+  const failure = (message: string) => new BenchmarkAnswerError(message, {
+    ...promptIdentity,
+    usage: aggregateAssistantUsage(agent.state.messages),
+  });
   let timedOut = false;
   const timer = setTimeout(() => {
     timedOut = true;
@@ -57,36 +67,36 @@ export async function runBenchmarkAnswer(options: {
   }, maxRunMs);
   timer.unref();
   try {
-    await agent.prompt(assertNonEmpty(options.prompt.userPrompt, "answer prompt"));
+    await agent.prompt(userPrompt);
+  } catch (error) {
+    throw failure(timedOut
+      ? `Benchmark answer stage exceeded ${maxRunMs}ms`
+      : error instanceof Error ? error.message : String(error));
   } finally {
     clearTimeout(timer);
   }
   const message = lastAssistantMessage(agent.state.messages);
   if (timedOut) {
-    throw new Error(`Benchmark answer stage exceeded ${maxRunMs}ms`);
+    throw failure(`Benchmark answer stage exceeded ${maxRunMs}ms`);
   }
-  if (!message) throw new Error("Benchmark answer stage returned no assistant message");
+  if (!message) throw failure("Benchmark answer stage returned no assistant message");
   if (message.stopReason === "error" || message.stopReason === "aborted") {
-    throw new Error(
+    throw failure(
       message.errorMessage ??
         `Benchmark answer stage stopped with ${message.stopReason}`,
     );
   }
   const answer = assistantMessageText(message).trim();
-  if (!answer) throw new Error("Benchmark answer stage returned empty text");
+  if (!answer) throw failure("Benchmark answer stage returned empty text");
   const responseModel = message.responseModel ?? message.model;
   if (!returnedModelMatches(options.modelRuntime.modelId, responseModel)) {
-    throw new Error(
+    throw failure(
       `Benchmark answer provider substituted model ${responseModel}; expected ${options.modelRuntime.modelId}`,
     );
   }
   return {
     answer,
-    promptAdapter: options.prompt.adapterId,
-    promptVersion: options.prompt.promptVersion,
-    promptHash: sha256(
-      `${answerSystemPrompt(options.prompt, options.executionChecklist)}\0${options.prompt.userPrompt}`,
-    ),
+    ...promptIdentity,
     model: {
       providerId: options.modelRuntime.providerId,
       modelId: options.modelRuntime.modelId,

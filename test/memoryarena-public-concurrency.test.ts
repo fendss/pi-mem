@@ -11,6 +11,28 @@ function deferred(): { promise: Promise<void>; resolve(): void } {
 }
 
 describe("MemoryArena Public concurrent execution", () => {
+  it.each(["add", "initialize"] as const)("invalidates cached wraps even when %s fails after changing storage", async (operation) => {
+    let content = "old memory";
+    let wrapCalls = 0;
+    const failAfterMutation = async (): Promise<never> => {
+      content = "new memory";
+      throw new Error("audit failed after persistence");
+    };
+    const application = new MemoryArenaPublicApplication({
+      initialize: failAfterMutation,
+      add: failAfterMutation,
+      wrap: async (input) => {
+        wrapCalls += 1;
+        return { userId: input.userId, prompt: content };
+      },
+    });
+    const input = { userId: "same", memorySystemName: "pimem", question: "question" };
+    expect((await application.wrap(input)).prompt).toBe("old memory");
+    await expect(application[operation]({ ...input, chunk: "new memory" })).rejects.toThrow("audit failed");
+    expect((await application.wrap(input)).prompt).toBe("new memory");
+    expect(wrapCalls).toBe(2);
+  });
+
   it("serializes one user while allowing a different user to run", async () => {
     const firstRelease = deferred();
     const started: string[] = [];

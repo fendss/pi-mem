@@ -9,6 +9,8 @@ import {
 import {
   evidenceBenchmarkDataPaths,
   runBenchmarkAnswer,
+  BenchmarkAnswerError,
+  type BenchmarkAnswerResult,
   type EvidenceBenchmarkFailureRecord,
   type EvidenceBenchmarkId,
   type EvidenceBenchmarkPrediction,
@@ -459,9 +461,11 @@ export async function benchmarkEvidence(parsed: ParsedCommand): Promise<void> {
         notStarted += 1;
         return;
       }
+      let retrieval: PiMemResult | undefined;
+      let answer: BenchmarkAnswerResult | undefined;
       try {
         const retrievalContext = contexts[context.slot - 1]!;
-        const retrieval = await runPiMem({
+        retrieval = await runPiMem({
           store: retrievalContext.store,
           operatorRegistry: retrievalContext.operatorRegistry,
           modelRuntime: retrievalRuntime,
@@ -479,7 +483,7 @@ export async function benchmarkEvidence(parsed: ParsedCommand): Promise<void> {
             query.scopeId,
           ),
         });
-        const answer = await runBenchmarkAnswer({
+        answer = await runBenchmarkAnswer({
           modelRuntime: answerRuntime,
           prompt: answerPromptFor(benchmark, query, retrieval),
           maxRunMs: stageTimeoutMs,
@@ -506,6 +510,9 @@ export async function benchmarkEvidence(parsed: ParsedCommand): Promise<void> {
           case_id: query.questionId,
           slot: context.slot,
           error: message,
+          ...(retrieval === undefined ? {} : { retrieval }),
+          ...(answer === undefined ? {} : { answer }),
+          ...(error instanceof BenchmarkAnswerError ? { answerDiagnostics: error.diagnostics } : {}),
           ...(error instanceof PiMemRunError
             ? { diagnostics: error.diagnostics }
             : {}),

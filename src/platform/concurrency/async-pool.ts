@@ -3,7 +3,7 @@ export interface AsyncPoolContext {
   index: number;
 }
 
-/** Runs at most one item per slot and refills a slot as soon as it settles. */
+/** Refills free slots; on failure, stops dispatch and settles active work before rejecting. */
 export async function runAsyncPool<T, R>(
   items: readonly T[],
   slots: number,
@@ -16,12 +16,19 @@ export async function runAsyncPool<T, R>(
 
   const results = new Array<R>(items.length);
   let cursor = 0;
+  let failed = false;
+  let failure: unknown;
   const consume = async (slot: number): Promise<void> => {
-    while (true) {
+    while (!failed) {
       const index = cursor;
       cursor += 1;
       if (index >= items.length) return;
-      results[index] = await worker(items[index]!, { slot, index });
+      try {
+        results[index] = await worker(items[index]!, { slot, index });
+      } catch (error) {
+        if (!failed) failure = error;
+        failed = true;
+      }
     }
   };
 
@@ -29,5 +36,6 @@ export async function runAsyncPool<T, R>(
   await Promise.all(
     Array.from({ length: workerCount }, (_unused, index) => consume(index + 1)),
   );
+  if (failed) throw failure;
   return results;
 }

@@ -1,3 +1,5 @@
+import { sha256 } from "../src/util.js";
+import { PASSAGE_VIEW_VERSION } from "../src/retrieval/model/passage.js";
 import { describe, expect, it } from "vitest";
 import {
   createPiMemTools,
@@ -524,12 +526,17 @@ describe("search coverage progress", () => {
       contentHash: "shared-passage-parent-hash",
     };
     const hiddenStart = visibleContent.length + 2;
+    const sourceBoundId = (start: number, end: number): string => `P-${sha256(JSON.stringify([
+      PASSAGE_VIEW_VERSION, parent.memoryId, parent.contentHash, start, end,
+    ])).slice(0, 24)}`;
+    const visibleId = sourceBoundId(0, visibleContent.length);
+    const hiddenId = sourceBoundId(hiddenStart, parent.content.length);
     const hits: RetrievalHit[] = [
       {
         ...hit(parent, query, 1),
         preview: visibleContent,
         passage: {
-          passageId: "passage-visible",
+          passageId: visibleId,
           parentMemoryId: parent.memoryId,
           sourceContentHash: parent.contentHash,
           index: 0,
@@ -542,7 +549,7 @@ describe("search coverage progress", () => {
         ...hit(parent, query, 2),
         preview: hiddenContent,
         passage: {
-          passageId: "passage-hidden",
+          passageId: hiddenId,
           parentMemoryId: parent.memoryId,
           sourceContentHash: parent.contentHash,
           index: 1,
@@ -594,9 +601,9 @@ describe("search coverage progress", () => {
       queries: [query],
       limit: 1,
     });
-    expect(initial.details.candidates[0]?.candidateId).toBe("passage-visible");
+    expect(initial.details.candidates[0]?.candidateId).toBe(visibleId);
     expect(initial.details.directoryCandidates?.[0]?.candidateId).toBe(
-      "passage-hidden",
+      hiddenId,
     );
     expect(initial.details.operatorResult?.rows).toEqual([]);
     expect(JSON.stringify(initial.content)).not.toContain(secretQuote);

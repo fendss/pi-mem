@@ -175,6 +175,19 @@ describe("LDBD service", () => {
       })).resolves.toBe("inserted");
       expect(embedDocuments).not.toHaveBeenCalled();
 
+      const controller = new AbortController();
+      const cancellation = new Error("cancel before scope sealing");
+      controller.abort(cancellation);
+      await expect(fts.search({
+        query: "exact memory", userId: "user-fts", topK: 10, options: [],
+      }, controller.signal)).rejects.toBe(cancellation);
+      await expect(fts.add({
+        requestId: "request-after-cancellation",
+        userId: "user-fts",
+        sessionId: "session-fts",
+        messages: [{ role: "user", content: "scope is still writable" }],
+      })).resolves.toBe("inserted");
+
       expect(() => new PiMemLdbdApplication(store, embedder, modelRuntime, {
         retrievalProfile: "pimem-hybrid-qdrant-hnsw-v1",
         environment: { PIMEM_VECTOR_GENERATION_ID: "run-a" },

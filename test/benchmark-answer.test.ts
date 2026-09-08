@@ -113,6 +113,14 @@ describe("benchmark answer boundary", () => {
     expect(observedSystemPrompt).toContain("Retrieval rank is not chronology");
     expect(observedSystemPrompt).toContain("exact output syntax");
     expect(result.answer).toBe("Answer");
+    message.content = [];
+    await expect(runBenchmarkAnswer({
+      modelRuntime: runtime,
+      prompt: { adapterId: "test", promptVersion: "test", systemPrompt: "", userPrompt: "Question" },
+    })).rejects.toMatchObject({
+      name: "BenchmarkAnswerError",
+      diagnostics: { usage: { input: 1, output: 1, totalTokens: 2 }, promptAdapter: "test" },
+    });
   });
 
   it("does not change benchmark prompts unless the checklist is enabled", async () => {

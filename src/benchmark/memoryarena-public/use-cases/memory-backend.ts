@@ -146,8 +146,8 @@ function sourceIntegrityError(message: string): MemoryArenaPublicError {
 function validateCommittedEvidence(
   retrieval: MemoryArenaRetrievalResult,
 ): MemoryArenaCommittedEvidence[] {
-  if (!retrieval.evidenceSummary.trim()) {
-    throw sourceIntegrityError("PiMem retrieval omitted its evidence summary");
+  if (retrieval.evidenceSummary !== undefined && !retrieval.evidenceSummary.trim()) {
+    throw sourceIntegrityError("PiMem retrieval supplied an empty evidence summary");
   }
   if (retrieval.status === "sufficient" && retrieval.evidence.length === 0) {
     throw sourceIntegrityError(
@@ -285,8 +285,9 @@ function renderMemoryArenaEvidenceSources(
  * retrieval summary and sufficiency status remain available in result/audit
  * data but are intentionally omitted here. Selected immutable parents are
  * expanded as one all-or-nothing package when the complete prompt fits the
- * global byte budget; otherwise the exact excerpts returned by read remain the
- * answer authority.
+ * full-parent expansion budget; otherwise the exact excerpts returned by read
+ * remain the answer authority. This threshold must never silently truncate
+ * already committed excerpts, even when that package itself is larger.
  */
 export function renderMemoryArenaEvidencePrompt(
   question: string,
@@ -296,7 +297,13 @@ export function renderMemoryArenaEvidencePrompt(
   const excerptPrompt = renderMemoryArenaEvidenceSources(question, retrieval);
   if (
     originalContentByMemoryId === undefined ||
-    retrieval.evidence.some((source) => !originalContentByMemoryId.has(source.memoryId))
+    retrieval.evidence.some((source) => {
+      const parent = originalContentByMemoryId.get(source.memoryId);
+      return parent === undefined || sha256(parent) !== source.sourceContentHash ||
+        source.excerpts.some((excerpt) =>
+          parent.slice(excerpt.start, excerpt.end) !== excerpt.content
+        );
+    })
   ) {
     return excerptPrompt;
   }

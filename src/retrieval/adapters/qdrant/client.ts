@@ -1,3 +1,4 @@
+import { parseSourceTimestamp } from "../../model/source-time.js";
 import type { MemoryRole } from "../../../memory/index.js";
 
 export const QDRANT_COLLECTION_SCHEMA_VERSION = 2;
@@ -125,22 +126,8 @@ function memoryRole(value: unknown, label: string): MemoryRole {
 }
 
 function dateTimeMilliseconds(value: string, label: string): number {
-  const text = nonEmpty(value, label).trim();
-  const hasTime = /[Tt ]\d/u.test(text);
-  let normalized = hasTime ? text : `${text}T00:00:00Z`;
-  if (hasTime) {
-    if (/[zZ]$/u.test(normalized)) {
-      normalized = `${normalized.slice(0, -1)}Z`;
-    } else if (/[+-]\d{2}$/u.test(normalized)) {
-      normalized = `${normalized}:00`;
-    } else if (/[+-]\d{4}$/u.test(normalized)) {
-      normalized = `${normalized.slice(0, -2)}:${normalized.slice(-2)}`;
-    } else if (!/[+-]\d{2}:\d{2}$/u.test(normalized)) {
-      normalized = `${normalized}Z`;
-    }
-  }
-  const milliseconds = Date.parse(normalized);
-  if (!Number.isFinite(milliseconds)) {
+  const milliseconds = parseSourceTimestamp(nonEmpty(value, label));
+  if (milliseconds === undefined) {
     throw new Error(`${label} must be a supported Qdrant datetime`);
   }
   return milliseconds;
@@ -448,6 +435,8 @@ export class QdrantClient {
   }
 
   async search(request: QdrantSearchRequest): Promise<QdrantSearchHit[]> {
+    request.signal?.throwIfAborted();
+    if (request.roles?.length === 0 || request.sessionIds?.length === 0) return [];
     positiveInteger(request.limit, "Qdrant search limit");
     positiveInteger(request.hnswEf, "Qdrant HNSW ef");
     const afterMs = request.after === undefined

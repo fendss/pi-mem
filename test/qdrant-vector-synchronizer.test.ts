@@ -1,7 +1,7 @@
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { ingestMemorySessions } from "../src/memory/index.js";
 import { MemoryStore } from "../src/platform/sqlite/pimem-store.js";
 import {
@@ -127,6 +127,39 @@ afterEach(async () => {
 });
 
 describe("durable Qdrant generation", () => {
+  it("stops claiming batches after failure and drains outstanding writes before rejecting", async () => {
+    const store = await fixture();
+    const qdrant = new FakeQdrant();
+    let release!: () => void;
+    let started!: () => void;
+    const blocked = new Promise<void>((resolve) => { release = resolve; });
+    const secondStarted = new Promise<void>((resolve) => { started = resolve; });
+    const failure = new Error("first upload failed");
+    const original = qdrant.upsert.bind(qdrant);
+    const upsert = vi.spyOn(qdrant, "upsert").mockImplementation(async (...args) => {
+      if (upsert.mock.calls.length === 1) throw failure;
+      if (upsert.mock.calls.length === 2) { started(); await blocked; }
+      return original(...args);
+    });
+    const synchronizer = new QdrantVectorSynchronizer({ store, client: qdrant,
+      generationId: "generation-a", collection, batchSize: 1, concurrentBatches: 2 });
+    let settled = false;
+    const result = synchronizer.synchronizeAvailable().then(
+      () => { settled = true; return undefined; },
+      (error: unknown) => { settled = true; return error; },
+    );
+    try {
+      await secondStarted;
+      await new Promise<void>((resolve) => setImmediate(resolve));
+      expect(settled).toBe(false);
+    } finally {
+      release();
+      const error = await result;
+      store.close();
+      expect(error).toBe(failure);
+    }
+    expect(upsert).toHaveBeenCalledTimes(2);
+  });
   it("accepts settled per-segment exact-scan tails", () => {
     expect(qdrantCollectionIndexReady({
       status: "green",

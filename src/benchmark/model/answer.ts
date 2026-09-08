@@ -1,4 +1,4 @@
-import type { ModelMetadata, ModelUsage } from "../../evidence-agent/index.js";
+import type { ModelMetadata, ModelUsage, PiMemResult } from "../../evidence-agent/index.js";
 import { responseModelMatchesRequested } from "../../util.js";
 
 /** Benchmark-owned prompt handed to an answer-model adapter. */
@@ -26,6 +26,24 @@ export interface BenchmarkAnswerResult {
     responseModel: string;
   };
   usage: ModelUsage;
+}
+
+export type BenchmarkAnswerFailureDiagnostics = Pick<BenchmarkAnswerResult,
+  "promptAdapter" | "promptVersion" | "promptHash" | "usage">;
+
+/** A failed answer still owns its provider usage and exact prompt identity. */
+export class BenchmarkAnswerError extends Error {
+  constructor(message: string, readonly diagnostics: BenchmarkAnswerFailureDiagnostics) {
+    super(message);
+    this.name = "BenchmarkAnswerError";
+  }
+}
+
+/** Preserve completed stages even when a later stage or artifact write fails. */
+export interface BenchmarkFailureArtifacts {
+  retrieval?: PiMemResult;
+  answer?: BenchmarkAnswerResult;
+  answerDiagnostics?: BenchmarkAnswerFailureDiagnostics;
 }
 
 export function returnedModelMatches(requested: string, returned: string): boolean {

@@ -10,6 +10,11 @@ export const MAX_EVIDENCE_CHARS_PER_MEMORY = 8 * 1024;
 export const MAX_INSPECTED_EVIDENCE_COUNT = 128;
 export const MAX_INSPECTED_EVIDENCE_CHARS = 1024 * 1024;
 
+export interface SourceSpan {
+  start: number;
+  end: number;
+}
+
 export interface EvidenceExcerpt {
   /** UTF-16 offsets into the immutable source MemoryRecord content. */
   start: number;
@@ -64,9 +69,7 @@ function focusTerms(focus: readonly string[]): string[] {
   )].filter((term) => term.length >= 3 && !STOP_WORDS.has(term));
 }
 
-function mergeSpans(
-  spans: readonly { start: number; end: number }[],
-): Array<{ start: number; end: number }> {
+export function mergeSpans(spans: readonly SourceSpan[]): SourceSpan[] {
   const ordered = [...spans].sort((left, right) =>
     left.start - right.start || left.end - right.end
   );
@@ -86,6 +89,7 @@ function focusedSpans(
   content: string,
   focus: readonly string[],
   budget: number,
+  required: readonly SourceSpan[] = [],
 ): Array<{ start: number; end: number }> {
   if (content.length <= budget) return [{ start: 0, end: content.length }];
 
@@ -95,11 +99,29 @@ function focusedSpans(
     1_024,
     Math.max(1, Math.floor(budget / 4)),
   );
-  const spans: Array<{ start: number; end: number }> = [
-    { start: 0, end: headLength },
-  ];
-  let remaining = budget - headLength;
-  if (remaining <= 0) return spans;
+  const spans = mergeSpans(required);
+  let remaining = budget - spans.reduce((sum, span) => sum + span.end - span.start, 0);
+  if (remaining < 0) {
+    throw new Error("Read budget cannot preserve the candidate's source fragments; read fewer candidates.");
+  }
+  const retain = (start: number, end: number): void => {
+    const length = Math.min(end - start, remaining);
+    if (length <= 0) return;
+    spans.push({ start, end: start + length });
+    remaining -= length;
+  };
+  const retainUnique = (start: number, end: number): void => {
+    let cursor = start;
+    for (const covered of mergeSpans(spans)) {
+      if (covered.end <= cursor) continue;
+      if (covered.start >= end) break;
+      retain(cursor, Math.min(covered.start, end));
+      cursor = Math.max(cursor, covered.end);
+    }
+    retain(cursor, end);
+  };
+  retainUnique(0, headLength);
+  if (remaining <= 0) return mergeSpans(spans);
 
   // ASCII-only folding preserves UTF-16 offsets into the immutable source.
   const normalized = asciiLower(content);
@@ -140,15 +162,12 @@ function focusedSpans(
   );
   for (const window of ranked) {
     if (remaining <= 0) break;
-    const length = Math.min(window.end - window.start, remaining);
-    if (length <= 0) continue;
-    spans.push({ start: window.start, end: window.start + length });
-    remaining -= length;
+    retainUnique(window.start, window.end);
   }
 
-  if (spans.length === 1 && remaining > 0) {
+  if (ranked.length === 0 && remaining > 0) {
     const length = Math.min(remaining, content.length - headLength);
-    spans.push({ start: content.length - length, end: content.length });
+    retainUnique(content.length - length, content.length);
   }
 
   return mergeSpans(spans);
@@ -266,8 +285,9 @@ function projectMemoryEvidenceWithinBudget(
   record: MemoryRecord,
   focus: readonly string[],
   budget: number,
+  required: readonly SourceSpan[] = [],
 ): MemoryEvidence {
-  const excerpts = focusedSpans(record.content, focus, budget).map((span) => ({
+  const excerpts = focusedSpans(record.content, focus, budget, required).map((span) => ({
     ...span,
     content: record.content.slice(span.start, span.end),
   }));
@@ -286,7 +306,8 @@ function projectMemoryEvidenceWithinBudget(
     contentHash: sha256(content),
     sourceContentHash: record.contentHash,
     sourceContentLength: record.content.length,
-    truncated: excerpts.length !== 1 || excerpts[0]!.end !== record.content.length,
+    truncated: excerpts.length !== 1 || excerpts[0]!.start !== 0 ||
+      excerpts[0]!.end !== record.content.length,
     excerpts,
     metadata: cloneMetadata(record.metadata),
   };
@@ -339,20 +360,48 @@ export function projectPassageEvidence(
 export function projectMemoryEvidenceBatch(
   records: readonly MemoryRecord[],
   focusFor: (record: MemoryRecord) => readonly string[],
+  maximumChars = MAX_READ_RESULT_CHARS,
+  requiredSpansFor: (record: MemoryRecord) => readonly SourceSpan[] = () => [],
 ): MemoryEvidence[] {
   if (records.length === 0) return [];
-  if (records.length > MAX_READ_RESULT_CHARS) {
+  if (!Number.isSafeInteger(maximumChars) || maximumChars < records.length) {
     throw new Error(
       `Read batch contains ${String(records.length)} memories, which cannot ` +
         `fit at least one exact source character per memory within the ` +
-        `${String(MAX_READ_RESULT_CHARS)} character read budget`,
+        `${String(maximumChars)} character read budget`,
     );
   }
+  // A parent limit is only a fallback for oversized batches. When complete
+  // sources fit the caller's remaining read budget, retain them byte-exactly.
+  const fullBatchFits = records.reduce((sum, record) => sum + record.content.length, 0)
+    <= maximumChars;
   const perMemoryBudget = Math.min(
     MAX_EVIDENCE_CHARS_PER_MEMORY,
-    Math.floor(MAX_READ_RESULT_CHARS / records.length),
+    Math.floor(maximumChars / records.length),
   );
-  return records.map((record) =>
-    projectMemoryEvidenceWithinBudget(record, focusFor(record), perMemoryBudget)
-  );
+  return records.map((record) => {
+    const focus = focusFor(record);
+    const incoming = requiredSpansFor(record);
+    for (const span of incoming) {
+      if (!Number.isSafeInteger(span.start) || !Number.isSafeInteger(span.end) ||
+          span.start < 0 || span.end <= span.start || span.end > record.content.length) {
+        throw new Error(`Invalid required source span for ${record.memoryId}`);
+      }
+    }
+    const required = mergeSpans(incoming);
+    if (fullBatchFits) {
+      return projectMemoryEvidenceWithinBudget(record, focus, record.content.length, required);
+    }
+    const minimumExactChars = required.reduce((sum, span) => sum + span.end - span.start, 0);
+    let exactBudget = perMemoryBudget;
+    while (exactBudget > 0) {
+      const evidence = projectMemoryEvidenceWithinBudget(record, focus, exactBudget, required);
+      const overflow = evidence.content.length - perMemoryBudget;
+      if (overflow <= 0) return evidence;
+      // Source offsets and omission markers also occupy the read result.
+      if (exactBudget <= minimumExactChars) break;
+      exactBudget = Math.max(minimumExactChars, exactBudget - overflow);
+    }
+    throw new Error("Read budget cannot fit exact excerpts and source markers; read fewer candidates.");
+  });
 }

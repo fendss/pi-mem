@@ -253,17 +253,17 @@ export const FinishParameters = Type.Object({
       "Use sufficient only when the exact sources read so far cover the " +
       "question. Reading one source does not establish coverage.",
   }),
-  evidenceSummary: Type.String({
+  evidenceSummary: Type.Optional(Type.String({
     minLength: 1,
     maxLength: 2000,
     description:
-      "Compact source-grounded conclusion from inspected evidence, preserving " +
-      "specific names, values, and unresolved gaps for the answer stage. Do " +
-      "not copy long passages or manage citations, hashes, or provenance.",
-  }),
+      "Optional audit note. Normally omit it; workingMemory already retains " +
+      "retrieval progress. This note is not source evidence and is not required " +
+      "by the answer handoff.",
+  })),
 }, {
   description:
-    "Stop retrieval with a semantic handoff. Use as the only tool call in an " +
+    "Stop retrieval with a status and an optional audit note. Use as the only tool call in an " +
     "assistant turn, after observing the latest search or read result in an " +
     "earlier turn. The harness automatically commits every exact source " +
     "returned by read and generates citations, hashes, provenance, and package formatting.",

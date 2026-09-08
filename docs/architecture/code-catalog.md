@@ -24,8 +24,8 @@ _No top-level functions, classes, or class methods._
 
 | Symbol | Purpose | Kind | Visibility | Source |
 |---|---|---|---|---|
-| `answerSystemPrompt(prompt: BenchmarkAnswerPrompt, executionChecklist?: string): string` | Runs benchmark-owned answer synthesis after PiMem has finished retrieval. | function | internal | [line 19](../../src/benchmark/adapters/pi/answer.ts#L19) |
-| `runBenchmarkAnswer(options: { modelRuntime: PiModelRuntime; prompt: BenchmarkAnswerPrompt; maxRunMs?: number; executionChecklist?: string; }): Promise<BenchmarkAnswerResult>` | Runs benchmark answer. | function | exported | [line 28](../../src/benchmark/adapters/pi/answer.ts#L28) |
+| `answerSystemPrompt(prompt: BenchmarkAnswerPrompt, executionChecklist?: string): string` | Runs benchmark-owned answer synthesis after PiMem has finished retrieval. | function | internal | [line 21](../../src/benchmark/adapters/pi/answer.ts#L21) |
+| `runBenchmarkAnswer(options: { modelRuntime: PiModelRuntime; prompt: BenchmarkAnswerPrompt; maxRunMs?: number; executionChecklist?: string; }): Promise<BenchmarkAnswerResult>` | Runs benchmark answer. | function | exported | [line 30](../../src/benchmark/adapters/pi/answer.ts#L30) |
 ## `src/benchmark/amabench/answer-contract.ts`
 
 | Symbol | Purpose | Kind | Visibility | Source |
@@ -261,20 +261,22 @@ _No top-level functions, classes, or class methods._
 | `renderMemoryArenaPublicPrompt(question: string, chunks: readonly string[]): string` | Renders memory arena public prompt. | function | exported | [line 229](../../src/benchmark/memoryarena-public/use-cases/memory-backend.ts#L229) |
 | `renderCommittedMemory(source: MemoryArenaCommittedEvidence): string` | Renders committed memory. | function | internal | [line 243](../../src/benchmark/memoryarena-public/use-cases/memory-backend.ts#L243) |
 | `renderMemoryArenaEvidenceSources(question: string, retrieval: MemoryArenaRetrievalResult, contentByMemoryId?: ReadonlyMap<string, string>): string` | Renders memory arena evidence sources. | function | internal | [line 262](../../src/benchmark/memoryarena-public/use-cases/memory-backend.ts#L262) |
-| `renderMemoryArenaEvidencePrompt(question: string, retrieval: MemoryArenaRetrievalResult, originalContentByMemoryId?: ReadonlyMap<string, string>): string` | Evidence-aware answer handoff used by agentic-memory harnesses. | function | exported | [line 291](../../src/benchmark/memoryarena-public/use-cases/memory-backend.ts#L291) |
-| `MemoryArenaPublicMemoryBackend` | Implements memory arena public memory backend. | class | exported | [line 314](../../src/benchmark/memoryarena-public/use-cases/memory-backend.ts#L314) |
-| `MemoryArenaPublicMemoryBackend.constructor(private readonly dependencies: MemoryArenaPublicBackendDependencies)` | Creates a memory arena public memory backend instance. | method | public | [line 315](../../src/benchmark/memoryarena-public/use-cases/memory-backend.ts#L315) |
-| `MemoryArenaPublicMemoryBackend.initialize(input: MemoryArenaInitializeInput): Promise<MemoryArenaInitializeResult>` | Implements the initialize operation. | method | public | [line 321](../../src/benchmark/memoryarena-public/use-cases/memory-backend.ts#L321) |
-| `MemoryArenaPublicMemoryBackend.add(input: MemoryArenaAddInput): Promise<MemoryArenaAddResult>` | Implements the add operation. | method | public | [line 345](../../src/benchmark/memoryarena-public/use-cases/memory-backend.ts#L345) |
-| `MemoryArenaPublicMemoryBackend.wrap(input: MemoryArenaWrapInput): Promise<MemoryArenaWrapResult>` | Implements the wrap operation. | method | public | [line 385](../../src/benchmark/memoryarena-public/use-cases/memory-backend.ts#L385) |
-| `MemoryArenaPublicMemoryBackend.audited(start: MemoryArenaOperationAuditStart, operation: () => Promise<{ result: T; audit: MemoryArenaOperationAuditSuccess; }>): Promise<T>` | Implements the audited operation. | method | private | [line 526](../../src/benchmark/memoryarena-public/use-cases/memory-backend.ts#L526) |
-| `MemoryArenaPublicMemoryBackend.assertSupportedSystem(memorySystemName: string): void` | Validates supported system and throws when invalid. | method | private | [line 579](../../src/benchmark/memoryarena-public/use-cases/memory-backend.ts#L579) |
-| `MemoryArenaPublicMemoryBackend.activeState(input: MemoryArenaInitializeInput): Promise<MemoryArenaGenerationState>` | Implements the active state operation. | method | private | [line 585](../../src/benchmark/memoryarena-public/use-cases/memory-backend.ts#L585) |
+| `renderMemoryArenaEvidencePrompt(question: string, retrieval: MemoryArenaRetrievalResult, originalContentByMemoryId?: ReadonlyMap<string, string>): string` | Evidence-aware answer handoff used by agentic-memory harnesses. | function | exported | [line 292](../../src/benchmark/memoryarena-public/use-cases/memory-backend.ts#L292) |
+| `MemoryArenaPublicMemoryBackend` | Implements memory arena public memory backend. | class | exported | [line 321](../../src/benchmark/memoryarena-public/use-cases/memory-backend.ts#L321) |
+| `MemoryArenaPublicMemoryBackend.constructor(private readonly dependencies: MemoryArenaPublicBackendDependencies)` | Creates a memory arena public memory backend instance. | method | public | [line 322](../../src/benchmark/memoryarena-public/use-cases/memory-backend.ts#L322) |
+| `MemoryArenaPublicMemoryBackend.initialize(input: MemoryArenaInitializeInput): Promise<MemoryArenaInitializeResult>` | Implements the initialize operation. | method | public | [line 328](../../src/benchmark/memoryarena-public/use-cases/memory-backend.ts#L328) |
+| `MemoryArenaPublicMemoryBackend.add(input: MemoryArenaAddInput): Promise<MemoryArenaAddResult>` | Implements the add operation. | method | public | [line 352](../../src/benchmark/memoryarena-public/use-cases/memory-backend.ts#L352) |
+| `MemoryArenaPublicMemoryBackend.wrap(input: MemoryArenaWrapInput): Promise<MemoryArenaWrapResult>` | Implements the wrap operation. | method | public | [line 392](../../src/benchmark/memoryarena-public/use-cases/memory-backend.ts#L392) |
+| `MemoryArenaPublicMemoryBackend.audited(start: MemoryArenaOperationAuditStart, operation: () => Promise<{ result: T; audit: MemoryArenaOperationAuditSuccess; }>): Promise<T>` | Implements the audited operation. | method | private | [line 533](../../src/benchmark/memoryarena-public/use-cases/memory-backend.ts#L533) |
+| `MemoryArenaPublicMemoryBackend.assertSupportedSystem(memorySystemName: string): void` | Validates supported system and throws when invalid. | method | private | [line 586](../../src/benchmark/memoryarena-public/use-cases/memory-backend.ts#L586) |
+| `MemoryArenaPublicMemoryBackend.activeState(input: MemoryArenaInitializeInput): Promise<MemoryArenaGenerationState>` | Implements the active state operation. | method | private | [line 592](../../src/benchmark/memoryarena-public/use-cases/memory-backend.ts#L592) |
 ## `src/benchmark/model/answer.ts`
 
 | Symbol | Purpose | Kind | Visibility | Source |
 |---|---|---|---|---|
-| `returnedModelMatches(requested: string, returned: string): boolean` | Checks whether the provider's response model matches the requested model. | function | exported | [line 31](../../src/benchmark/model/answer.ts#L31) |
+| `BenchmarkAnswerError` | A failed answer still owns its provider usage and exact prompt identity. | class | exported | [line 35](../../src/benchmark/model/answer.ts#L35) |
+| `BenchmarkAnswerError.constructor(message: string, readonly diagnostics: BenchmarkAnswerFailureDiagnostics)` | Creates a benchmark answer error instance. | method | public | [line 36](../../src/benchmark/model/answer.ts#L36) |
+| `returnedModelMatches(requested: string, returned: string): boolean` | Checks whether the provider's response model matches the requested model. | function | exported | [line 49](../../src/benchmark/model/answer.ts#L49) |
 ## `src/benchmark/model/benchmark-query.ts`
 
 _No top-level functions, classes, or class methods._
@@ -363,30 +365,30 @@ _No top-level functions, classes, or class methods._
 
 | Symbol | Purpose | Kind | Visibility | Source |
 |---|---|---|---|---|
-| `datasetRetrievalProfile(manifest: DatasetManifest): RetrievalProfile` | Implements the dataset retrieval profile operation. | function | internal | [line 86](../../src/entrypoints/cli/commands/benchmark-evidence.ts#L86) |
-| `benchmarkFor(parsed: ParsedCommand): EvidenceBenchmarkId` | Implements the benchmark for operation. | function | internal | [line 107](../../src/entrypoints/cli/commands/benchmark-evidence.ts#L107) |
-| `selectQueries(queries: readonly RunnableQuery[], requestedIds: ReadonlySet<string>): RunnableQuery[]` | Implements the select queries operation. | function | internal | [line 115](../../src/entrypoints/cli/commands/benchmark-evidence.ts#L115) |
-| `recordPath(directory: string, caseId: string): string` | Implements the record path operation. | function | internal | [line 133](../../src/entrypoints/cli/commands/benchmark-evidence.ts#L133) |
-| `directoryHasRecords(directory: string): Promise<boolean>` | Implements the directory has records operation. | function | internal | [line 137](../../src/entrypoints/cli/commands/benchmark-evidence.ts#L137) |
-| `loadSuccessRecordIds(directory: string, benchmark: EvidenceBenchmarkId, queries: readonly RunnableQuery[]): Promise<Set<string>>` | Loads success record ids. | function | internal | [line 148](../../src/entrypoints/cli/commands/benchmark-evidence.ts#L148) |
-| `materializeArtifacts(options: { outputDir: string; benchmark: EvidenceBenchmarkId; queries: readonly RunnableQuery[]; }): Promise<{ succeeded: number; failed: number }>` | Materializes artifacts. | function | internal | [line 170](../../src/entrypoints/cli/commands/benchmark-evidence.ts#L170) |
-| `predictionFor(options: { benchmark: EvidenceBenchmarkId; query: RunnableQuery; retrieval: PiMemResult; answer: Awaited<ReturnType<typeof runBenchmarkAnswer>>; }): EvidenceBenchmarkPrediction` | Implements the prediction for operation. | function | internal | [line 230](../../src/entrypoints/cli/commands/benchmark-evidence.ts#L230) |
-| `answerPromptFor(_benchmark: EvidenceBenchmarkId, query: RunnableQuery, retrieval: PiMemResult)` | Implements the answer prompt for operation. | function | internal | [line 256](../../src/entrypoints/cli/commands/benchmark-evidence.ts#L256) |
-| `modelFlagsForRun(): string[]` | Implements the model flags for run operation. | function | internal | [line 264](../../src/entrypoints/cli/commands/benchmark-evidence.ts#L264) |
-| `benchmarkEvidence(parsed: ParsedCommand): Promise<void>` | Implements the benchmark evidence operation. | function | exported | [line 273](../../src/entrypoints/cli/commands/benchmark-evidence.ts#L273) |
+| `datasetRetrievalProfile(manifest: DatasetManifest): RetrievalProfile` | Implements the dataset retrieval profile operation. | function | internal | [line 88](../../src/entrypoints/cli/commands/benchmark-evidence.ts#L88) |
+| `benchmarkFor(parsed: ParsedCommand): EvidenceBenchmarkId` | Implements the benchmark for operation. | function | internal | [line 109](../../src/entrypoints/cli/commands/benchmark-evidence.ts#L109) |
+| `selectQueries(queries: readonly RunnableQuery[], requestedIds: ReadonlySet<string>): RunnableQuery[]` | Implements the select queries operation. | function | internal | [line 117](../../src/entrypoints/cli/commands/benchmark-evidence.ts#L117) |
+| `recordPath(directory: string, caseId: string): string` | Implements the record path operation. | function | internal | [line 135](../../src/entrypoints/cli/commands/benchmark-evidence.ts#L135) |
+| `directoryHasRecords(directory: string): Promise<boolean>` | Implements the directory has records operation. | function | internal | [line 139](../../src/entrypoints/cli/commands/benchmark-evidence.ts#L139) |
+| `loadSuccessRecordIds(directory: string, benchmark: EvidenceBenchmarkId, queries: readonly RunnableQuery[]): Promise<Set<string>>` | Loads success record ids. | function | internal | [line 150](../../src/entrypoints/cli/commands/benchmark-evidence.ts#L150) |
+| `materializeArtifacts(options: { outputDir: string; benchmark: EvidenceBenchmarkId; queries: readonly RunnableQuery[]; }): Promise<{ succeeded: number; failed: number }>` | Materializes artifacts. | function | internal | [line 172](../../src/entrypoints/cli/commands/benchmark-evidence.ts#L172) |
+| `predictionFor(options: { benchmark: EvidenceBenchmarkId; query: RunnableQuery; retrieval: PiMemResult; answer: Awaited<ReturnType<typeof runBenchmarkAnswer>>; }): EvidenceBenchmarkPrediction` | Implements the prediction for operation. | function | internal | [line 232](../../src/entrypoints/cli/commands/benchmark-evidence.ts#L232) |
+| `answerPromptFor(_benchmark: EvidenceBenchmarkId, query: RunnableQuery, retrieval: PiMemResult)` | Implements the answer prompt for operation. | function | internal | [line 258](../../src/entrypoints/cli/commands/benchmark-evidence.ts#L258) |
+| `modelFlagsForRun(): string[]` | Implements the model flags for run operation. | function | internal | [line 266](../../src/entrypoints/cli/commands/benchmark-evidence.ts#L266) |
+| `benchmarkEvidence(parsed: ParsedCommand): Promise<void>` | Implements the benchmark evidence operation. | function | exported | [line 275](../../src/entrypoints/cli/commands/benchmark-evidence.ts#L275) |
 ## `src/entrypoints/cli/commands/benchmark-longmemeval.ts`
 
 | Symbol | Purpose | Kind | Visibility | Source |
 |---|---|---|---|---|
-| `successRecordPath(recordsDir: string, questionId: string): string` | Implements the success record path operation. | function | internal | [line 69](../../src/entrypoints/cli/commands/benchmark-longmemeval.ts#L69) |
-| `failureRecordPath(failuresDir: string, questionId: string): string` | Implements the failure record path operation. | function | internal | [line 73](../../src/entrypoints/cli/commands/benchmark-longmemeval.ts#L73) |
-| `completedQuestionIds(path: string): Promise<Set<string>>` | Implements the completed question ids operation. | function | internal | [line 77](../../src/entrypoints/cli/commands/benchmark-longmemeval.ts#L77) |
-| `predictionFor(retrieval: PiMemResult, answer: BenchmarkAnswerResult, questionId: string): BenchmarkPrediction` | Implements the prediction for operation. | function | internal | [line 95](../../src/entrypoints/cli/commands/benchmark-longmemeval.ts#L95) |
-| `loadSuccessRecords(recordsDir: string, questions: readonly LongMemEvalPrivateQuestion[]): Promise<Map<string, BenchmarkSuccessRecord>>` | Loads success records. | function | internal | [line 123](../../src/entrypoints/cli/commands/benchmark-longmemeval.ts#L123) |
-| `readJsonlMap(path: string): Promise<Map<string, unknown>>` | Reads jsonl map. | function | internal | [line 144](../../src/entrypoints/cli/commands/benchmark-longmemeval.ts#L144) |
-| `materializeBenchmarkArtifacts(outputDir: string, selected: readonly LongMemEvalPrivateQuestion[]): Promise<{ succeeded: number; failed: number }>` | Materializes benchmark artifacts. | function | internal | [line 164](../../src/entrypoints/cli/commands/benchmark-longmemeval.ts#L164) |
-| `systemicRuntimeFailure(message: string): boolean` | Implements the systemic runtime failure operation. | function | internal | [line 235](../../src/entrypoints/cli/commands/benchmark-longmemeval.ts#L235) |
-| `benchmarkLongMemEval(parsed: ParsedCommand): Promise<void>` | Implements the benchmark long mem eval operation. | function | exported | [line 241](../../src/entrypoints/cli/commands/benchmark-longmemeval.ts#L241) |
+| `successRecordPath(recordsDir: string, questionId: string): string` | Implements the success record path operation. | function | internal | [line 70](../../src/entrypoints/cli/commands/benchmark-longmemeval.ts#L70) |
+| `failureRecordPath(failuresDir: string, questionId: string): string` | Implements the failure record path operation. | function | internal | [line 74](../../src/entrypoints/cli/commands/benchmark-longmemeval.ts#L74) |
+| `completedQuestionIds(path: string): Promise<Set<string>>` | Implements the completed question ids operation. | function | internal | [line 78](../../src/entrypoints/cli/commands/benchmark-longmemeval.ts#L78) |
+| `predictionFor(retrieval: PiMemResult, answer: BenchmarkAnswerResult, questionId: string): BenchmarkPrediction` | Implements the prediction for operation. | function | internal | [line 96](../../src/entrypoints/cli/commands/benchmark-longmemeval.ts#L96) |
+| `loadSuccessRecords(recordsDir: string, questions: readonly LongMemEvalPrivateQuestion[]): Promise<Map<string, BenchmarkSuccessRecord>>` | Loads success records. | function | internal | [line 124](../../src/entrypoints/cli/commands/benchmark-longmemeval.ts#L124) |
+| `readJsonlMap(path: string): Promise<Map<string, unknown>>` | Reads jsonl map. | function | internal | [line 145](../../src/entrypoints/cli/commands/benchmark-longmemeval.ts#L145) |
+| `materializeBenchmarkArtifacts(outputDir: string, selected: readonly LongMemEvalPrivateQuestion[]): Promise<{ succeeded: number; failed: number }>` | Materializes benchmark artifacts. | function | internal | [line 165](../../src/entrypoints/cli/commands/benchmark-longmemeval.ts#L165) |
+| `systemicRuntimeFailure(message: string): boolean` | Implements the systemic runtime failure operation. | function | internal | [line 236](../../src/entrypoints/cli/commands/benchmark-longmemeval.ts#L236) |
+| `benchmarkLongMemEval(parsed: ParsedCommand): Promise<void>` | Implements the benchmark long mem eval operation. | function | exported | [line 242](../../src/entrypoints/cli/commands/benchmark-longmemeval.ts#L242) |
 ## `src/entrypoints/cli/commands/benchmark-memoryagentbench.ts`
 
 | Symbol | Purpose | Kind | Visibility | Source |
@@ -566,7 +568,7 @@ _No top-level functions, classes, or class methods._
 | `PiMemLdbdApplication` | Implements pi mem ldbd application. | class | exported | [line 60](../../src/entrypoints/ldbd-api/pimem-runtime.ts#L60) |
 | `PiMemLdbdApplication.constructor(private readonly store: MemoryStore & OnlineMemoryStore, private readonly embedder: Embedder, private readonly modelRuntime: PiModelRuntime, options: { retrievalProfile?: RetrievalProfile; environment?: NodeJS.ProcessEnv; } = {})` | Creates a pi mem ldbd application instance. | method | public | [line 66](../../src/entrypoints/ldbd-api/pimem-runtime.ts#L66) |
 | `PiMemLdbdApplication.add(request: LdbdAddRequest): Promise<"inserted" \| "unchanged">` | Implements the add operation. | method | public | [line 82](../../src/entrypoints/ldbd-api/pimem-runtime.ts#L82) |
-| `PiMemLdbdApplication.search(request: LdbdSearchRequest, _signal?: AbortSignal): Promise<LdbdSearchItem[]>` | Performs a search. | method | public | [line 122](../../src/entrypoints/ldbd-api/pimem-runtime.ts#L122) |
+| `PiMemLdbdApplication.search(request: LdbdSearchRequest, signal?: AbortSignal): Promise<LdbdSearchItem[]>` | Performs a search. | method | public | [line 122](../../src/entrypoints/ldbd-api/pimem-runtime.ts#L122) |
 ## `src/entrypoints/ldbd-api/service.ts`
 
 | Symbol | Purpose | Kind | Visibility | Source |
@@ -606,7 +608,7 @@ _No top-level functions, classes, or class methods._
 | `MemoryArenaPublicApplication` | Keeps lifecycle writes exclusive while parallelizing read-only retrievals. | class | exported | [line 246](../../src/entrypoints/memoryarena-public-api/application.ts#L246) |
 | `MemoryArenaPublicApplication.constructor(private readonly backend: MemoryArenaPublicBackend, options: MemoryArenaPublicApplicationOptions = {})` | Creates a memory arena public application instance. | method | public | [line 251](../../src/entrypoints/memoryarena-public-api/application.ts#L251) |
 | `MemoryArenaPublicApplication.initialize(input: MemoryArenaInitializeInput): Promise<MemoryArenaInitializeResult>` | Implements the initialize operation. | method | public | [line 264](../../src/entrypoints/memoryarena-public-api/application.ts#L264) |
-| `MemoryArenaPublicApplication.add(input: MemoryArenaAddInput): Promise<MemoryArenaAddResult>` | Implements the add operation. | method | public | [line 274](../../src/entrypoints/memoryarena-public-api/application.ts#L274) |
+| `MemoryArenaPublicApplication.add(input: MemoryArenaAddInput): Promise<MemoryArenaAddResult>` | Implements the add operation. | method | public | [line 275](../../src/entrypoints/memoryarena-public-api/application.ts#L275) |
 | `MemoryArenaPublicApplication.wrap(input: MemoryArenaWrapInput): Promise<MemoryArenaWrapResult>` | Implements the wrap operation. | method | public | [line 282](../../src/entrypoints/memoryarena-public-api/application.ts#L282) |
 | `MemoryArenaPublicApplication.health(): Record<string, unknown>` | Implements the health operation. | method | public | [line 290](../../src/entrypoints/memoryarena-public-api/application.ts#L290) |
 | `MemoryArenaPublicApiService` | Implements memory arena public api service. | class | exported | [line 299](../../src/entrypoints/memoryarena-public-api/application.ts#L299) |
@@ -714,12 +716,12 @@ _No top-level functions, classes, or class methods._
 
 | Symbol | Purpose | Kind | Visibility | Source |
 |---|---|---|---|---|
-| `PiMemRunError` | Implements pi mem run error. | class | exported | [line 104](../../src/evidence-agent/adapters/pi/run-agent.ts#L104) |
-| `PiMemRunError.constructor(message: string, diagnostics: PiMemFailureDiagnostics, code: PiMemFailureCode = "runtime_error")` | Creates a pi mem run error instance. | method | public | [line 108](../../src/evidence-agent/adapters/pi/run-agent.ts#L108) |
-| `providerFailureKind(message: string): PiMemProviderFailureKind` | Implements the provider failure kind operation. | function | internal | [line 122](../../src/evidence-agent/adapters/pi/run-agent.ts#L122) |
-| `providerResponseModel(message: string): string \| undefined` | Implements the provider response model operation. | function | internal | [line 142](../../src/evidence-agent/adapters/pi/run-agent.ts#L142) |
-| `questionPrompt(question: string, questionDate?: string): string` | Builds the user prompt from the question and optional question date. | function | internal | [line 148](../../src/evidence-agent/adapters/pi/run-agent.ts#L148) |
-| `runPiMem(options: RunPiMemOptions): Promise<PiMemResult>` | Runs one bounded evidence-agent session and returns its provenance-backed result. | function | exported | [line 170](../../src/evidence-agent/adapters/pi/run-agent.ts#L170) |
+| `PiMemRunError` | Implements pi mem run error. | class | exported | [line 110](../../src/evidence-agent/adapters/pi/run-agent.ts#L110) |
+| `PiMemRunError.constructor(message: string, diagnostics: PiMemFailureDiagnostics, code: PiMemFailureCode = "runtime_error")` | Creates a pi mem run error instance. | method | public | [line 114](../../src/evidence-agent/adapters/pi/run-agent.ts#L114) |
+| `providerFailureKind(message: string): PiMemProviderFailureKind` | Implements the provider failure kind operation. | function | internal | [line 128](../../src/evidence-agent/adapters/pi/run-agent.ts#L128) |
+| `providerResponseModel(message: string): string \| undefined` | Implements the provider response model operation. | function | internal | [line 148](../../src/evidence-agent/adapters/pi/run-agent.ts#L148) |
+| `questionPrompt(question: string, questionDate?: string): string` | Builds the user prompt from the question and optional question date. | function | internal | [line 154](../../src/evidence-agent/adapters/pi/run-agent.ts#L154) |
+| `runPiMem(options: RunPiMemOptions): Promise<PiMemResult>` | Runs one bounded evidence-agent session and returns its provenance-backed result. | function | exported | [line 176](../../src/evidence-agent/adapters/pi/run-agent.ts#L176) |
 ## `src/evidence-agent/adapters/pi/tools.ts`
 
 _No top-level functions, classes, or class methods._
@@ -767,8 +769,8 @@ _No top-level functions, classes, or class methods._
 |---|---|---|---|---|
 | `temporalSuffix(timestamp: string \| undefined, questionDate: string \| undefined): string` | Implements the temporal suffix operation. | function | internal | [line 9](../../src/evidence-agent/adapters/pi/tools/render-tool-result.ts#L9) |
 | `renderEvidenceOperator(result: EvidenceOperatorResult \| undefined, ledger: MemoryLedger): string` | Renders evidence operator. | function | exported | [line 17](../../src/evidence-agent/adapters/pi/tools/render-tool-result.ts#L17) |
-| `renderCandidates(candidates: readonly MemoryCandidate[], ledger: MemoryLedger, questionDate?: string): string` | Renders candidates. | function | exported | [line 67](../../src/evidence-agent/adapters/pi/tools/render-tool-result.ts#L67) |
-| `renderInspectedEvidence(memories: readonly MemoryEvidence[], ledger: MemoryLedger, questionDate?: string, candidateIds: readonly string[] = []): string` | Renders inspected evidence. | function | exported | [line 89](../../src/evidence-agent/adapters/pi/tools/render-tool-result.ts#L89) |
+| `renderCandidates(candidates: readonly MemoryCandidate[], ledger: MemoryLedger, questionDate?: string): string` | Renders candidates. | function | exported | [line 69](../../src/evidence-agent/adapters/pi/tools/render-tool-result.ts#L69) |
+| `renderInspectedEvidence(memories: readonly MemoryEvidence[], ledger: MemoryLedger, questionDate?: string, candidateIds: readonly string[] = []): string` | Renders inspected evidence. | function | exported | [line 91](../../src/evidence-agent/adapters/pi/tools/render-tool-result.ts#L91) |
 ## `src/evidence-agent/adapters/pi/tools/schemas.ts`
 
 | Symbol | Purpose | Kind | Visibility | Source |
@@ -780,14 +782,13 @@ _No top-level functions, classes, or class methods._
 
 | Symbol | Purpose | Kind | Visibility | Source |
 |---|---|---|---|---|
-| `renderPlanTrace(trace: SearchOperatorCompositionTrace \| undefined): string \| undefined` | Renders plan trace. | function | internal | [line 18](../../src/evidence-agent/adapters/pi/tools/search-tool.ts#L18) |
-| `queryFingerprint(query: string): string` | Implements the query fingerprint operation. | function | internal | [line 42](../../src/evidence-agent/adapters/pi/tools/search-tool.ts#L42) |
-| `hitQueryFingerprints(hit: RetrievalHit): Set<string>` | Implements the hit query fingerprints operation. | function | internal | [line 51](../../src/evidence-agent/adapters/pi/tools/search-tool.ts#L51) |
-| `coverageProgress(input: { call: number; hits: readonly RetrievalHit[]; executedQueries: readonly string[]; repeatedQueries: readonly string[]; previousCandidates: readonly MemoryCandidate[]; requestedLimit: number; consecutiveNoNewCandidateCalls: number; consecutiveNoNewSessionCalls: number; }): SearchCoverageProgress` | Implements the coverage progress operation. | function | internal | [line 55](../../src/evidence-agent/adapters/pi/tools/search-tool.ts#L55) |
-| `renderCoverageProgress(progress: SearchCoverageProgress): string` | Renders coverage progress. | function | internal | [line 139](../../src/evidence-agent/adapters/pi/tools/search-tool.ts#L139) |
-| `nextContinuationDepth(depth: number, maxDepth: number): number \| undefined` | Implements the next continuation depth operation. | function | internal | [line 183](../../src/evidence-agent/adapters/pi/tools/search-tool.ts#L183) |
-| `pageOperatorResult(result: EvidenceOperatorResult \| undefined, hits: readonly RetrievalHit[], reservoirHits: readonly RetrievalHit[], ledger: MemoryLedger): EvidenceOperatorResult \| undefined` | Implements the page operator result operation. | function | internal | [line 194](../../src/evidence-agent/adapters/pi/tools/search-tool.ts#L194) |
-| `createSearchTools(options: CreatePiMemToolsOptions): Pick<PiMemTools, "search" \| "searchMore">` | Creates search tools. | function | exported | [line 236](../../src/evidence-agent/adapters/pi/tools/search-tool.ts#L236) |
+| `renderPlanTrace(trace: SearchOperatorCompositionTrace \| undefined): string \| undefined` | Renders plan trace. | function | internal | [line 20](../../src/evidence-agent/adapters/pi/tools/search-tool.ts#L20) |
+| `hitQueryFingerprints(hit: RetrievalHit): Set<string>` | Implements the hit query fingerprints operation. | function | internal | [line 44](../../src/evidence-agent/adapters/pi/tools/search-tool.ts#L44) |
+| `coverageProgress(input: { call: number; hits: readonly RetrievalHit[]; executedQueries: readonly string[]; repeatedQueries: readonly string[]; previousCandidates: readonly MemoryCandidate[]; requestedLimit: number; consecutiveNoNewCandidateCalls: number; consecutiveNoNewSessionCalls: number; }): SearchCoverageProgress` | Implements the coverage progress operation. | function | internal | [line 48](../../src/evidence-agent/adapters/pi/tools/search-tool.ts#L48) |
+| `renderCoverageProgress(progress: SearchCoverageProgress): string` | Renders coverage progress. | function | internal | [line 132](../../src/evidence-agent/adapters/pi/tools/search-tool.ts#L132) |
+| `nextContinuationDepth(depth: number, maxDepth: number): number \| undefined` | Implements the next continuation depth operation. | function | internal | [line 176](../../src/evidence-agent/adapters/pi/tools/search-tool.ts#L176) |
+| `pageOperatorResult(result: EvidenceOperatorResult \| undefined, hits: readonly RetrievalHit[], reservoirHits: readonly RetrievalHit[], ledger: MemoryLedger): EvidenceOperatorResult \| undefined` | Implements the page operator result operation. | function | internal | [line 187](../../src/evidence-agent/adapters/pi/tools/search-tool.ts#L187) |
+| `createSearchTools(options: CreatePiMemToolsOptions): Pick<PiMemTools, "search" \| "searchMore">` | Creates search tools. | function | exported | [line 229](../../src/evidence-agent/adapters/pi/tools/search-tool.ts#L229) |
 ## `src/evidence-agent/adapters/pi/tools/tool-protocol.ts`
 
 | Symbol | Purpose | Kind | Visibility | Source |
@@ -795,6 +796,23 @@ _No top-level functions, classes, or class methods._
 | `validateFinishToolBatch(toolNames: readonly string[], finishToolName = "finish"): string \| undefined` | Validates finish tool batch. | function | exported | [line 7](../../src/evidence-agent/adapters/pi/tools/tool-protocol.ts#L7) |
 | `createFinishOnlyBeforeToolCall(finishToolName = "finish"): ( context: BeforeToolCallContext, signal?: AbortSignal, ) => Promise<BeforeToolCallResult \| undefined>` | Creates finish only before tool call. | function | exported | [line 18](../../src/evidence-agent/adapters/pi/tools/tool-protocol.ts#L18) |
 | `createToolProtocolBeforeToolCall(): ( context: BeforeToolCallContext, signal?: AbortSignal, ) => Promise<BeforeToolCallResult \| undefined>` | Creates tool protocol before tool call. | function | exported | [line 45](../../src/evidence-agent/adapters/pi/tools/tool-protocol.ts#L45) |
+## `src/evidence-agent/adapters/pi/work-progress-contract.ts`
+
+| Symbol | Purpose | Kind | Visibility | Source |
+|---|---|---|---|---|
+| `normalized(s: string)` | Normalizes d. | function | internal | [line 23](../../src/evidence-agent/adapters/pi/work-progress-contract.ts#L23) |
+| `contains(body: string, quote: string)` | Implements the contains operation. | function | internal | [line 24](../../src/evidence-agent/adapters/pi/work-progress-contract.ts#L24) |
+| `createWorkProgress(ledger: MemoryLedger)` | Creates work progress. | function | exported | [line 25](../../src/evidence-agent/adapters/pi/work-progress-contract.ts#L25) |
+## `src/evidence-agent/adapters/pi/working-memory-context.ts`
+
+| Symbol | Purpose | Kind | Visibility | Source |
+|---|---|---|---|---|
+| `createWorkingMemoryContext(ledger: MemoryLedger, maxSearchCalls?: number, mode: "entries" \| "progress" \| "rewrite" = "entries")` | Creates working memory context. | function | exported | [line 66](../../src/evidence-agent/adapters/pi/working-memory-context.ts#L66) |
+## `src/evidence-agent/adapters/pi/working-memory-observation.ts`
+
+| Symbol | Purpose | Kind | Visibility | Source |
+|---|---|---|---|---|
+| `createWorkingMemoryObservation(ledger: MemoryLedger, maxSearchCalls?: number, recordShown?: (ref: string, text: string) => void)` | Navigation deltas only. | function | exported | [line 7](../../src/evidence-agent/adapters/pi/working-memory-observation.ts#L7) |
 ## `src/evidence-agent/index.ts`
 
 _No top-level functions, classes, or class methods._
@@ -805,27 +823,28 @@ _No top-level functions, classes, or class methods._
 
 | Symbol | Purpose | Kind | Visibility | Source |
 |---|---|---|---|---|
-| `cloneCandidate(candidate: MemoryCandidate): MemoryCandidate` | Implements the clone candidate operation. | function | internal | [line 21](../../src/evidence-agent/model/ledger.ts#L21) |
-| `cloneEvidence(evidence: MemoryEvidence): MemoryEvidence` | Implements the clone evidence operation. | function | internal | [line 40](../../src/evidence-agent/model/ledger.ts#L40) |
-| `cloneSelection(selection: PiMemSelection): PiMemSelection` | Implements the clone selection operation. | function | internal | [line 48](../../src/evidence-agent/model/ledger.ts#L48) |
-| `MemoryLedger` | Per-question, in-memory provenance ledger. | class | exported | [line 74](../../src/evidence-agent/model/ledger.ts#L74) |
-| `MemoryLedger.constructor(scopeId: string)` | Creates a memory ledger instance. | method | public | [line 86](../../src/evidence-agent/model/ledger.ts#L86) |
-| `MemoryLedger.nextStep(): number` | Implements the next step operation. | method | public | [line 94](../../src/evidence-agent/model/ledger.ts#L94) |
-| `MemoryLedger.hasInspected(memoryId: string): boolean` | Checks whether inspected. | method | public | [line 124](../../src/evidence-agent/model/ledger.ts#L124) |
-| `MemoryLedger.candidateRef(candidateOrMemoryId: string): string \| undefined` | Checks whether didate ref. | method | public | [line 128](../../src/evidence-agent/model/ledger.ts#L128) |
-| `MemoryLedger.candidateRefForQuote(memoryId: string, quote: string): string \| undefined` | Checks whether didate ref for quote. | method | public | [line 138](../../src/evidence-agent/model/ledger.ts#L138) |
-| `MemoryLedger.evidenceRef(memoryId: string): string \| undefined` | Implements the evidence ref operation. | method | public | [line 154](../../src/evidence-agent/model/ledger.ts#L154) |
-| `MemoryLedger.resolveCandidateRefs(refs: readonly string[]): string[]` | Resolves candidate refs. | method | public | [line 158](../../src/evidence-agent/model/ledger.ts#L158) |
-| `MemoryLedger.resolveCandidates(refs: readonly string[]): MemoryCandidate[]` | Resolves candidates. | method | public | [line 162](../../src/evidence-agent/model/ledger.ts#L162) |
-| `MemoryLedger.selectCandidates(candidateOrMemoryIds: readonly string[]): MemoryCandidate[]` | Implements the select candidates operation. | method | public | [line 178](../../src/evidence-agent/model/ledger.ts#L178) |
-| `MemoryLedger.selectMemoryCandidates(memoryIds: readonly string[]): MemoryCandidate[]` | Returns every passage/legacy candidate belonging to the given parents. | method | public | [line 198](../../src/evidence-agent/model/ledger.ts#L198) |
-| `MemoryLedger.recordSearchHits(hits: readonly RetrievalHit[], step = this.nextStep()): MemoryCandidate[]` | Registers retrieval hits as candidates while preserving first-seen provenance. | method | public | [line 209](../../src/evidence-agent/model/ledger.ts#L209) |
-| `MemoryLedger.recordInspect(evidenceRecords: readonly MemoryEvidence[], step = this.nextStep(), inspectedCandidateIds: readonly string[] = []): MemoryEvidence[]` | Records bounded exact source excerpts returned by inspect. | method | public | [line 248](../../src/evidence-agent/model/ledger.ts#L248) |
-| `MemoryLedger.recordBashDiscoveries(records: readonly MemoryRecord[], command: string, step = this.nextStep()): MemoryCandidate[]` | Implements the record bash discoveries operation. | method | public | [line 335](../../src/evidence-agent/model/ledger.ts#L335) |
-| `MemoryLedger.finish(input: PiMemSelection): PiMemSelection` | Validates and stores the agent's final evidence selection. | method | public | [line 353](../../src/evidence-agent/model/ledger.ts#L353) |
-| `MemoryLedger.assertInvariants(): void` | Verifies candidate, evidence, citation, and scope provenance invariants. | method | public | [line 449](../../src/evidence-agent/model/ledger.ts#L449) |
-| `MemoryLedger.assertScope(record: Pick<MemoryRecord, "scopeId" \| "memoryId">): void` | Validates scope and throws when invalid. | method | private | [line 474](../../src/evidence-agent/model/ledger.ts#L474) |
-| `MemoryLedger.upsertCandidate(candidateId: string, record: Pick< MemoryRecord, "memoryId" \| "scopeId" \| "sessionId" \| "turnIndex" \| "role" \| "timestamp" >, preview: string, discovery: MemoryCandidate["discoveries"][number], passage?: MemoryPassage): void` | Implements the upsert candidate operation. | method | private | [line 482](../../src/evidence-agent/model/ledger.ts#L482) |
+| `cloneCandidate(candidate: MemoryCandidate): MemoryCandidate` | Implements the clone candidate operation. | function | internal | [line 24](../../src/evidence-agent/model/ledger.ts#L24) |
+| `cloneEvidence(evidence: MemoryEvidence): MemoryEvidence` | Implements the clone evidence operation. | function | internal | [line 43](../../src/evidence-agent/model/ledger.ts#L43) |
+| `cloneSelection(selection: PiMemSelection): PiMemSelection` | Implements the clone selection operation. | function | internal | [line 47](../../src/evidence-agent/model/ledger.ts#L47) |
+| `MemoryLedger` | Per-question, in-memory provenance ledger. | class | exported | [line 73](../../src/evidence-agent/model/ledger.ts#L73) |
+| `MemoryLedger.constructor(scopeId: string)` | Creates a memory ledger instance. | method | public | [line 89](../../src/evidence-agent/model/ledger.ts#L89) |
+| `MemoryLedger.nextStep(): number` | Implements the next step operation. | method | public | [line 97](../../src/evidence-agent/model/ledger.ts#L97) |
+| `MemoryLedger.hasInspected(memoryId: string): boolean` | Checks whether inspected. | method | public | [line 127](../../src/evidence-agent/model/ledger.ts#L127) |
+| `MemoryLedger.candidateRef(candidateOrMemoryId: string): string \| undefined` | Checks whether didate ref. | method | public | [line 131](../../src/evidence-agent/model/ledger.ts#L131) |
+| `MemoryLedger.candidateRefForQuote(memoryId: string, quote: string): string \| undefined` | Checks whether didate ref for quote. | method | public | [line 141](../../src/evidence-agent/model/ledger.ts#L141) |
+| `MemoryLedger.evidenceRef(memoryId: string): string \| undefined` | Implements the evidence ref operation. | method | public | [line 157](../../src/evidence-agent/model/ledger.ts#L157) |
+| `MemoryLedger.resolveCandidateRefs(refs: readonly string[]): string[]` | Resolves candidate refs. | method | public | [line 161](../../src/evidence-agent/model/ledger.ts#L161) |
+| `MemoryLedger.resolveCandidates(refs: readonly string[]): MemoryCandidate[]` | Resolves candidates. | method | public | [line 165](../../src/evidence-agent/model/ledger.ts#L165) |
+| `MemoryLedger.selectCandidates(candidateOrMemoryIds: readonly string[]): MemoryCandidate[]` | Implements the select candidates operation. | method | public | [line 181](../../src/evidence-agent/model/ledger.ts#L181) |
+| `MemoryLedger.selectMemoryCandidates(memoryIds: readonly string[]): MemoryCandidate[]` | Returns every passage/legacy candidate belonging to the given parents. | method | public | [line 201](../../src/evidence-agent/model/ledger.ts#L201) |
+| `MemoryLedger.sourceSpansFor(record: MemoryRecord): SourceSpan[]` | Source-bound search fragments survive later searches and preview changes. | method | public | [line 213](../../src/evidence-agent/model/ledger.ts#L213) |
+| `MemoryLedger.recordSearchHits(hits: readonly RetrievalHit[], step = this.nextStep()): MemoryCandidate[]` | Registers retrieval hits as candidates while preserving first-seen provenance. | method | public | [line 224](../../src/evidence-agent/model/ledger.ts#L224) |
+| `MemoryLedger.recordInspect(evidenceRecords: readonly MemoryEvidence[], step = this.nextStep(), inspectedCandidateIds: readonly string[] = []): MemoryEvidence[]` | Records bounded exact source excerpts returned by inspect. | method | public | [line 281](../../src/evidence-agent/model/ledger.ts#L281) |
+| `MemoryLedger.recordBashDiscoveries(records: readonly MemoryRecord[], command: string, step = this.nextStep()): MemoryCandidate[]` | Implements the record bash discoveries operation. | method | public | [line 362](../../src/evidence-agent/model/ledger.ts#L362) |
+| `MemoryLedger.finish(input: PiMemSelection): PiMemSelection` | Validates and stores the agent's final evidence selection. | method | public | [line 380](../../src/evidence-agent/model/ledger.ts#L380) |
+| `MemoryLedger.assertInvariants(): void` | Verifies candidate, evidence, citation, and scope provenance invariants. | method | public | [line 476](../../src/evidence-agent/model/ledger.ts#L476) |
+| `MemoryLedger.assertScope(record: Pick<MemoryRecord, "scopeId" \| "memoryId">): void` | Validates scope and throws when invalid. | method | private | [line 501](../../src/evidence-agent/model/ledger.ts#L501) |
+| `MemoryLedger.upsertCandidate(candidateId: string, record: Pick< MemoryRecord, "memoryId" \| "scopeId" \| "sessionId" \| "turnIndex" \| "role" \| "timestamp" >, preview: string, discovery: MemoryCandidate["discoveries"][number], passage?: MemoryPassage): void` | Implements the upsert candidate operation. | method | private | [line 509](../../src/evidence-agent/model/ledger.ts#L509) |
 ## `src/evidence-agent/model/operator-evolution.ts`
 
 | Symbol | Purpose | Kind | Visibility | Source |
@@ -844,22 +863,63 @@ _No top-level functions, classes, or class methods._
 | `OperatorEvolutionCatalog.definitionsForNextQuestion(): SearchOperatorDefinition[]` | Implements the definitions for next question operation. | method | public | [line 222](../../src/evidence-agent/model/operator-evolution.ts#L222) |
 | `OperatorEvolutionCatalog.observe(questionId: string, result: PiMemResult): OperatorEvolutionObservation` | Implements the observe operation. | method | public | [line 246](../../src/evidence-agent/model/operator-evolution.ts#L246) |
 | `OperatorEvolutionCatalog.snapshot(): OperatorEvolutionSnapshot` | Implements the snapshot operation. | method | public | [line 375](../../src/evidence-agent/model/operator-evolution.ts#L375) |
+## `src/evidence-agent/model/rewrite-working-memory.ts`
+
+| Symbol | Purpose | Kind | Visibility | Source |
+|---|---|---|---|---|
+| `RewriteWorkingMemory` | One replaceable note; prior revisions are audit data, never model context. | class | exported | [line 11](../../src/evidence-agent/model/rewrite-working-memory.ts#L11) |
+| `RewriteWorkingMemory.constructor(private readonly validateReferences: (text: string) => void)` | Creates a rewrite working memory instance. | method | public | [line 14](../../src/evidence-agent/model/rewrite-working-memory.ts#L14) |
+| `RewriteWorkingMemory.apply(value: unknown, toolCallId: string)` | Implements the apply operation. | method | public | [line 18](../../src/evidence-agent/model/rewrite-working-memory.ts#L18) |
+| `RewriteWorkingMemory.render(): string` | Implements the render operation. | method | public | [line 35](../../src/evidence-agent/model/rewrite-working-memory.ts#L35) |
+| `RewriteWorkingMemory.snapshot(): RewriteMemorySnapshot` | Implements the snapshot operation. | method | public | [line 40](../../src/evidence-agent/model/rewrite-working-memory.ts#L40) |
 ## `src/evidence-agent/model/source-evidence.ts`
 
 | Symbol | Purpose | Kind | Visibility | Source |
 |---|---|---|---|---|
-| `cloneMetadata(metadata: Record<string, unknown>): Record<string, unknown>` | Implements the clone metadata operation. | function | internal | [line 50](../../src/evidence-agent/model/source-evidence.ts#L50) |
-| `asciiLower(value: string): string` | Implements the ascii lower operation. | function | internal | [line 54](../../src/evidence-agent/model/source-evidence.ts#L54) |
-| `focusTerms(focus: readonly string[]): string[]` | Implements the focus terms operation. | function | internal | [line 58](../../src/evidence-agent/model/source-evidence.ts#L58) |
-| `mergeSpans(spans: readonly { start: number; end: number }[]): Array<{ start: number; end: number }>` | Merges spans. | function | internal | [line 67](../../src/evidence-agent/model/source-evidence.ts#L67) |
-| `focusedSpans(content: string, focus: readonly string[], budget: number): Array<{ start: number; end: number }>` | Implements the focused spans operation. | function | internal | [line 85](../../src/evidence-agent/model/source-evidence.ts#L85) |
-| `renderEvidenceExcerpts(options: { sourceContentLength: number; excerpts: readonly EvidenceExcerpt[]; }): string` | Renders evidence excerpts. | function | exported | [line 157](../../src/evidence-agent/model/source-evidence.ts#L157) |
-| `mergeEvidenceExcerpts(memoryId: string, sourceContentLength: number, excerpts: readonly EvidenceExcerpt[]): EvidenceExcerpt[]` | Merges evidence excerpts. | function | internal | [line 172](../../src/evidence-agent/model/source-evidence.ts#L172) |
-| `mergeMemoryEvidence(existing: MemoryEvidence, incoming: MemoryEvidence): MemoryEvidence` | Accumulates independently inspected exact projections of one immutable source. | function | exported | [line 226](../../src/evidence-agent/model/source-evidence.ts#L226) |
-| `projectMemoryEvidenceWithinBudget(record: MemoryRecord, focus: readonly string[], budget: number): MemoryEvidence` | Implements the project memory evidence within budget operation. | function | internal | [line 265](../../src/evidence-agent/model/source-evidence.ts#L265) |
-| `projectMemoryEvidence(record: MemoryRecord, focus: readonly string[], maximumChars: number): MemoryEvidence` | Implements the project memory evidence operation. | function | exported | [line 295](../../src/evidence-agent/model/source-evidence.ts#L295) |
-| `projectPassageEvidence(record: MemoryRecord, passage: MemoryPassage): MemoryEvidence` | Projects exactly the passage the Agent selected, bound to its parent hash. | function | exported | [line 308](../../src/evidence-agent/model/source-evidence.ts#L308) |
-| `projectMemoryEvidenceBatch(records: readonly MemoryRecord[], focusFor: (record: MemoryRecord) => readonly string[]): MemoryEvidence[]` | Implements the project memory evidence batch operation. | function | exported | [line 339](../../src/evidence-agent/model/source-evidence.ts#L339) |
+| `cloneMetadata(metadata: Record<string, unknown>): Record<string, unknown>` | Implements the clone metadata operation. | function | internal | [line 55](../../src/evidence-agent/model/source-evidence.ts#L55) |
+| `asciiLower(value: string): string` | Implements the ascii lower operation. | function | internal | [line 59](../../src/evidence-agent/model/source-evidence.ts#L59) |
+| `focusTerms(focus: readonly string[]): string[]` | Implements the focus terms operation. | function | internal | [line 63](../../src/evidence-agent/model/source-evidence.ts#L63) |
+| `mergeSpans(spans: readonly SourceSpan[]): SourceSpan[]` | Merges spans. | function | exported | [line 72](../../src/evidence-agent/model/source-evidence.ts#L72) |
+| `focusedSpans(content: string, focus: readonly string[], budget: number, required: readonly SourceSpan[] = []): Array<{ start: number; end: number }>` | Implements the focused spans operation. | function | internal | [line 88](../../src/evidence-agent/model/source-evidence.ts#L88) |
+| `renderEvidenceExcerpts(options: { sourceContentLength: number; excerpts: readonly EvidenceExcerpt[]; }): string` | Renders evidence excerpts. | function | exported | [line 176](../../src/evidence-agent/model/source-evidence.ts#L176) |
+| `mergeEvidenceExcerpts(memoryId: string, sourceContentLength: number, excerpts: readonly EvidenceExcerpt[]): EvidenceExcerpt[]` | Merges evidence excerpts. | function | internal | [line 191](../../src/evidence-agent/model/source-evidence.ts#L191) |
+| `mergeMemoryEvidence(existing: MemoryEvidence, incoming: MemoryEvidence): MemoryEvidence` | Accumulates independently inspected exact projections of one immutable source. | function | exported | [line 245](../../src/evidence-agent/model/source-evidence.ts#L245) |
+| `projectMemoryEvidenceWithinBudget(record: MemoryRecord, focus: readonly string[], budget: number, required: readonly SourceSpan[] = []): MemoryEvidence` | Implements the project memory evidence within budget operation. | function | internal | [line 284](../../src/evidence-agent/model/source-evidence.ts#L284) |
+| `projectMemoryEvidence(record: MemoryRecord, focus: readonly string[], maximumChars: number): MemoryEvidence` | Implements the project memory evidence operation. | function | exported | [line 316](../../src/evidence-agent/model/source-evidence.ts#L316) |
+| `projectPassageEvidence(record: MemoryRecord, passage: MemoryPassage): MemoryEvidence` | Projects exactly the passage the Agent selected, bound to its parent hash. | function | exported | [line 329](../../src/evidence-agent/model/source-evidence.ts#L329) |
+| `projectMemoryEvidenceBatch(records: readonly MemoryRecord[], focusFor: (record: MemoryRecord) => readonly string[], maximumChars = MAX_READ_RESULT_CHARS, requiredSpansFor: (record: MemoryRecord) => readonly SourceSpan[] = () => []): MemoryEvidence[]` | Implements the project memory evidence batch operation. | function | exported | [line 360](../../src/evidence-agent/model/source-evidence.ts#L360) |
+## `src/evidence-agent/model/source-preview-spans.ts`
+
+| Symbol | Purpose | Kind | Visibility | Source |
+|---|---|---|---|---|
+| `candidatePreview(hit: RetrievalHit): string` | Legacy adapters may return unbounded previews; store and display the same view. | function | exported | [line 6](../../src/evidence-agent/model/source-preview-spans.ts#L6) |
+| `sourcePreviewSpans(content: string, preview: string): SourceSpan[]` | Recover only verbatim source fragments; whitespace compaction is reversible. | function | exported | [line 14](../../src/evidence-agent/model/source-preview-spans.ts#L14) |
+## `src/evidence-agent/model/work-progress.ts`
+
+| Symbol | Purpose | Kind | Visibility | Source |
+|---|---|---|---|---|
+| `object(value: unknown): Record<string, unknown>` | Implements the object operation. | function | internal | [line 24](../../src/evidence-agent/model/work-progress.ts#L24) |
+| `text(value: unknown, name: string, empty = false): string` | Implements the text operation. | function | internal | [line 28](../../src/evidence-agent/model/work-progress.ts#L28) |
+| `array(value: unknown, parse: (v: unknown) => T): T[]` | Implements the array operation. | function | internal | [line 34](../../src/evidence-agent/model/work-progress.ts#L34) |
+| `WorkProgress` | Current decisions, not a log of searches. | class | exported | [line 40](../../src/evidence-agent/model/work-progress.ts#L40) |
+| `WorkProgress.constructor(private readonly sources: WorkSources)` | Creates a work progress instance. | method | public | [line 45](../../src/evidence-agent/model/work-progress.ts#L45) |
+| `WorkProgress.apply(delta: unknown, toolCallId: string): WorkCommit` | Implements the apply operation. | method | public | [line 48](../../src/evidence-agent/model/work-progress.ts#L48) |
+| `WorkProgress.basis(item: WorkItem): string` | Implements the basis operation. | method | private | [line 131](../../src/evidence-agent/model/work-progress.ts#L131) |
+| `WorkProgress.gaps(): string[]` | Implements the gaps operation. | method | public | [line 138](../../src/evidence-agent/model/work-progress.ts#L138) |
+| `WorkProgress.assertFinish(status: unknown): void` | Validates finish and throws when invalid. | method | public | [line 149](../../src/evidence-agent/model/work-progress.ts#L149) |
+| `WorkProgress.render(): string` | Implements the render operation. | method | public | [line 154](../../src/evidence-agent/model/work-progress.ts#L154) |
+| `WorkProgress.snapshot(): WorkProgressSnapshot` | Implements the snapshot operation. | method | public | [line 160](../../src/evidence-agent/model/work-progress.ts#L160) |
+## `src/evidence-agent/model/working-memory.ts`
+
+| Symbol | Purpose | Kind | Visibility | Source |
+|---|---|---|---|---|
+| `fields(value: unknown): Record<string, unknown>` | Implements the fields operation. | function | internal | [line 21](../../src/evidence-agent/model/working-memory.ts#L21) |
+| `nonempty(value: unknown, name: string): string` | Implements the nonempty operation. | function | internal | [line 36](../../src/evidence-agent/model/working-memory.ts#L36) |
+| `IncrementalWorkingMemory` | Task-local entries. | class | exported | [line 44](../../src/evidence-agent/model/working-memory.ts#L44) |
+| `IncrementalWorkingMemory.constructor(private readonly validateReferences: (text: string) => void)` | Creates a incremental working memory instance. | method | public | [line 50](../../src/evidence-agent/model/working-memory.ts#L50) |
+| `IncrementalWorkingMemory.apply(delta: unknown, toolCallId: string): WorkingMemoryCommit` | Implements the apply operation. | method | public | [line 54](../../src/evidence-agent/model/working-memory.ts#L54) |
+| `IncrementalWorkingMemory.render(): string` | Implements the render operation. | method | public | [line 105](../../src/evidence-agent/model/working-memory.ts#L105) |
+| `IncrementalWorkingMemory.snapshot(): WorkingMemorySnapshot` | Implements the snapshot operation. | method | public | [line 111](../../src/evidence-agent/model/working-memory.ts#L111) |
 ## `src/evidence-agent/ports/read-only-navigation.ts`
 
 _No top-level functions, classes, or class methods._
@@ -888,7 +948,7 @@ _No top-level functions, classes, or class methods._
 
 | Symbol | Purpose | Kind | Visibility | Source |
 |---|---|---|---|---|
-| `runAsyncPool(items: readonly T[], slots: number, worker: (item: T, context: AsyncPoolContext) => Promise<R>): Promise<R[]>` | Runs at most one item per slot and refills a slot as soon as it settles. | function | exported | [line 7](../../src/platform/concurrency/async-pool.ts#L7) |
+| `runAsyncPool(items: readonly T[], slots: number, worker: (item: T, context: AsyncPoolContext) => Promise<R>): Promise<R[]>` | Refills free slots; on failure, stops dispatch and settles active work before rejecting. | function | exported | [line 7](../../src/platform/concurrency/async-pool.ts#L7) |
 ## `src/platform/concurrency/request-gate.ts`
 
 | Symbol | Purpose | Kind | Visibility | Source |
@@ -899,6 +959,12 @@ _No top-level functions, classes, or class methods._
 | `AsyncRequestGate.acquire(): Promise<void>` | Implements the acquire operation. | method | private | [line 29](../../src/platform/concurrency/request-gate.ts#L29) |
 | `AsyncRequestGate.release(): void` | Implements the release operation. | method | private | [line 37](../../src/platform/concurrency/request-gate.ts#L37) |
 | `AsyncRequestGate.pace(): Promise<void>` | Implements the pace operation. | method | private | [line 46](../../src/platform/concurrency/request-gate.ts#L46) |
+## `src/platform/filesystem/export-memory-scope.ts`
+
+| Symbol | Purpose | Kind | Visibility | Source |
+|---|---|---|---|---|
+| `verifyExistingExport(directory: string, stagingPath: string, paths: Iterable<string>): Promise<void>` | Reuse only an exact, regular-file export of this immutable source snapshot. | function | internal | [line 7](../../src/platform/filesystem/export-memory-scope.ts#L7) |
+| `exportMemoryScope(scopeId: string, records: readonly MemoryRecord[], exportRoot: string): Promise<ScopeExport>` | Atomically publishes the unchanged source files used by read-only navigation. | function | exported | [line 35](../../src/platform/filesystem/export-memory-scope.ts#L35) |
 ## `src/platform/filesystem/jsonl-writer.ts`
 
 | Symbol | Purpose | Kind | Visibility | Source |
@@ -912,6 +978,12 @@ _No top-level functions, classes, or class methods._
 |---|---|---|---|---|
 | `readPrivateJsonl(path: string): Promise<T[]>` | Reads private jsonl. | function | exported | [line 9](../../src/platform/filesystem/private-jsonl.ts#L9) |
 | `mergePrivateJsonl(path: string, incoming: readonly T[], identity: PrivateJsonlIdentity<T>): Promise<void>` | Merges private jsonl. | function | exported | [line 25](../../src/platform/filesystem/private-jsonl.ts#L25) |
+## `src/platform/http/runtime-fetch.ts`
+
+| Symbol | Purpose | Kind | Visibility | Source |
+|---|---|---|---|---|
+| `fetchWithHttpTimeout(input: string \| URL, init: RequestInit, timeoutMs?: number): Promise<Response>` | Implements the fetch with http timeout operation. | function | exported | [line 8](../../src/platform/http/runtime-fetch.ts#L8) |
+| `transportErrorMessage(error: unknown): string` | Implements the transport error message operation. | function | exported | [line 26](../../src/platform/http/runtime-fetch.ts#L26) |
 ## `src/platform/pi/load-model-runtime.ts`
 
 | Symbol | Purpose | Kind | Visibility | Source |
@@ -954,26 +1026,26 @@ _No top-level functions, classes, or class methods._
 
 | Symbol | Purpose | Kind | Visibility | Source |
 |---|---|---|---|---|
-| `resolvedMessageCompat(model: Model<"openai-completions">): MessageCompat` | Resolves the OpenAI message-conversion compatibility settings for a model. | function | internal | [line 61](../../src/platform/pi/openai-non-stream-transport.ts#L61) |
-| `requestHeaders(model: Model<"openai-completions">, options: SimpleStreamOptions \| undefined): Headers` | Builds authenticated JSON request headers without persisting the API key. | function | internal | [line 95](../../src/platform/pi/openai-non-stream-transport.ts#L95) |
-| `serializedTools(context: Context, compat: MessageCompat): JsonObject[] \| undefined` | Serializes Pi function tools for an OpenAI-compatible request. | function | internal | [line 115](../../src/platform/pi/openai-non-stream-transport.ts#L115) |
-| `buildPayload(model: Model<"openai-completions">, context: Context, options: SimpleStreamOptions \| undefined): JsonObject` | Builds a non-streaming Chat Completions request from Pi model context. | function | internal | [line 138](../../src/platform/pi/openai-non-stream-transport.ts#L138) |
-| `asObject(value: unknown, label: string): JsonObject` | Validates that an untrusted protocol value is a JSON object. | function | internal | [line 169](../../src/platform/pi/openai-non-stream-transport.ts#L169) |
-| `nonNegativeInteger(value: unknown): number` | Normalizes an untrusted usage counter to a non-negative integer. | function | internal | [line 176](../../src/platform/pi/openai-non-stream-transport.ts#L176) |
-| `responseUsage(model: Model<"openai-completions">, raw: ChatCompletionResponse["usage"]): Usage` | Maps provider token usage and model rates to Pi usage metadata. | function | internal | [line 184](../../src/platform/pi/openai-non-stream-transport.ts#L184) |
-| `responseText(content: unknown): string` | Extracts text from an OpenAI-compatible assistant response. | function | internal | [line 217](../../src/platform/pi/openai-non-stream-transport.ts#L217) |
-| `responseThinking(message: NonNullable<ChatCompletionChoice["message"]>): \| { thinking: string; signature: string } \| undefined` | Extracts optional reasoning text and its provider field name. | function | internal | [line 236](../../src/platform/pi/openai-non-stream-transport.ts#L236) |
-| `responseToolCalls(value: unknown): ToolCall[]` | Validates and maps complete provider tool calls to Pi tool-call blocks. | function | internal | [line 252](../../src/platform/pi/openai-non-stream-transport.ts#L252) |
-| `finishReason(value: unknown, hasToolCalls: boolean): { stopReason: StopReason; errorMessage?: string }` | Maps an OpenAI finish reason to the Pi stop-reason contract. | function | internal | [line 292](../../src/platform/pi/openai-non-stream-transport.ts#L292) |
-| `errorMessageFromBody(text: string): string` | Extracts a bounded provider error message from an HTTP response body. | function | internal | [line 313](../../src/platform/pi/openai-non-stream-transport.ts#L313) |
-| `transientHttpStatus(status: number): boolean` | Implements the transient http status operation. | function | internal | [line 328](../../src/platform/pi/openai-non-stream-transport.ts#L328) |
-| `configuredMaximumRetries(options: SimpleStreamOptions \| undefined): number` | Implements the configured maximum retries operation. | function | internal | [line 332](../../src/platform/pi/openai-non-stream-transport.ts#L332) |
-| `configuredMaximumRetryDelayMs(options: SimpleStreamOptions \| undefined): number` | Implements the configured maximum retry delay ms operation. | function | internal | [line 340](../../src/platform/pi/openai-non-stream-transport.ts#L340) |
-| `retryDelayMs(response: Response, retryIndex: number, maximumDelayMs: number): number` | Implements the retry delay ms operation. | function | internal | [line 350](../../src/platform/pi/openai-non-stream-transport.ts#L350) |
-| `attemptAbortContext(parent: AbortSignal \| undefined, timeoutMs: number \| undefined): AttemptAbortContext` | Implements the attempt abort context operation. | function | internal | [line 389](../../src/platform/pi/openai-non-stream-transport.ts#L389) |
-| `waitForRetry(delayMs: number, signal: AbortSignal \| undefined): Promise<void>` | Implements the wait for retry operation. | function | internal | [line 422](../../src/platform/pi/openai-non-stream-transport.ts#L422) |
-| `emitCompletedMessage(stream: ReturnType<typeof createAssistantMessageEventStream>, message: AssistantMessage): void` | Emits one complete assistant response through the Pi event protocol. | function | internal | [line 442](../../src/platform/pi/openai-non-stream-transport.ts#L442) |
-| `openAINonStreamingStreamFn(genericModel, context, options)` | Executes one non-streaming Chat Completions request and exposes it as a Pi event stream. | function | exported | [line 515](../../src/platform/pi/openai-non-stream-transport.ts#L515) |
+| `resolvedMessageCompat(model: Model<"openai-completions">): MessageCompat` | Resolves the OpenAI message-conversion compatibility settings for a model. | function | internal | [line 62](../../src/platform/pi/openai-non-stream-transport.ts#L62) |
+| `requestHeaders(model: Model<"openai-completions">, options: SimpleStreamOptions \| undefined): Headers` | Builds authenticated JSON request headers without persisting the API key. | function | internal | [line 96](../../src/platform/pi/openai-non-stream-transport.ts#L96) |
+| `serializedTools(context: Context, compat: MessageCompat): JsonObject[] \| undefined` | Serializes Pi function tools for an OpenAI-compatible request. | function | internal | [line 116](../../src/platform/pi/openai-non-stream-transport.ts#L116) |
+| `buildPayload(model: Model<"openai-completions">, context: Context, options: SimpleStreamOptions \| undefined): JsonObject` | Builds a non-streaming Chat Completions request from Pi model context. | function | internal | [line 139](../../src/platform/pi/openai-non-stream-transport.ts#L139) |
+| `asObject(value: unknown, label: string): JsonObject` | Validates that an untrusted protocol value is a JSON object. | function | internal | [line 170](../../src/platform/pi/openai-non-stream-transport.ts#L170) |
+| `nonNegativeInteger(value: unknown): number` | Normalizes an untrusted usage counter to a non-negative integer. | function | internal | [line 177](../../src/platform/pi/openai-non-stream-transport.ts#L177) |
+| `responseUsage(model: Model<"openai-completions">, raw: ChatCompletionResponse["usage"]): Usage` | Maps provider token usage and model rates to Pi usage metadata. | function | internal | [line 185](../../src/platform/pi/openai-non-stream-transport.ts#L185) |
+| `responseText(content: unknown): string` | Extracts text from an OpenAI-compatible assistant response. | function | internal | [line 218](../../src/platform/pi/openai-non-stream-transport.ts#L218) |
+| `responseThinking(message: NonNullable<ChatCompletionChoice["message"]>): \| { thinking: string; signature: string } \| undefined` | Extracts optional reasoning text and its provider field name. | function | internal | [line 237](../../src/platform/pi/openai-non-stream-transport.ts#L237) |
+| `responseToolCalls(value: unknown): ToolCall[]` | Validates and maps complete provider tool calls to Pi tool-call blocks. | function | internal | [line 253](../../src/platform/pi/openai-non-stream-transport.ts#L253) |
+| `finishReason(value: unknown, hasToolCalls: boolean): { stopReason: StopReason; errorMessage?: string }` | Maps an OpenAI finish reason to the Pi stop-reason contract. | function | internal | [line 293](../../src/platform/pi/openai-non-stream-transport.ts#L293) |
+| `errorMessageFromBody(text: string): string` | Extracts a bounded provider error message from an HTTP response body. | function | internal | [line 314](../../src/platform/pi/openai-non-stream-transport.ts#L314) |
+| `transientHttpStatus(status: number): boolean` | Implements the transient http status operation. | function | internal | [line 329](../../src/platform/pi/openai-non-stream-transport.ts#L329) |
+| `configuredMaximumRetries(options: SimpleStreamOptions \| undefined): number` | Implements the configured maximum retries operation. | function | internal | [line 333](../../src/platform/pi/openai-non-stream-transport.ts#L333) |
+| `configuredMaximumRetryDelayMs(options: SimpleStreamOptions \| undefined): number` | Implements the configured maximum retry delay ms operation. | function | internal | [line 341](../../src/platform/pi/openai-non-stream-transport.ts#L341) |
+| `retryDelayMs(response: Response, retryIndex: number, maximumDelayMs: number): number` | Implements the retry delay ms operation. | function | internal | [line 351](../../src/platform/pi/openai-non-stream-transport.ts#L351) |
+| `attemptAbortContext(parent: AbortSignal \| undefined, timeoutMs: number \| undefined): AttemptAbortContext` | Implements the attempt abort context operation. | function | internal | [line 390](../../src/platform/pi/openai-non-stream-transport.ts#L390) |
+| `waitForRetry(delayMs: number, signal: AbortSignal \| undefined): Promise<void>` | Implements the wait for retry operation. | function | internal | [line 423](../../src/platform/pi/openai-non-stream-transport.ts#L423) |
+| `emitCompletedMessage(stream: ReturnType<typeof createAssistantMessageEventStream>, message: AssistantMessage): void` | Emits one complete assistant response through the Pi event protocol. | function | internal | [line 443](../../src/platform/pi/openai-non-stream-transport.ts#L443) |
+| `openAINonStreamingStreamFn(genericModel, context, options)` | Executes one non-streaming Chat Completions request and exposes it as a Pi event stream. | function | exported | [line 516](../../src/platform/pi/openai-non-stream-transport.ts#L516) |
 ## `src/platform/security/protected-environment.ts`
 
 | Symbol | Purpose | Kind | Visibility | Source |
@@ -999,47 +1071,46 @@ _No top-level functions, classes, or class methods._
 |---|---|---|---|---|
 | `compareRecords(a: MemoryRecord, b: MemoryRecord): number` | Compares records. | function | internal | [line 87](../../src/platform/sqlite/pimem-store.ts#L87) |
 | `recordFingerprint(record: MemoryRecord): string` | Implements the record fingerprint operation. | function | internal | [line 98](../../src/platform/sqlite/pimem-store.ts#L98) |
-| `isExistingTargetError(error: unknown): boolean` | Checks whether existing target error. | function | internal | [line 112](../../src/platform/sqlite/pimem-store.ts#L112) |
-| `validateEmbeddingProfile(profile: EmbeddingProfile): void` | Validates embedding profile. | function | internal | [line 120](../../src/platform/sqlite/pimem-store.ts#L120) |
-| `MemoryStore` | Implements memory store. | class | exported | [line 128](../../src/platform/sqlite/pimem-store.ts#L128) |
-| `MemoryStore.constructor(databasePath: string)` | Creates a memory store instance. | method | public | [line 144](../../src/platform/sqlite/pimem-store.ts#L144) |
-| `MemoryStore.close(): void` | Closes owned resources. | method | public | [line 220](../../src/platform/sqlite/pimem-store.ts#L220) |
-| `MemoryStore.ingestScope(scopeId: string, records: MemoryRecord[]): ScopeIngestStatus` | Atomically persists one immutable memory scope and reports whether it was inserted or reused. | method | public | [line 231](../../src/platform/sqlite/pimem-store.ts#L231) |
-| `MemoryStore.appendMemoryRequest(request: AppendMemoryRequest): AppendMemoryResult` | Appends immutable source messages while the online scope is ingesting. | method | public | [line 302](../../src/platform/sqlite/pimem-store.ts#L302) |
-| `MemoryStore.hasPendingAppendRequests(scopeId: string): boolean` | Checks whether pending append requests. | method | public | [line 444](../../src/platform/sqlite/pimem-store.ts#L444) |
-| `MemoryStore.markAppendRequestComplete(requestId: string, requestHash: string): void` | Implements the mark append request complete operation. | method | public | [line 451](../../src/platform/sqlite/pimem-store.ts#L451) |
-| `MemoryStore.getOnlineScopeState(scopeId: string): OnlineScopeState \| undefined` | Returns online scope state. | method | public | [line 461](../../src/platform/sqlite/pimem-store.ts#L461) |
-| `MemoryStore.sealOnlineScope(scopeId: string): OnlineScopeState` | Implements the seal online scope operation. | method | public | [line 468](../../src/platform/sqlite/pimem-store.ts#L468) |
-| `MemoryStore.recordsInTurnRange(scopeId: string, sessionId: string, startTurnIndex: number, count: number): MemoryRecord[]` | Implements the records in turn range operation. | method | private | [line 503](../../src/platform/sqlite/pimem-store.ts#L503) |
-| `MemoryStore.ensureEvidenceFactIndex(scopeId: string): EvidenceFactIndexStatus` | Builds or validates the deterministic sidecar index for one scope. | method | public | [line 529](../../src/platform/sqlite/pimem-store.ts#L529) |
-| `MemoryStore.expandEvidenceOperator(scopeId: string, request: SearchRequest, context: EvidenceOperatorSearchContext, seedHits: readonly StoreSearchHit[]): StoreSearchHit[]` | Expands hybrid/FTS seeds through the versioned database fact index. | method | public | [line 534](../../src/platform/sqlite/pimem-store.ts#L534) |
-| `MemoryStore.searchLexical(scopeId: string, request: SearchRequest): StoreSearchHit[]` | Searches lexical. | method | public | [line 543](../../src/platform/sqlite/pimem-store.ts#L543) |
-| `MemoryStore.search(scopeId: string, request: SearchRequest): StoreSearchHit[]` | Executes filtered FTS5 search and returns finalized retrieval hits. | method | public | [line 547](../../src/platform/sqlite/pimem-store.ts#L547) |
-| `MemoryStore.read(scopeId: string, memoryIds: string[], contextBefore = 0, contextAfter = 0): MemoryRecord[]` | Reads exact memories by ID within one scope. | method | public | [line 551](../../src/platform/sqlite/pimem-store.ts#L551) |
-| `MemoryStore.getRecords(scopeId: string, memoryIds: string[]): MemoryRecord[]` | Returns records. | method | public | [line 596](../../src/platform/sqlite/pimem-store.ts#L596) |
-| `MemoryStore.listScopeRecords(scopeId: string): MemoryRecord[]` | Implements the list scope records operation. | method | public | [line 613](../../src/platform/sqlite/pimem-store.ts#L613) |
-| `MemoryStore.listScopeIds(): string[]` | Lists immutable memory scope IDs in stable order for whole-corpus derived-index publication. | method | public | [line 627](../../src/platform/sqlite/pimem-store.ts#L627) |
-| `MemoryStore.assertEmbeddingProfileConsistent(profile: EmbeddingProfile): void` | Validates embedding profile consistent and throws when invalid. | method | private | [line 634](../../src/platform/sqlite/pimem-store.ts#L634) |
-| `MemoryStore.getEmbeddingIndexStatus(scopeId: string, profile: EmbeddingProfile): EmbeddingIndexStatus` | Returns embedding index status. | method | public | [line 660](../../src/platform/sqlite/pimem-store.ts#L660) |
-| `MemoryStore.listMissingEmbeddingRecords(scopeId: string, profile: EmbeddingProfile): MemoryRecord[]` | Implements the list missing embedding records operation. | method | public | [line 715](../../src/platform/sqlite/pimem-store.ts#L715) |
-| `MemoryStore.storeEmbeddingBatch(records: readonly MemoryRecord[], profile: EmbeddingProfile, vectors: readonly (readonly number[])[]): StoreEmbeddingBatchResult` | Implements the store embedding batch operation. | method | public | [line 734](../../src/platform/sqlite/pimem-store.ts#L734) |
-| `MemoryStore.beginVectorIndexGeneration(config: VectorIndexGenerationConfig): VectorIndexGenerationStatus` | Implements the begin vector index generation operation. | method | public | [line 821](../../src/platform/sqlite/pimem-store.ts#L821) |
-| `MemoryStore.enqueueStoredScopeEmbeddingsForVectorGeneration(generationId: string, scopeId: string, profile: EmbeddingProfile): number` | Implements the enqueue stored scope embeddings for vector generation operation. | method | public | [line 827](../../src/platform/sqlite/pimem-store.ts#L827) |
-| `MemoryStore.getVectorIndexGeneration(generationId: string): VectorIndexGenerationStatus` | Returns vector index generation. | method | public | [line 839](../../src/platform/sqlite/pimem-store.ts#L839) |
-| `MemoryStore.sealVectorIndexGeneration(generationId: string): VectorIndexGenerationStatus` | Implements the seal vector index generation operation. | method | public | [line 845](../../src/platform/sqlite/pimem-store.ts#L845) |
-| `MemoryStore.claimVectorSyncBatch(generationId: string, limit: number, leaseMs: number, nowMs = Date.now()): VectorSyncClaim[]` | Implements the claim vector sync batch operation. | method | public | [line 851](../../src/platform/sqlite/pimem-store.ts#L851) |
-| `MemoryStore.completeVectorSyncBatch(generationId: string, sequenceIds: readonly number[]): void` | Implements the complete vector sync batch operation. | method | public | [line 865](../../src/platform/sqlite/pimem-store.ts#L865) |
-| `MemoryStore.releaseVectorSyncBatch(generationId: string, sequenceIds: readonly number[], error: unknown): void` | Implements the release vector sync batch operation. | method | public | [line 872](../../src/platform/sqlite/pimem-store.ts#L872) |
-| `MemoryStore.beginVectorIndexVerification(generationId: string): VectorIndexGenerationStatus` | Implements the begin vector index verification operation. | method | public | [line 880](../../src/platform/sqlite/pimem-store.ts#L880) |
-| `MemoryStore.markVectorIndexGenerationReady(generationId: string, observedVectorCount: number): VectorIndexGenerationStatus` | Implements the mark vector index generation ready operation. | method | public | [line 886](../../src/platform/sqlite/pimem-store.ts#L886) |
-| `MemoryStore.failVectorIndexGeneration(generationId: string, error: unknown): void` | Implements the fail vector index generation operation. | method | public | [line 896](../../src/platform/sqlite/pimem-store.ts#L896) |
-| `MemoryStore.assertVectorIndexGenerationReady(generationId: string): VectorIndexGenerationStatus` | Validates vector index generation ready and throws when invalid. | method | public | [line 900](../../src/platform/sqlite/pimem-store.ts#L900) |
-| `MemoryStore.listVectorGenerationScopeCounts(generationId: string): Array<{ scopeId: string; count: number }>` | Implements the list vector generation scope counts operation. | method | public | [line 906](../../src/platform/sqlite/pimem-store.ts#L906) |
-| `MemoryStore.getVectorGenerationScopeCount(generationId: string, scopeId: string): number` | Returns one generation's durable vector count for a scope-level fail-closed retrieval check. | method | public | [line 912](../../src/platform/sqlite/pimem-store.ts#L912) |
-| `MemoryStore.listStoredEmbeddings(scopeId: string, profile: EmbeddingProfile, request: Omit<SearchRequest, "queries" \| "limit"> = {}): StoredEmbeddingRecord[]` | Implements the list stored embeddings operation. | method | public | [line 922](../../src/platform/sqlite/pimem-store.ts#L922) |
-| `MemoryStore.findMentionedMemoryIds(scopeId: string, text: string): string[]` | Implements the find mentioned memory ids operation. | method | public | [line 974](../../src/platform/sqlite/pimem-store.ts#L974) |
-| `MemoryStore.exportScope(scopeId: string, exportRoot: string): Promise<ScopeExport>` | Writes a sanitized, permission-restricted filesystem export of one scope. | method | public | [line 980](../../src/platform/sqlite/pimem-store.ts#L980) |
-| `MemoryStore.create(databasePath: string): Promise<MemoryStore>` | Implements the create operation. | method | public | [line 1057](../../src/platform/sqlite/pimem-store.ts#L1057) |
+| `validateEmbeddingProfile(profile: EmbeddingProfile): void` | Validates embedding profile. | function | internal | [line 112](../../src/platform/sqlite/pimem-store.ts#L112) |
+| `MemoryStore` | Implements memory store. | class | exported | [line 120](../../src/platform/sqlite/pimem-store.ts#L120) |
+| `MemoryStore.constructor(databasePath: string)` | Creates a memory store instance. | method | public | [line 136](../../src/platform/sqlite/pimem-store.ts#L136) |
+| `MemoryStore.close(): void` | Closes owned resources. | method | public | [line 212](../../src/platform/sqlite/pimem-store.ts#L212) |
+| `MemoryStore.ingestScope(scopeId: string, records: MemoryRecord[]): ScopeIngestStatus` | Atomically persists one immutable memory scope and reports whether it was inserted or reused. | method | public | [line 223](../../src/platform/sqlite/pimem-store.ts#L223) |
+| `MemoryStore.appendMemoryRequest(request: AppendMemoryRequest): AppendMemoryResult` | Appends immutable source messages while the online scope is ingesting. | method | public | [line 294](../../src/platform/sqlite/pimem-store.ts#L294) |
+| `MemoryStore.hasPendingAppendRequests(scopeId: string): boolean` | Checks whether pending append requests. | method | public | [line 436](../../src/platform/sqlite/pimem-store.ts#L436) |
+| `MemoryStore.markAppendRequestComplete(requestId: string, requestHash: string): void` | Implements the mark append request complete operation. | method | public | [line 443](../../src/platform/sqlite/pimem-store.ts#L443) |
+| `MemoryStore.getOnlineScopeState(scopeId: string): OnlineScopeState \| undefined` | Returns online scope state. | method | public | [line 453](../../src/platform/sqlite/pimem-store.ts#L453) |
+| `MemoryStore.sealOnlineScope(scopeId: string): OnlineScopeState` | Implements the seal online scope operation. | method | public | [line 460](../../src/platform/sqlite/pimem-store.ts#L460) |
+| `MemoryStore.recordsInTurnRange(scopeId: string, sessionId: string, startTurnIndex: number, count: number): MemoryRecord[]` | Implements the records in turn range operation. | method | private | [line 495](../../src/platform/sqlite/pimem-store.ts#L495) |
+| `MemoryStore.ensureEvidenceFactIndex(scopeId: string): EvidenceFactIndexStatus` | Builds or validates the deterministic sidecar index for one scope. | method | public | [line 521](../../src/platform/sqlite/pimem-store.ts#L521) |
+| `MemoryStore.expandEvidenceOperator(scopeId: string, request: SearchRequest, context: EvidenceOperatorSearchContext, seedHits: readonly StoreSearchHit[]): StoreSearchHit[]` | Expands hybrid/FTS seeds through the versioned database fact index. | method | public | [line 526](../../src/platform/sqlite/pimem-store.ts#L526) |
+| `MemoryStore.searchLexical(scopeId: string, request: SearchRequest): StoreSearchHit[]` | Searches lexical. | method | public | [line 535](../../src/platform/sqlite/pimem-store.ts#L535) |
+| `MemoryStore.search(scopeId: string, request: SearchRequest): StoreSearchHit[]` | Executes filtered FTS5 search and returns finalized retrieval hits. | method | public | [line 539](../../src/platform/sqlite/pimem-store.ts#L539) |
+| `MemoryStore.read(scopeId: string, memoryIds: string[], contextBefore = 0, contextAfter = 0): MemoryRecord[]` | Reads exact memories by ID within one scope. | method | public | [line 543](../../src/platform/sqlite/pimem-store.ts#L543) |
+| `MemoryStore.getRecords(scopeId: string, memoryIds: string[]): MemoryRecord[]` | Returns records. | method | public | [line 588](../../src/platform/sqlite/pimem-store.ts#L588) |
+| `MemoryStore.listScopeRecords(scopeId: string): MemoryRecord[]` | Implements the list scope records operation. | method | public | [line 605](../../src/platform/sqlite/pimem-store.ts#L605) |
+| `MemoryStore.listScopeIds(): string[]` | Lists immutable memory scope IDs in stable order for whole-corpus derived-index publication. | method | public | [line 619](../../src/platform/sqlite/pimem-store.ts#L619) |
+| `MemoryStore.assertEmbeddingProfileConsistent(profile: EmbeddingProfile): void` | Validates embedding profile consistent and throws when invalid. | method | private | [line 626](../../src/platform/sqlite/pimem-store.ts#L626) |
+| `MemoryStore.getEmbeddingIndexStatus(scopeId: string, profile: EmbeddingProfile): EmbeddingIndexStatus` | Returns embedding index status. | method | public | [line 652](../../src/platform/sqlite/pimem-store.ts#L652) |
+| `MemoryStore.listMissingEmbeddingRecords(scopeId: string, profile: EmbeddingProfile): MemoryRecord[]` | Implements the list missing embedding records operation. | method | public | [line 707](../../src/platform/sqlite/pimem-store.ts#L707) |
+| `MemoryStore.storeEmbeddingBatch(records: readonly MemoryRecord[], profile: EmbeddingProfile, vectors: readonly (readonly number[])[]): StoreEmbeddingBatchResult` | Implements the store embedding batch operation. | method | public | [line 726](../../src/platform/sqlite/pimem-store.ts#L726) |
+| `MemoryStore.beginVectorIndexGeneration(config: VectorIndexGenerationConfig): VectorIndexGenerationStatus` | Implements the begin vector index generation operation. | method | public | [line 813](../../src/platform/sqlite/pimem-store.ts#L813) |
+| `MemoryStore.enqueueStoredScopeEmbeddingsForVectorGeneration(generationId: string, scopeId: string, profile: EmbeddingProfile): number` | Implements the enqueue stored scope embeddings for vector generation operation. | method | public | [line 819](../../src/platform/sqlite/pimem-store.ts#L819) |
+| `MemoryStore.getVectorIndexGeneration(generationId: string): VectorIndexGenerationStatus` | Returns vector index generation. | method | public | [line 831](../../src/platform/sqlite/pimem-store.ts#L831) |
+| `MemoryStore.sealVectorIndexGeneration(generationId: string): VectorIndexGenerationStatus` | Implements the seal vector index generation operation. | method | public | [line 837](../../src/platform/sqlite/pimem-store.ts#L837) |
+| `MemoryStore.claimVectorSyncBatch(generationId: string, limit: number, leaseMs: number, nowMs = Date.now()): VectorSyncClaim[]` | Implements the claim vector sync batch operation. | method | public | [line 843](../../src/platform/sqlite/pimem-store.ts#L843) |
+| `MemoryStore.completeVectorSyncBatch(generationId: string, sequenceIds: readonly number[]): void` | Implements the complete vector sync batch operation. | method | public | [line 857](../../src/platform/sqlite/pimem-store.ts#L857) |
+| `MemoryStore.releaseVectorSyncBatch(generationId: string, sequenceIds: readonly number[], error: unknown): void` | Implements the release vector sync batch operation. | method | public | [line 864](../../src/platform/sqlite/pimem-store.ts#L864) |
+| `MemoryStore.beginVectorIndexVerification(generationId: string): VectorIndexGenerationStatus` | Implements the begin vector index verification operation. | method | public | [line 872](../../src/platform/sqlite/pimem-store.ts#L872) |
+| `MemoryStore.markVectorIndexGenerationReady(generationId: string, observedVectorCount: number): VectorIndexGenerationStatus` | Implements the mark vector index generation ready operation. | method | public | [line 878](../../src/platform/sqlite/pimem-store.ts#L878) |
+| `MemoryStore.failVectorIndexGeneration(generationId: string, error: unknown): void` | Implements the fail vector index generation operation. | method | public | [line 888](../../src/platform/sqlite/pimem-store.ts#L888) |
+| `MemoryStore.assertVectorIndexGenerationReady(generationId: string): VectorIndexGenerationStatus` | Validates vector index generation ready and throws when invalid. | method | public | [line 892](../../src/platform/sqlite/pimem-store.ts#L892) |
+| `MemoryStore.listVectorGenerationScopeCounts(generationId: string): Array<{ scopeId: string; count: number }>` | Implements the list vector generation scope counts operation. | method | public | [line 898](../../src/platform/sqlite/pimem-store.ts#L898) |
+| `MemoryStore.getVectorGenerationScopeCount(generationId: string, scopeId: string): number` | Returns one generation's durable vector count for a scope-level fail-closed retrieval check. | method | public | [line 904](../../src/platform/sqlite/pimem-store.ts#L904) |
+| `MemoryStore.listStoredEmbeddings(scopeId: string, profile: EmbeddingProfile, request: Omit<SearchRequest, "queries" \| "limit"> = {}): StoredEmbeddingRecord[]` | Implements the list stored embeddings operation. | method | public | [line 914](../../src/platform/sqlite/pimem-store.ts#L914) |
+| `MemoryStore.findMentionedMemoryIds(scopeId: string, text: string): string[]` | Implements the find mentioned memory ids operation. | method | public | [line 967](../../src/platform/sqlite/pimem-store.ts#L967) |
+| `MemoryStore.exportScope(scopeId: string, exportRoot: string): Promise<ScopeExport>` | Writes a sanitized, permission-restricted filesystem export of one scope. | method | public | [line 973](../../src/platform/sqlite/pimem-store.ts#L973) |
+| `MemoryStore.create(databasePath: string): Promise<MemoryStore>` | Implements the create operation. | method | public | [line 977](../../src/platform/sqlite/pimem-store.ts#L977) |
 ## `src/platform/sqlite/vector-index-state-store.ts`
 
 | Symbol | Purpose | Kind | Visibility | Source |
@@ -1115,42 +1186,42 @@ _No top-level functions, classes, or class methods._
 
 | Symbol | Purpose | Kind | Visibility | Source |
 |---|---|---|---|---|
-| `makeSearchRequest(input: SearchOperatorInput, order: SearchOrder = "relevance"): SearchRequest` | Implements the make search request operation. | function | internal | [line 17](../../src/retrieval/adapters/operators/builtins.ts#L17) |
-| `mergeHits(preferred: readonly RetrievalHit[], fallback: readonly RetrievalHit[], limit: number): RetrievalHit[]` | Merges hits. | function | internal | [line 32](../../src/retrieval/adapters/operators/builtins.ts#L32) |
-| `hybridOperator(store: SearchOperatorStore): SearchOperator` | Implements the hybrid operator operation. | function | internal | [line 48](../../src/retrieval/adapters/operators/builtins.ts#L48) |
-| `lexicalOperator(store: SearchOperatorStore): SearchOperator` | Implements the lexical operator operation. | function | internal | [line 68](../../src/retrieval/adapters/operators/builtins.ts#L68) |
-| `chronologicalOperator(store: SearchOperatorStore): SearchOperator` | Implements the chronological operator operation. | function | internal | [line 90](../../src/retrieval/adapters/operators/builtins.ts#L90) |
-| `evidenceIndexOperator(store: SearchOperatorStore, operator: "temporal" \| "numeric"): SearchOperator` | Implements the evidence index operator operation. | function | internal | [line 110](../../src/retrieval/adapters/operators/builtins.ts#L110) |
-| `builtInSearchOperators(store: SearchOperatorStore): SearchOperator[]` | Creates the built-in search-operator implementations over one injected store. | function | exported | [line 173](../../src/retrieval/adapters/operators/builtins.ts#L173) |
+| `makeSearchRequest(input: SearchOperatorInput, order: SearchOrder = "relevance"): SearchRequest` | Implements the make search request operation. | function | internal | [line 19](../../src/retrieval/adapters/operators/builtins.ts#L19) |
+| `mergeHits(preferred: readonly RetrievalHit[], fallback: readonly RetrievalHit[], limit: number): RetrievalHit[]` | Merges hits. | function | internal | [line 34](../../src/retrieval/adapters/operators/builtins.ts#L34) |
+| `hybridOperator(store: SearchOperatorStore): SearchOperator` | Implements the hybrid operator operation. | function | internal | [line 51](../../src/retrieval/adapters/operators/builtins.ts#L51) |
+| `lexicalOperator(store: SearchOperatorStore): SearchOperator` | Implements the lexical operator operation. | function | internal | [line 71](../../src/retrieval/adapters/operators/builtins.ts#L71) |
+| `chronologicalOperator(store: SearchOperatorStore): SearchOperator` | Implements the chronological operator operation. | function | internal | [line 93](../../src/retrieval/adapters/operators/builtins.ts#L93) |
+| `evidenceIndexOperator(store: SearchOperatorStore, operator: "temporal" \| "numeric"): SearchOperator` | Implements the evidence index operator operation. | function | internal | [line 113](../../src/retrieval/adapters/operators/builtins.ts#L113) |
+| `builtInSearchOperators(store: SearchOperatorStore): SearchOperator[]` | Creates the built-in search-operator implementations over one injected store. | function | exported | [line 178](../../src/retrieval/adapters/operators/builtins.ts#L178) |
 ## `src/retrieval/adapters/qdrant/client.ts`
 
 | Symbol | Purpose | Kind | Visibility | Source |
 |---|---|---|---|---|
-| `QdrantHttpError` | Implements qdrant http error. | class | exported | [line 87](../../src/retrieval/adapters/qdrant/client.ts#L87) |
-| `QdrantHttpError.constructor(readonly status: number, message: string)` | Creates a qdrant http error instance. | method | public | [line 88](../../src/retrieval/adapters/qdrant/client.ts#L88) |
-| `positiveInteger(value: number, label: string): number` | Implements the positive integer operation. | function | internal | [line 94](../../src/retrieval/adapters/qdrant/client.ts#L94) |
-| `nonNegativeInteger(value: number, label: string): number` | Implements the non negative integer operation. | function | internal | [line 101](../../src/retrieval/adapters/qdrant/client.ts#L101) |
-| `nonEmpty(value: string, label: string): string` | Implements the non empty operation. | function | internal | [line 108](../../src/retrieval/adapters/qdrant/client.ts#L108) |
-| `objectValue(value: unknown, label: string): Record<string, unknown>` | Implements the object value operation. | function | internal | [line 113](../../src/retrieval/adapters/qdrant/client.ts#L113) |
-| `memoryRole(value: unknown, label: string): MemoryRole` | Implements the memory role operation. | function | internal | [line 120](../../src/retrieval/adapters/qdrant/client.ts#L120) |
-| `dateTimeMilliseconds(value: string, label: string): number` | Implements the date time milliseconds operation. | function | internal | [line 127](../../src/retrieval/adapters/qdrant/client.ts#L127) |
-| `dateTime(value: string, label: string): string` | Implements the date time operation. | function | internal | [line 149](../../src/retrieval/adapters/qdrant/client.ts#L149) |
-| `collectionName(value: string): string` | Collects ion name. | function | internal | [line 154](../../src/retrieval/adapters/qdrant/client.ts#L154) |
-| `baseUrl(value: string): string` | Implements the base url operation. | function | internal | [line 161](../../src/retrieval/adapters/qdrant/client.ts#L161) |
-| `finiteVector(vector: readonly number[], dimensions?: number): number[]` | Implements the finite vector operation. | function | internal | [line 178](../../src/retrieval/adapters/qdrant/client.ts#L178) |
-| `responseSignal(timeoutMs: number, signal?: AbortSignal): AbortSignal` | Implements the response signal operation. | function | internal | [line 188](../../src/retrieval/adapters/qdrant/client.ts#L188) |
-| `responseMessage(status: number, body: string): string` | Implements the response message operation. | function | internal | [line 193](../../src/retrieval/adapters/qdrant/client.ts#L193) |
-| `optimizerStatus(value: unknown): string` | Implements the optimizer status operation. | function | internal | [line 200](../../src/retrieval/adapters/qdrant/client.ts#L200) |
-| `parseCollectionInfo(value: unknown): QdrantCollectionInfo` | Parses collection info. | function | internal | [line 208](../../src/retrieval/adapters/qdrant/client.ts#L208) |
-| `QdrantClient` | Minimal HTTP adapter; Qdrant is never trusted as the source of memory text. | class | exported | [line 251](../../src/retrieval/adapters/qdrant/client.ts#L251) |
-| `QdrantClient.constructor(options: QdrantClientOptions)` | Creates a qdrant client instance. | method | public | [line 257](../../src/retrieval/adapters/qdrant/client.ts#L257) |
-| `QdrantClient.request(method: string, path: string, options: { body?: unknown; signal?: AbortSignal; acceptedStatuses?: readonly number[]; } = {}): Promise<{ status: number; value: unknown }>` | Implements the request operation. | method | private | [line 264](../../src/retrieval/adapters/qdrant/client.ts#L264) |
-| `QdrantClient.getCollection(name: string, signal?: AbortSignal): Promise<QdrantCollectionInfo \| undefined>` | Returns collection. | method | public | [line 295](../../src/retrieval/adapters/qdrant/client.ts#L295) |
-| `QdrantClient.ensurePayloadIndex(collection: string, fieldName: string, fieldSchema: Record<string, unknown>, signal?: AbortSignal): Promise<void>` | Implements the ensure payload index operation. | method | private | [line 310](../../src/retrieval/adapters/qdrant/client.ts#L310) |
-| `QdrantClient.ensureCollection(spec: QdrantCollectionSpec, signal?: AbortSignal): Promise<void>` | Implements the ensure collection operation. | method | public | [line 326](../../src/retrieval/adapters/qdrant/client.ts#L326) |
-| `QdrantClient.upsert(collection: string, dimensions: number, points: readonly QdrantVectorPoint[], signal?: AbortSignal): Promise<void>` | Implements the upsert operation. | method | public | [line 387](../../src/retrieval/adapters/qdrant/client.ts#L387) |
-| `QdrantClient.count(request: QdrantCountRequest): Promise<number>` | Implements the count operation. | method | public | [line 426](../../src/retrieval/adapters/qdrant/client.ts#L426) |
-| `QdrantClient.search(request: QdrantSearchRequest): Promise<QdrantSearchHit[]>` | Performs a search. | method | public | [line 450](../../src/retrieval/adapters/qdrant/client.ts#L450) |
+| `QdrantHttpError` | Implements qdrant http error. | class | exported | [line 88](../../src/retrieval/adapters/qdrant/client.ts#L88) |
+| `QdrantHttpError.constructor(readonly status: number, message: string)` | Creates a qdrant http error instance. | method | public | [line 89](../../src/retrieval/adapters/qdrant/client.ts#L89) |
+| `positiveInteger(value: number, label: string): number` | Implements the positive integer operation. | function | internal | [line 95](../../src/retrieval/adapters/qdrant/client.ts#L95) |
+| `nonNegativeInteger(value: number, label: string): number` | Implements the non negative integer operation. | function | internal | [line 102](../../src/retrieval/adapters/qdrant/client.ts#L102) |
+| `nonEmpty(value: string, label: string): string` | Implements the non empty operation. | function | internal | [line 109](../../src/retrieval/adapters/qdrant/client.ts#L109) |
+| `objectValue(value: unknown, label: string): Record<string, unknown>` | Implements the object value operation. | function | internal | [line 114](../../src/retrieval/adapters/qdrant/client.ts#L114) |
+| `memoryRole(value: unknown, label: string): MemoryRole` | Implements the memory role operation. | function | internal | [line 121](../../src/retrieval/adapters/qdrant/client.ts#L121) |
+| `dateTimeMilliseconds(value: string, label: string): number` | Implements the date time milliseconds operation. | function | internal | [line 128](../../src/retrieval/adapters/qdrant/client.ts#L128) |
+| `dateTime(value: string, label: string): string` | Implements the date time operation. | function | internal | [line 136](../../src/retrieval/adapters/qdrant/client.ts#L136) |
+| `collectionName(value: string): string` | Collects ion name. | function | internal | [line 141](../../src/retrieval/adapters/qdrant/client.ts#L141) |
+| `baseUrl(value: string): string` | Implements the base url operation. | function | internal | [line 148](../../src/retrieval/adapters/qdrant/client.ts#L148) |
+| `finiteVector(vector: readonly number[], dimensions?: number): number[]` | Implements the finite vector operation. | function | internal | [line 165](../../src/retrieval/adapters/qdrant/client.ts#L165) |
+| `responseSignal(timeoutMs: number, signal?: AbortSignal): AbortSignal` | Implements the response signal operation. | function | internal | [line 175](../../src/retrieval/adapters/qdrant/client.ts#L175) |
+| `responseMessage(status: number, body: string): string` | Implements the response message operation. | function | internal | [line 180](../../src/retrieval/adapters/qdrant/client.ts#L180) |
+| `optimizerStatus(value: unknown): string` | Implements the optimizer status operation. | function | internal | [line 187](../../src/retrieval/adapters/qdrant/client.ts#L187) |
+| `parseCollectionInfo(value: unknown): QdrantCollectionInfo` | Parses collection info. | function | internal | [line 195](../../src/retrieval/adapters/qdrant/client.ts#L195) |
+| `QdrantClient` | Minimal HTTP adapter; Qdrant is never trusted as the source of memory text. | class | exported | [line 238](../../src/retrieval/adapters/qdrant/client.ts#L238) |
+| `QdrantClient.constructor(options: QdrantClientOptions)` | Creates a qdrant client instance. | method | public | [line 244](../../src/retrieval/adapters/qdrant/client.ts#L244) |
+| `QdrantClient.request(method: string, path: string, options: { body?: unknown; signal?: AbortSignal; acceptedStatuses?: readonly number[]; } = {}): Promise<{ status: number; value: unknown }>` | Implements the request operation. | method | private | [line 251](../../src/retrieval/adapters/qdrant/client.ts#L251) |
+| `QdrantClient.getCollection(name: string, signal?: AbortSignal): Promise<QdrantCollectionInfo \| undefined>` | Returns collection. | method | public | [line 282](../../src/retrieval/adapters/qdrant/client.ts#L282) |
+| `QdrantClient.ensurePayloadIndex(collection: string, fieldName: string, fieldSchema: Record<string, unknown>, signal?: AbortSignal): Promise<void>` | Implements the ensure payload index operation. | method | private | [line 297](../../src/retrieval/adapters/qdrant/client.ts#L297) |
+| `QdrantClient.ensureCollection(spec: QdrantCollectionSpec, signal?: AbortSignal): Promise<void>` | Implements the ensure collection operation. | method | public | [line 313](../../src/retrieval/adapters/qdrant/client.ts#L313) |
+| `QdrantClient.upsert(collection: string, dimensions: number, points: readonly QdrantVectorPoint[], signal?: AbortSignal): Promise<void>` | Implements the upsert operation. | method | public | [line 374](../../src/retrieval/adapters/qdrant/client.ts#L374) |
+| `QdrantClient.count(request: QdrantCountRequest): Promise<number>` | Implements the count operation. | method | public | [line 413](../../src/retrieval/adapters/qdrant/client.ts#L413) |
+| `QdrantClient.search(request: QdrantSearchRequest): Promise<QdrantSearchHit[]>` | Performs a search. | method | public | [line 437](../../src/retrieval/adapters/qdrant/client.ts#L437) |
 ## `src/retrieval/adapters/qdrant/dense-retriever.ts`
 
 | Symbol | Purpose | Kind | Visibility | Source |
@@ -1173,38 +1244,39 @@ _No top-level functions, classes, or class methods._
 | `QdrantVectorSynchronizer` | Publishes an immutable, resumable Qdrant generation from SQLite outbox rows. | class | exported | [line 147](../../src/retrieval/adapters/qdrant/vector-synchronizer.ts#L147) |
 | `QdrantVectorSynchronizer.constructor(private readonly options: QdrantVectorSynchronizerOptions)` | Creates a qdrant vector synchronizer instance. | method | public | [line 154](../../src/retrieval/adapters/qdrant/vector-synchronizer.ts#L154) |
 | `QdrantVectorSynchronizer.initialize(signal?: AbortSignal): Promise<VectorIndexGenerationStatus>` | Implements the initialize operation. | method | public | [line 166](../../src/retrieval/adapters/qdrant/vector-synchronizer.ts#L166) |
-| `QdrantVectorSynchronizer.worker(signal?: AbortSignal): Promise<number>` | Implements the worker operation. | method | private | [line 185](../../src/retrieval/adapters/qdrant/vector-synchronizer.ts#L185) |
-| `QdrantVectorSynchronizer.synchronizeAvailable(signal?: AbortSignal): Promise<number>` | Implements the synchronize available operation. | method | public | [line 215](../../src/retrieval/adapters/qdrant/vector-synchronizer.ts#L215) |
-| `QdrantVectorSynchronizer.waitForIndex(signal?: AbortSignal): Promise<void>` | Implements the wait for index operation. | method | private | [line 224](../../src/retrieval/adapters/qdrant/vector-synchronizer.ts#L224) |
-| `QdrantVectorSynchronizer.verifyCounts(status: VectorIndexGenerationStatus, signal?: AbortSignal): Promise<number>` | Implements the verify counts operation. | method | private | [line 248](../../src/retrieval/adapters/qdrant/vector-synchronizer.ts#L248) |
-| `QdrantVectorSynchronizer.finalize(signal?: AbortSignal): Promise<VectorIndexGenerationStatus>` | Implements the finalize operation. | method | public | [line 276](../../src/retrieval/adapters/qdrant/vector-synchronizer.ts#L276) |
+| `QdrantVectorSynchronizer.worker(signal: AbortSignal \| undefined, shouldStop: () => boolean, onFailure: (error: unknown) => void): Promise<number>` | Implements the worker operation. | method | private | [line 185](../../src/retrieval/adapters/qdrant/vector-synchronizer.ts#L185) |
+| `QdrantVectorSynchronizer.synchronizeAvailable(signal?: AbortSignal): Promise<number>` | Implements the synchronize available operation. | method | public | [line 217](../../src/retrieval/adapters/qdrant/vector-synchronizer.ts#L217) |
+| `QdrantVectorSynchronizer.waitForIndex(signal?: AbortSignal): Promise<void>` | Implements the wait for index operation. | method | private | [line 237](../../src/retrieval/adapters/qdrant/vector-synchronizer.ts#L237) |
+| `QdrantVectorSynchronizer.verifyCounts(status: VectorIndexGenerationStatus, signal?: AbortSignal): Promise<number>` | Implements the verify counts operation. | method | private | [line 261](../../src/retrieval/adapters/qdrant/vector-synchronizer.ts#L261) |
+| `QdrantVectorSynchronizer.finalize(signal?: AbortSignal): Promise<VectorIndexGenerationStatus>` | Implements the finalize operation. | method | public | [line 289](../../src/retrieval/adapters/qdrant/vector-synchronizer.ts#L289) |
 ## `src/retrieval/adapters/sqlite/database-evidence-operators.ts`
 
 | Symbol | Purpose | Kind | Visibility | Source |
 |---|---|---|---|---|
-| `compareRecords(left: MemoryRecord, right: MemoryRecord): number` | Compares records. | function | internal | [line 53](../../src/retrieval/adapters/sqlite/database-evidence-operators.ts#L53) |
-| `operatorTokens(queries: readonly string[]): string[]` | Implements the operator tokens operation. | function | internal | [line 70](../../src/retrieval/adapters/sqlite/database-evidence-operators.ts#L70) |
-| `DatabaseEvidenceOperators` | Owns all deterministic, database-backed evidence indexing and expansion. | class | exported | [line 85](../../src/retrieval/adapters/sqlite/database-evidence-operators.ts#L85) |
-| `DatabaseEvidenceOperators.constructor(db: DatabaseSync)` | Creates a database evidence operators instance. | method | public | [line 89](../../src/retrieval/adapters/sqlite/database-evidence-operators.ts#L89) |
-| `DatabaseEvidenceOperators.ensureScope(scopeId: string): EvidenceFactIndexStatus` | Lazily materializes facts for one scope and is idempotent. | method | public | [line 95](../../src/retrieval/adapters/sqlite/database-evidence-operators.ts#L95) |
-| `DatabaseEvidenceOperators.expand(scopeId: string, request: SearchRequest, context: EvidenceOperatorSearchContext, seedHits: readonly DatabaseOperatorSeed[]): DatabaseOperatorHit[]` | Implements the expand operation. | method | public | [line 99](../../src/retrieval/adapters/sqlite/database-evidence-operators.ts#L99) |
-| `DatabaseEvidenceOperators.matchesRequestFilters(record: MemoryRecord, request: SearchRequest): boolean` | Implements the matches request filters operation. | method | private | [line 111](../../src/retrieval/adapters/sqlite/database-evidence-operators.ts#L111) |
-| `DatabaseEvidenceOperators.hit(record: MemoryRecord, query: string, matchedQueries: readonly string[], retriever: DatabaseOperatorHit["retriever"], rank: number): DatabaseOperatorHit` | Implements the hit operation. | method | private | [line 128](../../src/retrieval/adapters/sqlite/database-evidence-operators.ts#L128) |
-| `DatabaseEvidenceOperators.expandTimeline(scopeId: string, request: SearchRequest, context: EvidenceOperatorSearchContext, seedHits: readonly DatabaseOperatorSeed[]): DatabaseOperatorHit[]` | Implements the expand timeline operation. | method | private | [line 146](../../src/retrieval/adapters/sqlite/database-evidence-operators.ts#L146) |
-| `DatabaseEvidenceOperators.expandAggregate(scopeId: string, request: SearchRequest, context: EvidenceOperatorSearchContext, seedHits: readonly DatabaseOperatorSeed[]): DatabaseOperatorHit[]` | Implements the expand aggregate operation. | method | private | [line 263](../../src/retrieval/adapters/sqlite/database-evidence-operators.ts#L263) |
+| `sessionQueryPaths(seeds: readonly DatabaseOperatorSeed[]): Map<string, Set<string>>` | Implements the session query paths operation. | function | internal | [line 40](../../src/retrieval/adapters/sqlite/database-evidence-operators.ts#L40) |
+| `compareRecords(left: MemoryRecord, right: MemoryRecord): number` | Compares records. | function | internal | [line 67](../../src/retrieval/adapters/sqlite/database-evidence-operators.ts#L67) |
+| `operatorTokens(queries: readonly string[]): string[]` | Implements the operator tokens operation. | function | internal | [line 77](../../src/retrieval/adapters/sqlite/database-evidence-operators.ts#L77) |
+| `DatabaseEvidenceOperators` | Owns all deterministic, database-backed evidence indexing and expansion. | class | exported | [line 92](../../src/retrieval/adapters/sqlite/database-evidence-operators.ts#L92) |
+| `DatabaseEvidenceOperators.constructor(db: DatabaseSync)` | Creates a database evidence operators instance. | method | public | [line 96](../../src/retrieval/adapters/sqlite/database-evidence-operators.ts#L96) |
+| `DatabaseEvidenceOperators.ensureScope(scopeId: string): EvidenceFactIndexStatus` | Lazily materializes facts for one scope and is idempotent. | method | public | [line 102](../../src/retrieval/adapters/sqlite/database-evidence-operators.ts#L102) |
+| `DatabaseEvidenceOperators.expand(scopeId: string, request: SearchRequest, context: EvidenceOperatorSearchContext, seedHits: readonly DatabaseOperatorSeed[]): DatabaseOperatorHit[]` | Implements the expand operation. | method | public | [line 106](../../src/retrieval/adapters/sqlite/database-evidence-operators.ts#L106) |
+| `DatabaseEvidenceOperators.matchesRequestFilters(record: MemoryRecord, request: SearchRequest): boolean` | Implements the matches request filters operation. | method | private | [line 119](../../src/retrieval/adapters/sqlite/database-evidence-operators.ts#L119) |
+| `DatabaseEvidenceOperators.hit(record: MemoryRecord, query: string, matchedQueries: readonly string[], retriever: DatabaseOperatorHit["retriever"], rank: number): DatabaseOperatorHit` | Implements the hit operation. | method | private | [line 139](../../src/retrieval/adapters/sqlite/database-evidence-operators.ts#L139) |
+| `DatabaseEvidenceOperators.expandTimeline(scopeId: string, request: SearchRequest, context: EvidenceOperatorSearchContext, seedHits: readonly DatabaseOperatorSeed[]): DatabaseOperatorHit[]` | Implements the expand timeline operation. | method | private | [line 157](../../src/retrieval/adapters/sqlite/database-evidence-operators.ts#L157) |
+| `DatabaseEvidenceOperators.expandAggregate(scopeId: string, request: SearchRequest, context: EvidenceOperatorSearchContext, seedHits: readonly DatabaseOperatorSeed[]): DatabaseOperatorHit[]` | Implements the expand aggregate operation. | method | private | [line 276](../../src/retrieval/adapters/sqlite/database-evidence-operators.ts#L276) |
 ## `src/retrieval/adapters/sqlite/evidence-fact-index.ts`
 
 | Symbol | Purpose | Kind | Visibility | Source |
 |---|---|---|---|---|
-| `EvidenceFactIndex` | Versioned, deterministic sidecar index for immutable raw memories. | class | exported | [line 22](../../src/retrieval/adapters/sqlite/evidence-fact-index.ts#L22) |
-| `EvidenceFactIndex.constructor(db: DatabaseSync)` | Creates a evidence fact index instance. | method | public | [line 25](../../src/retrieval/adapters/sqlite/evidence-fact-index.ts#L25) |
-| `EvidenceFactIndex.ensureScope(scopeId: string): EvidenceFactIndexStatus` | Implements the ensure scope operation. | method | public | [line 30](../../src/retrieval/adapters/sqlite/evidence-fact-index.ts#L30) |
-| `EvidenceFactIndex.initializeSchema(): void` | Implements the initialize schema operation. | method | private | [line 37](../../src/retrieval/adapters/sqlite/evidence-fact-index.ts#L37) |
-| `EvidenceFactIndex.assertContentHashes(scopeId: string): void` | Validates content hashes and throws when invalid. | method | private | [line 82](../../src/retrieval/adapters/sqlite/evidence-fact-index.ts#L82) |
-| `EvidenceFactIndex.listUnindexedRows(scopeId: string): MemoryRow[]` | Implements the list unindexed rows operation. | method | private | [line 96](../../src/retrieval/adapters/sqlite/evidence-fact-index.ts#L96) |
-| `EvidenceFactIndex.indexRows(rows: readonly MemoryRow[]): void` | Indexes rows. | method | private | [line 110](../../src/retrieval/adapters/sqlite/evidence-fact-index.ts#L110) |
-| `EvidenceFactIndex.indexRecord(row: MemoryRow, insertNumeric: ReturnType<DatabaseSync["prepare"]>, insertTemporal: ReturnType<DatabaseSync["prepare"]>, markIndexed: ReturnType<DatabaseSync["prepare"]>): void` | Indexes record. | method | private | [line 139](../../src/retrieval/adapters/sqlite/evidence-fact-index.ts#L139) |
-| `EvidenceFactIndex.status(scopeId: string): EvidenceFactIndexStatus` | Implements the status operation. | method | private | [line 198](../../src/retrieval/adapters/sqlite/evidence-fact-index.ts#L198) |
+| `EvidenceFactIndex` | Versioned, deterministic sidecar index for immutable raw memories. | class | exported | [line 23](../../src/retrieval/adapters/sqlite/evidence-fact-index.ts#L23) |
+| `EvidenceFactIndex.constructor(db: DatabaseSync)` | Creates a evidence fact index instance. | method | public | [line 26](../../src/retrieval/adapters/sqlite/evidence-fact-index.ts#L26) |
+| `EvidenceFactIndex.ensureScope(scopeId: string): EvidenceFactIndexStatus` | Implements the ensure scope operation. | method | public | [line 31](../../src/retrieval/adapters/sqlite/evidence-fact-index.ts#L31) |
+| `EvidenceFactIndex.initializeSchema(): void` | Implements the initialize schema operation. | method | private | [line 38](../../src/retrieval/adapters/sqlite/evidence-fact-index.ts#L38) |
+| `EvidenceFactIndex.assertContentHashes(scopeId: string): void` | Validates content hashes and throws when invalid. | method | private | [line 83](../../src/retrieval/adapters/sqlite/evidence-fact-index.ts#L83) |
+| `EvidenceFactIndex.listUnindexedRows(scopeId: string): MemoryRow[]` | Implements the list unindexed rows operation. | method | private | [line 97](../../src/retrieval/adapters/sqlite/evidence-fact-index.ts#L97) |
+| `EvidenceFactIndex.indexRows(rows: readonly MemoryRow[]): void` | Indexes rows. | method | private | [line 111](../../src/retrieval/adapters/sqlite/evidence-fact-index.ts#L111) |
+| `EvidenceFactIndex.indexRecord(row: MemoryRow, insertNumeric: ReturnType<DatabaseSync["prepare"]>, insertTemporal: ReturnType<DatabaseSync["prepare"]>, markIndexed: ReturnType<DatabaseSync["prepare"]>): void` | Indexes record. | method | private | [line 140](../../src/retrieval/adapters/sqlite/evidence-fact-index.ts#L140) |
+| `EvidenceFactIndex.status(scopeId: string): EvidenceFactIndexStatus` | Implements the status operation. | method | private | [line 200](../../src/retrieval/adapters/sqlite/evidence-fact-index.ts#L200) |
 ## `src/retrieval/adapters/sqlite/exact-dense-retriever.ts`
 
 | Symbol | Purpose | Kind | Visibility | Source |
@@ -1219,17 +1291,16 @@ _No top-level functions, classes, or class methods._
 |---|---|---|---|---|
 | `quoteFtsToken(token: string): string` | Implements the quote fts token operation. | function | internal | [line 23](../../src/retrieval/adapters/sqlite/lexical-retriever.ts#L23) |
 | `rawFtsTokens(text: string): string[]` | Implements the raw fts tokens operation. | function | internal | [line 27](../../src/retrieval/adapters/sqlite/lexical-retriever.ts#L27) |
-| `ftsQueryPlans(text: string): FtsQueryPlan[]` | Builds strict-to-broad FTS plans from query text alone. | function | internal | [line 38](../../src/retrieval/adapters/sqlite/lexical-retriever.ts#L38) |
-| `SqliteLexicalRetriever` | SQLite FTS adapter; query planning and ranking stay inside retrieval. | class | exported | [line 73](../../src/retrieval/adapters/sqlite/lexical-retriever.ts#L73) |
-| `SqliteLexicalRetriever.constructor(private readonly db: DatabaseSync)` | Creates a sqlite lexical retriever instance. | method | public | [line 74](../../src/retrieval/adapters/sqlite/lexical-retriever.ts#L74) |
-| `SqliteLexicalRetriever.search(scopeId: string, request: SearchRequest): RetrievalHit[]` | Performs a search. | method | public | [line 76](../../src/retrieval/adapters/sqlite/lexical-retriever.ts#L76) |
+| `ftsQueryPlans(text: string): FtsQueryPlan[]` | Builds strict-to-broad FTS plans from query text alone. | function | internal | [line 37](../../src/retrieval/adapters/sqlite/lexical-retriever.ts#L37) |
+| `SqliteLexicalRetriever` | SQLite FTS adapter; query planning and ranking stay inside retrieval. | class | exported | [line 70](../../src/retrieval/adapters/sqlite/lexical-retriever.ts#L70) |
+| `SqliteLexicalRetriever.constructor(private readonly db: DatabaseSync)` | Creates a sqlite lexical retriever instance. | method | public | [line 71](../../src/retrieval/adapters/sqlite/lexical-retriever.ts#L71) |
+| `SqliteLexicalRetriever.search(scopeId: string, request: SearchRequest): RetrievalHit[]` | Performs a search. | method | public | [line 73](../../src/retrieval/adapters/sqlite/lexical-retriever.ts#L73) |
 ## `src/retrieval/finalize-search-hits.ts`
 
 | Symbol | Purpose | Kind | Visibility | Source |
 |---|---|---|---|---|
-| `timestampValue(hit: RetrievalHit): string` | Implements the timestamp value operation. | function | internal | [line 3](../../src/retrieval/finalize-search-hits.ts#L3) |
-| `finalizeSearchHits(relevanceOrderedHits: readonly RetrievalHit[], request: SearchRequest, limit: number): RetrievalHit[]` | Finalizes search hits. | function | exported | [line 7](../../src/retrieval/finalize-search-hits.ts#L7) |
-| `selectSessionBreadth(relevanceOrderedHits: readonly RetrievalHit[], maxPerSession: number, limit: number): RetrievalHit[]` | Breadth-first admission only when the caller explicitly asks for a session cap. | function | internal | [line 44](../../src/retrieval/finalize-search-hits.ts#L44) |
+| `finalizeSearchHits(relevanceOrderedHits: readonly T[], request: SearchRequest, limit: number): T[]` | Finalizes search hits. | function | exported | [line 5](../../src/retrieval/finalize-search-hits.ts#L5) |
+| `selectSessionBreadth(relevanceOrderedHits: readonly T[], maxPerSession: number, limit: number): T[]` | Breadth-first admission only when the caller explicitly asks for a session cap. | function | internal | [line 28](../../src/retrieval/finalize-search-hits.ts#L28) |
 ## `src/retrieval/index-scope-embeddings.ts`
 
 | Symbol | Purpose | Kind | Visibility | Source |
@@ -1246,6 +1317,12 @@ _No top-level functions, classes, or class methods._
 ## `src/retrieval/model/embedding.ts`
 
 _No top-level functions, classes, or class methods._
+## `src/retrieval/model/hit-provenance.ts`
+
+| Symbol | Purpose | Kind | Visibility | Source |
+|---|---|---|---|---|
+| `unionBy(left: readonly T[] \| undefined, right: readonly T[] \| undefined, key: (value: T) => string): T[] \| undefined` | Implements the union by operation. | function | internal | [line 3](../../src/retrieval/model/hit-provenance.ts#L3) |
+| `mergeHitProvenance(left: RetrievalHit, right: RetrievalHit): RetrievalHit` | Keep all source coordinates when different discovery routes meet. | function | exported | [line 10](../../src/retrieval/model/hit-provenance.ts#L10) |
 ## `src/retrieval/model/operator.ts`
 
 _No top-level functions, classes, or class methods._
@@ -1267,7 +1344,17 @@ _No top-level functions, classes, or class methods._
 | `assertPassageMatchesRecord(passage: MemoryPassage, record: MemoryRecord): void` | Validates passage matches record and throws when invalid. | function | exported | [line 318](../../src/retrieval/model/passage.ts#L318) |
 ## `src/retrieval/model/search.ts`
 
-_No top-level functions, classes, or class methods._
+| Symbol | Purpose | Kind | Visibility | Source |
+|---|---|---|---|---|
+| `searchQueryFingerprint(query: string): string` | Shared identity for repeated queries and per-query coverage accounting. | function | exported | [line 185](../../src/retrieval/model/search.ts#L185) |
+## `src/retrieval/model/source-time.ts`
+
+| Symbol | Purpose | Kind | Visibility | Source |
+|---|---|---|---|---|
+| `calendarTimestamp(year: number, month: number, day: number): number \| undefined` | Calendar validation must not silently roll February 31 into March. | function | exported | [line 6](../../src/retrieval/model/source-time.ts#L6) |
+| `parseSourceTimestamp(value: string \| undefined): number \| undefined` | ISO instants and legacy source dates; timestamps without a zone use UTC. | function | exported | [line 15](../../src/retrieval/model/source-time.ts#L15) |
+| `sourceCalendarTimestamp(value: string \| undefined): number \| undefined` | Relative calendar expressions refer to the date written at the source. | function | exported | [line 38](../../src/retrieval/model/source-time.ts#L38) |
+| `compareMemoryChronology(left: MemoryRecord, right: MemoryRecord, direction: 1 \| -1 = 1): number` | Missing/invalid timestamps remain last in both chronological directions. | function | exported | [line 45](../../src/retrieval/model/source-time.ts#L45) |
 ## `src/retrieval/operators/hybrid-search.ts`
 
 | Symbol | Purpose | Kind | Visibility | Source |
@@ -1275,27 +1362,27 @@ _No top-level functions, classes, or class methods._
 | `metadataFilterKey(filter: RetrievalMetadataFilter): string` | Implements the metadata filter key operation. | function | internal | [line 40](../../src/retrieval/operators/hybrid-search.ts#L40) |
 | `mergeMetadataFilters(...groups: Array<readonly RetrievalMetadataFilter[] \| undefined>): RetrievalMetadataFilter[] \| undefined` | Merges metadata filters. | function | internal | [line 49](../../src/retrieval/operators/hybrid-search.ts#L49) |
 | `reserveMetadataRoutes(rankings: readonly (readonly T[])[]): T[]` | Implements the reserve metadata routes operation. | function | internal | [line 59](../../src/retrieval/operators/hybrid-search.ts#L59) |
-| `compareFinal(left: RankedHybridHit, right: RankedHybridHit): number` | Compares final. | function | internal | [line 79](../../src/retrieval/operators/hybrid-search.ts#L79) |
-| `HybridRetriever` | Implements hybrid retriever. | class | exported | [line 89](../../src/retrieval/operators/hybrid-search.ts#L89) |
-| `HybridRetriever.constructor(rawStore: HybridSearchStore, embedder: Embedder, denseRetriever: DenseRetriever)` | Creates a hybrid retriever instance. | method | public | [line 97](../../src/retrieval/operators/hybrid-search.ts#L97) |
-| `HybridRetriever.getRetrievalMetadata(): RetrievalMetadata` | Returns retrieval metadata. | method | public | [line 107](../../src/retrieval/operators/hybrid-search.ts#L107) |
-| `HybridRetriever.snapshotRetrievalMetrics(): RetrievalMetricsSnapshot` | Implements the snapshot retrieval metrics operation. | method | public | [line 125](../../src/retrieval/operators/hybrid-search.ts#L125) |
-| `HybridRetriever.search(scopeId: string, request: SearchRequest, signal?: AbortSignal): Promise<RetrievalHit[]>` | Performs a search. | method | public | [line 136](../../src/retrieval/operators/hybrid-search.ts#L136) |
-| `HybridRetriever.searchLexical(scopeId: string, request: SearchRequest): RetrievalHit[]` | Searches lexical. | method | public | [line 432](../../src/retrieval/operators/hybrid-search.ts#L432) |
-| `HybridRetriever.expandEvidenceOperator(scopeId: string, request: SearchRequest, context: EvidenceOperatorSearchContext, seedHits: readonly RetrievalHit[]): RetrievalHit[]` | Implements the expand evidence operator operation. | method | public | [line 439](../../src/retrieval/operators/hybrid-search.ts#L439) |
-| `HybridRetriever.read(scopeId: string, memoryIds: string[], contextBefore = 0, contextAfter = 0): MemoryRecord[]` | Reads the requested value. | method | public | [line 453](../../src/retrieval/operators/hybrid-search.ts#L453) |
-| `HybridRetriever.getRecords(scopeId: string, memoryIds: string[]): MemoryRecord[]` | Returns records. | method | public | [line 467](../../src/retrieval/operators/hybrid-search.ts#L467) |
-| `HybridRetriever.findMentionedMemoryIds(scopeId: string, text: string): string[]` | Implements the find mentioned memory ids operation. | method | public | [line 471](../../src/retrieval/operators/hybrid-search.ts#L471) |
+| `compareFinal(left: RankedHybridHit, right: RankedHybridHit): number` | Compares final. | function | internal | [line 80](../../src/retrieval/operators/hybrid-search.ts#L80) |
+| `HybridRetriever` | Implements hybrid retriever. | class | exported | [line 90](../../src/retrieval/operators/hybrid-search.ts#L90) |
+| `HybridRetriever.constructor(rawStore: HybridSearchStore, embedder: Embedder, denseRetriever: DenseRetriever)` | Creates a hybrid retriever instance. | method | public | [line 98](../../src/retrieval/operators/hybrid-search.ts#L98) |
+| `HybridRetriever.getRetrievalMetadata(): RetrievalMetadata` | Returns retrieval metadata. | method | public | [line 108](../../src/retrieval/operators/hybrid-search.ts#L108) |
+| `HybridRetriever.snapshotRetrievalMetrics(): RetrievalMetricsSnapshot` | Implements the snapshot retrieval metrics operation. | method | public | [line 126](../../src/retrieval/operators/hybrid-search.ts#L126) |
+| `HybridRetriever.search(scopeId: string, request: SearchRequest, signal?: AbortSignal): Promise<RetrievalHit[]>` | Performs a search. | method | public | [line 137](../../src/retrieval/operators/hybrid-search.ts#L137) |
+| `HybridRetriever.searchLexical(scopeId: string, request: SearchRequest): RetrievalHit[]` | Searches lexical. | method | public | [line 420](../../src/retrieval/operators/hybrid-search.ts#L420) |
+| `HybridRetriever.expandEvidenceOperator(scopeId: string, request: SearchRequest, context: EvidenceOperatorSearchContext, seedHits: readonly RetrievalHit[]): RetrievalHit[]` | Implements the expand evidence operator operation. | method | public | [line 427](../../src/retrieval/operators/hybrid-search.ts#L427) |
+| `HybridRetriever.read(scopeId: string, memoryIds: string[], contextBefore = 0, contextAfter = 0): MemoryRecord[]` | Reads the requested value. | method | public | [line 441](../../src/retrieval/operators/hybrid-search.ts#L441) |
+| `HybridRetriever.getRecords(scopeId: string, memoryIds: string[]): MemoryRecord[]` | Returns records. | method | public | [line 455](../../src/retrieval/operators/hybrid-search.ts#L455) |
+| `HybridRetriever.findMentionedMemoryIds(scopeId: string, text: string): string[]` | Implements the find mentioned memory ids operation. | method | public | [line 459](../../src/retrieval/operators/hybrid-search.ts#L459) |
 ## `src/retrieval/operators/numeric-operator.ts`
 
 | Symbol | Purpose | Kind | Visibility | Source |
 |---|---|---|---|---|
-| `numericValue(raw: string): number \| undefined` | Implements the numeric value operation. | function | internal | [line 27](../../src/retrieval/operators/numeric-operator.ts#L27) |
-| `extractNumericMentions(content: string): Omit<NumericFact, "valueKind">[]` | Implements the extract numeric mentions operation. | function | internal | [line 32](../../src/retrieval/operators/numeric-operator.ts#L32) |
-| `classifyValue(content: string, mention: Omit<NumericFact, "valueKind">): NumericValueKind` | Implements the classify value operation. | function | internal | [line 98](../../src/retrieval/operators/numeric-operator.ts#L98) |
-| `extractNumericFacts(content: string): NumericFact[]` | Implements the extract numeric facts operation. | function | exported | [line 117](../../src/retrieval/operators/numeric-operator.ts#L117) |
-| `rowKey(hit: RetrievalHit, mention: NumericFact): string` | Implements the row key operation. | function | internal | [line 124](../../src/retrieval/operators/numeric-operator.ts#L124) |
-| `buildAggregateOperatorResult(hits: readonly RetrievalHit[]): EvidenceOperatorResult` | Builds aggregate operator result. | function | exported | [line 128](../../src/retrieval/operators/numeric-operator.ts#L128) |
+| `numericValue(raw: string): number \| undefined` | Implements the numeric value operation. | function | internal | [line 30](../../src/retrieval/operators/numeric-operator.ts#L30) |
+| `extractNumericMentions(content: string): Omit<NumericFact, "valueKind">[]` | Implements the extract numeric mentions operation. | function | internal | [line 35](../../src/retrieval/operators/numeric-operator.ts#L35) |
+| `classifyValue(content: string, mention: Omit<NumericFact, "valueKind">): NumericValueKind` | Implements the classify value operation. | function | internal | [line 109](../../src/retrieval/operators/numeric-operator.ts#L109) |
+| `extractNumericFacts(content: string): NumericFact[]` | Implements the extract numeric facts operation. | function | exported | [line 132](../../src/retrieval/operators/numeric-operator.ts#L132) |
+| `rowKey(hit: RetrievalHit, mention: NumericFact): string` | Implements the row key operation. | function | internal | [line 139](../../src/retrieval/operators/numeric-operator.ts#L139) |
+| `buildAggregateOperatorResult(hits: readonly RetrievalHit[]): EvidenceOperatorResult` | Builds aggregate operator result. | function | exported | [line 143](../../src/retrieval/operators/numeric-operator.ts#L143) |
 ## `src/retrieval/operators/temporal-operator.ts`
 
 | Symbol | Purpose | Kind | Visibility | Source |
@@ -1303,13 +1390,13 @@ _No top-level functions, classes, or class methods._
 | `isoDate(timestamp: number): string` | Checks whether o date. | function | internal | [line 68](../../src/retrieval/operators/temporal-operator.ts#L68) |
 | `startOfDay(timestamp: number): number` | Implements the start of day operation. | function | internal | [line 72](../../src/retrieval/operators/temporal-operator.ts#L72) |
 | `addCalendarUnits(timestamp: number, amount: number, unit: "day" \| "week" \| "month" \| "year"): number` | Implements the add calendar units operation. | function | internal | [line 77](../../src/retrieval/operators/temporal-operator.ts#L77) |
-| `cleanQuestion(question: string): string` | Implements the clean question operation. | function | internal | [line 90](../../src/retrieval/operators/temporal-operator.ts#L90) |
-| `parseAmount(value: string): number \| undefined` | Parses amount. | function | internal | [line 100](../../src/retrieval/operators/temporal-operator.ts#L100) |
-| `resolveTemporalQuestion(question: string, questionDate?: string): TemporalQuestionPlan` | Resolves temporal question. | function | exported | [line 105](../../src/retrieval/operators/temporal-operator.ts#L105) |
-| `temporalAuxiliaryRequest(request: SearchRequest, plan: TemporalQuestionPlan): SearchRequest \| undefined` | Implements the temporal auxiliary request operation. | function | exported | [line 193](../../src/retrieval/operators/temporal-operator.ts#L193) |
-| `explicitDates(content: string, fallbackYear?: number): string[]` | Implements the explicit dates operation. | function | internal | [line 214](../../src/retrieval/operators/temporal-operator.ts#L214) |
-| `extractTemporalFacts(content: string, sourceTimestamp?: string): TemporalFact[]` | Extracts deterministic event-date facts from one immutable memory turn. | function | exported | [line 239](../../src/retrieval/operators/temporal-operator.ts#L239) |
-| `buildTimelineOperatorResult(hits: readonly RetrievalHit[], question: string, questionDate?: string, auxiliaryRequest?: SearchRequest): EvidenceOperatorResult` | Builds timeline operator result. | function | exported | [line 338](../../src/retrieval/operators/temporal-operator.ts#L338) |
+| `cleanQuestion(question: string): string` | Implements the clean question operation. | function | internal | [line 97](../../src/retrieval/operators/temporal-operator.ts#L97) |
+| `parseAmount(value: string): number \| undefined` | Parses amount. | function | internal | [line 107](../../src/retrieval/operators/temporal-operator.ts#L107) |
+| `resolveTemporalQuestion(question: string, questionDate?: string): TemporalQuestionPlan` | Resolves temporal question. | function | exported | [line 115](../../src/retrieval/operators/temporal-operator.ts#L115) |
+| `relativeDate(timestamp: number, amount: number, unit: "day" \| "week" \| "month" \| "year"): string \| undefined` | Implements the relative date operation. | function | internal | [line 134](../../src/retrieval/operators/temporal-operator.ts#L134) |
+| `temporalAuxiliaryRequest(request: SearchRequest, plan: TemporalQuestionPlan): SearchRequest \| undefined` | Implements the temporal auxiliary request operation. | function | exported | [line 140](../../src/retrieval/operators/temporal-operator.ts#L140) |
+| `extractTemporalFacts(content: string, sourceTimestamp?: string): TemporalFact[]` | Extracts deterministic event-date facts from one immutable memory turn. | function | exported | [line 166](../../src/retrieval/operators/temporal-operator.ts#L166) |
+| `buildTimelineOperatorResult(hits: readonly RetrievalHit[], question: string, questionDate?: string, auxiliaryRequest?: SearchRequest): EvidenceOperatorResult` | Builds timeline operator result. | function | exported | [line 266](../../src/retrieval/operators/temporal-operator.ts#L266) |
 ## `src/retrieval/ports/dense-retriever.ts`
 
 | Symbol | Purpose | Kind | Visibility | Source |
@@ -1339,54 +1426,68 @@ _No top-level functions, classes, or class methods._
 | Symbol | Purpose | Kind | Visibility | Source |
 |---|---|---|---|---|
 | `tokenizeForPiMemHybrid(text: string): string[]` | Tokenizes candidate text for PiMem hybrid BM25 after \W+ cleanup. | function | exported | [line 39](../../src/retrieval/ranking.ts#L39) |
-| `bm25Scores(query: string, documents: readonly string[], options: Readonly<Bm25Options> = PIMEM_HYBRID_BM25_OPTIONS): number[]` | Implements the bm25 scores operation. | function | exported | [line 48](../../src/retrieval/ranking.ts#L48) |
-| `reciprocalRankFusion(rankings: readonly (readonly number[])[], k = 60, documentCount?: number): number[]` | Returns one RRF score per zero-based document index. | function | exported | [line 112](../../src/retrieval/ranking.ts#L112) |
+| `bm25Scores(query: string, documents: readonly string[], options: Readonly<Bm25Options> = PIMEM_HYBRID_BM25_OPTIONS): number[]` | Implements the bm25 scores operation. | function | exported | [line 49](../../src/retrieval/ranking.ts#L49) |
+| `reciprocalRankFusion(rankings: readonly (readonly number[])[], k = 60, documentCount?: number): number[]` | Returns one RRF score per zero-based document index. | function | exported | [line 113](../../src/retrieval/ranking.ts#L113) |
 ## `src/retrieval/retrieval-profile.ts`
 
 | Symbol | Purpose | Kind | Visibility | Source |
 |---|---|---|---|---|
 | `parseRetrievalProfile(value: string \| undefined): RetrievalProfile` | Parses retrieval profile. | function | exported | [line 5](../../src/retrieval/retrieval-profile.ts#L5) |
+## `src/retrieval/search-explicit-date-routes.ts`
+
+| Symbol | Purpose | Kind | Visibility | Source |
+|---|---|---|---|---|
+| `searchExplicitDateRoutes(dense: DenseRetriever, base: DenseSearchBatchRequest, queries: readonly string[]): Map<number, DateRoute>` | Batch equal calendar windows without merging query votes or provenance. | function | exported | [line 11](../../src/retrieval/search-explicit-date-routes.ts#L11) |
 ## `src/retrieval/structured-query-constraints.ts`
 
 | Symbol | Purpose | Kind | Visibility | Source |
 |---|---|---|---|---|
-| `normalizedCalendarDate(yearText: string, monthText: string, dayText: string): string \| undefined` | Normalizes d calendar date. | function | internal | [line 5](../../src/retrieval/structured-query-constraints.ts#L5) |
-| `explicitQueryDateFilter(query: string): RetrievalMetadataFilter \| undefined` | Extracts one unambiguous, calendar-valid date already written in an Agent query. | function | exported | [line 31](../../src/retrieval/structured-query-constraints.ts#L31) |
+| `normalizedCalendarDate(yearText: string, monthText: string, dayText: string): string \| undefined` | Normalizes d calendar date. | function | internal | [line 6](../../src/retrieval/structured-query-constraints.ts#L6) |
+| `explicitQueryDateFilter(query: string): RetrievalMetadataFilter \| undefined` | Extracts one unambiguous, calendar-valid date already written in an Agent query. | function | exported | [line 27](../../src/retrieval/structured-query-constraints.ts#L27) |
 ## `src/retrieval/temporal-annotation.ts`
 
 | Symbol | Purpose | Kind | Visibility | Source |
 |---|---|---|---|---|
-| `parseSourceTimestamp(value: string \| undefined): number \| undefined` | Parses source timestamp. | function | exported | [line 4](../../src/retrieval/temporal-annotation.ts#L4) |
-| `durationParts(milliseconds: number): string` | Implements the duration parts operation. | function | internal | [line 29](../../src/retrieval/temporal-annotation.ts#L29) |
-| `temporalAnnotation(memoryTimestamp: string \| undefined, questionDate: string \| undefined): string \| undefined` | Implements the temporal annotation operation. | function | exported | [line 43](../../src/retrieval/temporal-annotation.ts#L43) |
+| `durationParts(milliseconds: number): string` | Implements the duration parts operation. | function | internal | [line 4](../../src/retrieval/temporal-annotation.ts#L4) |
+| `temporalAnnotation(memoryTimestamp: string \| undefined, questionDate: string \| undefined): string \| undefined` | Implements the temporal annotation operation. | function | exported | [line 18](../../src/retrieval/temporal-annotation.ts#L18) |
+## `src/retrieval/use-cases/candidate-set.ts`
+
+| Symbol | Purpose | Kind | Visibility | Source |
+|---|---|---|---|---|
+| `withRanks(hits: readonly RetrievalHit[], limit: number): RetrievalHit[]` | Implements the with ranks operation. | function | exported | [line 10](../../src/retrieval/use-cases/candidate-set.ts#L10) |
+| `unionCandidateSets(sets: readonly (readonly RetrievalHit[])[], limit: number): RetrievalHit[]` | Implements the union candidate sets operation. | function | exported | [line 17](../../src/retrieval/use-cases/candidate-set.ts#L17) |
+| `rrfCandidateSets(sets: readonly (readonly RetrievalHit[])[], limit: number): RetrievalHit[]` | Implements the rrf candidate sets operation. | function | exported | [line 42](../../src/retrieval/use-cases/candidate-set.ts#L42) |
+| `intersectCandidateSets(sets: readonly (readonly RetrievalHit[])[], limit: number): RetrievalHit[]` | Implements the intersect candidate sets operation. | function | exported | [line 75](../../src/retrieval/use-cases/candidate-set.ts#L75) |
+| `sortCandidateSet(hits: readonly RetrievalHit[], order: "relevance" \| "chronological" \| "reverse-chronological"): RetrievalHit[]` | Implements the sort candidate set operation. | function | exported | [line 103](../../src/retrieval/use-cases/candidate-set.ts#L103) |
+| `diversifyBySession(hits: readonly RetrievalHit[], maxPerGroup: number): RetrievalHit[]` | Implements the diversify by session operation. | function | exported | [line 116](../../src/retrieval/use-cases/candidate-set.ts#L116) |
+| `dedupeByContent(hits: readonly RetrievalHit[]): RetrievalHit[]` | Implements the dedupe by content operation. | function | exported | [line 140](../../src/retrieval/use-cases/candidate-set.ts#L140) |
+| `annotateCandidateSet(method: "temporal" \| "numeric", hits: readonly RetrievalHit[], question: string, questionDate: string \| undefined): EvidenceOperatorResult` | Implements the annotate candidate set operation. | function | exported | [line 154](../../src/retrieval/use-cases/candidate-set.ts#L154) |
+| `retainOperatorResult(result: EvidenceOperatorResult \| undefined, hits: readonly RetrievalHit[]): { operatorResult?: EvidenceOperatorResult }` | Unary transformations retain only annotations whose sources survive. | function | exported | [line 167](../../src/retrieval/use-cases/candidate-set.ts#L167) |
 ## `src/retrieval/use-cases/compose-operator.ts`
 
 | Symbol | Purpose | Kind | Visibility | Source |
 |---|---|---|---|---|
-| `normalizedText(value: string, label: string, maxLength = 240): string` | Normalizes d text. | function | internal | [line 32](../../src/retrieval/use-cases/compose-operator.ts#L32) |
-| `normalizedIdentifier(value: string, label: string): string` | Normalizes d identifier. | function | internal | [line 41](../../src/retrieval/use-cases/compose-operator.ts#L41) |
-| `normalizedLimit(value: number \| undefined, label: string): number \| undefined` | Normalizes d limit. | function | internal | [line 51](../../src/retrieval/use-cases/compose-operator.ts#L51) |
-| `normalizeDefinition(catalog: SearchOperatorCatalog, source: SearchOperatorDefinition): NormalizedDefinition` | Normalizes definition. | function | internal | [line 62](../../src/retrieval/use-cases/compose-operator.ts#L62) |
-| `withRanks(hits: readonly RetrievalHit[], limit: number): RetrievalHit[]` | Implements the with ranks operation. | function | internal | [line 284](../../src/retrieval/use-cases/compose-operator.ts#L284) |
-| `mergedMatchedQueries(left: RetrievalHit, right: RetrievalHit): string[]` | Merges d matched queries. | function | internal | [line 291](../../src/retrieval/use-cases/compose-operator.ts#L291) |
-| `mergedMetadataFilters(left: RetrievalHit, right: RetrievalHit): RetrievalHit["matchedMetadataFilters"]` | Merges d metadata filters. | function | internal | [line 301](../../src/retrieval/use-cases/compose-operator.ts#L301) |
-| `mergeHitProvenance(left: RetrievalHit, right: RetrievalHit): RetrievalHit` | Merges hit provenance. | function | internal | [line 316](../../src/retrieval/use-cases/compose-operator.ts#L316) |
-| `unionCandidateSets(sets: readonly (readonly RetrievalHit[])[], limit: number): RetrievalHit[]` | Implements the union candidate sets operation. | function | internal | [line 329](../../src/retrieval/use-cases/compose-operator.ts#L329) |
-| `rrfCandidateSets(sets: readonly (readonly RetrievalHit[])[], limit: number): RetrievalHit[]` | Implements the rrf candidate sets operation. | function | internal | [line 354](../../src/retrieval/use-cases/compose-operator.ts#L354) |
-| `intersectCandidateSets(sets: readonly (readonly RetrievalHit[])[], limit: number): RetrievalHit[]` | Implements the intersect candidate sets operation. | function | internal | [line 387](../../src/retrieval/use-cases/compose-operator.ts#L387) |
-| `sortCandidateSet(hits: readonly RetrievalHit[], order: "relevance" \| "chronological" \| "reverse-chronological"): RetrievalHit[]` | Implements the sort candidate set operation. | function | internal | [line 415](../../src/retrieval/use-cases/compose-operator.ts#L415) |
-| `diversifyBySession(hits: readonly RetrievalHit[], maxPerGroup: number): RetrievalHit[]` | Implements the diversify by session operation. | function | internal | [line 436](../../src/retrieval/use-cases/compose-operator.ts#L436) |
-| `dedupeByContent(hits: readonly RetrievalHit[]): RetrievalHit[]` | Implements the dedupe by content operation. | function | internal | [line 460](../../src/retrieval/use-cases/compose-operator.ts#L460) |
-| `annotateCandidateSet(method: "temporal" \| "numeric", hits: readonly RetrievalHit[], question: string, questionDate: string \| undefined): EvidenceOperatorResult` | Implements the annotate candidate set operation. | function | internal | [line 474](../../src/retrieval/use-cases/compose-operator.ts#L474) |
-| `requestFor(input: SearchOperatorInput): SearchRequest` | Implements the request for operation. | function | internal | [line 485](../../src/retrieval/use-cases/compose-operator.ts#L485) |
-| `intersectRoles(left: SearchOperatorInput["roles"], right: SearchOperatorInput["roles"]): SearchOperatorInput["roles"]` | Implements the intersect roles operation. | function | internal | [line 508](../../src/retrieval/use-cases/compose-operator.ts#L508) |
-| `sessionDiscoveryPolicies(steps: readonly SearchOperatorDefinitionStep[]): Map<string, SearchDiscoveryPolicy>` | Implements the session discovery policies operation. | function | internal | [line 518](../../src/retrieval/use-cases/compose-operator.ts#L518) |
-| `buildDeclarativeSearchOperator(catalog: SearchOperatorCatalog, source: SearchOperatorDefinition, definitionRevision: number): BuiltDeclarativeSearchOperator` | Validates a bounded operator graph and builds a candidate-only executable operator. | function | exported | [line 570](../../src/retrieval/use-cases/compose-operator.ts#L570) |
+| `requestFor(input: SearchOperatorInput): SearchRequest` | Implements the request for operation. | function | internal | [line 10](../../src/retrieval/use-cases/compose-operator.ts#L10) |
+| `buildDeclarativeSearchOperator(catalog: SearchOperatorCatalog, source: SearchOperatorDefinition, definitionRevision: number): BuiltDeclarativeSearchOperator` | Validates a bounded operator graph and builds a candidate-only executable operator. | function | exported | [line 28](../../src/retrieval/use-cases/compose-operator.ts#L28) |
 ## `src/retrieval/use-cases/execute-operator.ts`
 
 | Symbol | Purpose | Kind | Visibility | Source |
 |---|---|---|---|---|
-| `executeSearchOperator(registry: SearchOperatorCatalog, operatorId: string, context: SearchOperatorExecutionContext, input: SearchOperatorInput): Promise<ExecutedSearchOperator>` | Runs a registered operator and rejects candidate hits from another scope. | function | exported | [line 13](../../src/retrieval/use-cases/execute-operator.ts#L13) |
+| `executeSearchOperator(registry: SearchOperatorCatalog, operatorId: string, context: SearchOperatorExecutionContext, input: SearchOperatorInput): Promise<ExecutedSearchOperator>` | Runs a registered operator and rejects candidate hits from another scope. | function | exported | [line 16](../../src/retrieval/use-cases/execute-operator.ts#L16) |
+## `src/retrieval/use-cases/operator-definition.ts`
+
+| Symbol | Purpose | Kind | Visibility | Source |
+|---|---|---|---|---|
+| `normalizedText(value: string, label: string, maxLength = 240): string` | Normalizes d text. | function | internal | [line 16](../../src/retrieval/use-cases/operator-definition.ts#L16) |
+| `normalizedIdentifier(value: string, label: string): string` | Normalizes d identifier. | function | internal | [line 25](../../src/retrieval/use-cases/operator-definition.ts#L25) |
+| `normalizedLimit(value: number \| undefined, label: string, required = false): number \| undefined` | Normalizes d limit. | function | internal | [line 35](../../src/retrieval/use-cases/operator-definition.ts#L35) |
+| `normalizeDefinition(catalog: SearchOperatorCatalog, source: SearchOperatorDefinition): NormalizedDefinition` | Normalizes definition. | function | exported | [line 47](../../src/retrieval/use-cases/operator-definition.ts#L47) |
+## `src/retrieval/use-cases/operator-discovery.ts`
+
+| Symbol | Purpose | Kind | Visibility | Source |
+|---|---|---|---|---|
+| `intersectRoles(left: SearchOperatorInput["roles"], right: SearchOperatorInput["roles"]): SearchOperatorInput["roles"]` | Implements the intersect roles operation. | function | exported | [line 8](../../src/retrieval/use-cases/operator-discovery.ts#L8) |
+| `discoveryPolicies(steps: readonly SearchOperatorDefinitionStep[], output: string): Map<string, DiscoveryPolicy>` | Push constraints only when every consumer of a shared source permits them. | function | exported | [line 18](../../src/retrieval/use-cases/operator-discovery.ts#L18) |
 ## `src/retrieval/use-cases/operator-registry.ts`
 
 | Symbol | Purpose | Kind | Visibility | Source |
@@ -1414,12 +1515,11 @@ _No top-level functions, classes, or class methods._
 
 | Symbol | Purpose | Kind | Visibility | Source |
 |---|---|---|---|---|
-| `normalizeStrings(values: readonly string[], label: string): string[]` | Validates, trims, and deduplicates a list of search values. | function | internal | [line 66](../../src/retrieval/use-cases/search.ts#L66) |
-| `searchQueryFingerprint(query: string): string` | Creates a canonical fingerprint used to detect repeated queries. | function | internal | [line 76](../../src/retrieval/use-cases/search.ts#L76) |
-| `operatorSourceQuotes(result: EvidenceOperatorResult \| undefined): Map<string, string[]>` | Implements the operator source quotes operation. | function | internal | [line 85](../../src/retrieval/use-cases/search.ts#L85) |
-| `inlineSearchDefinition(params: SearchMemoryParams, primaryOperator: string): SearchOperatorDefinition \| undefined` | Implements the inline search definition operation. | function | internal | [line 97](../../src/retrieval/use-cases/search.ts#L97) |
-| `assertHitsStayInScope(operator: string, scopeId: string, hits: readonly RetrievalHit[]): void` | Validates hits stay in scope and throws when invalid. | function | internal | [line 174](../../src/retrieval/use-cases/search.ts#L174) |
-| `createSearchMemory(options: SearchMemoryOptions): ( params: SearchMemoryParams, signal?: AbortSignal, ) => Promise<SearchMemoryResult>` | Creates the search orchestrator for normalization, routing, coverage, expansion, and hit merging. | function | exported | [line 188](../../src/retrieval/use-cases/search.ts#L188) |
+| `normalizeStrings(values: readonly string[], label: string): string[]` | Validates, trims, and deduplicates a list of search values. | function | internal | [line 67](../../src/retrieval/use-cases/search.ts#L67) |
+| `operatorSourceQuotes(result: EvidenceOperatorResult \| undefined): Map<string, string[]>` | Implements the operator source quotes operation. | function | internal | [line 77](../../src/retrieval/use-cases/search.ts#L77) |
+| `inlineSearchDefinition(params: SearchMemoryParams, primaryOperator: string): SearchOperatorDefinition \| undefined` | Implements the inline search definition operation. | function | internal | [line 89](../../src/retrieval/use-cases/search.ts#L89) |
+| `assertHitsStayInScope(operator: string, scopeId: string, hits: readonly RetrievalHit[]): void` | Validates hits stay in scope and throws when invalid. | function | internal | [line 166](../../src/retrieval/use-cases/search.ts#L166) |
+| `createSearchMemory(options: SearchMemoryOptions): ( params: SearchMemoryParams, signal?: AbortSignal, ) => Promise<SearchMemoryResult>` | Creates the search orchestrator for normalization, routing, coverage, expansion, and hit merging. | function | exported | [line 180](../../src/retrieval/use-cases/search.ts#L180) |
 ## `src/tau-knowledge-bridge.ts`
 
 _No top-level functions, classes, or class methods._

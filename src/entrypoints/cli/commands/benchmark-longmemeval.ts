@@ -2,6 +2,7 @@ import { chmod, mkdir, readFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import {
   runBenchmarkAnswer,
+  BenchmarkAnswerError,
   type BenchmarkAnswerResult,
 } from "../../../benchmark/index.js";
 import type {
@@ -388,8 +389,10 @@ export async function benchmarkLongMemEval(
         notStarted += 1;
         return;
       }
+      let retrievalResult: PiMemResult | undefined;
+      let answerResult: BenchmarkAnswerResult | undefined;
       try {
-        const retrievalResult = await runPiMem({
+        retrievalResult = await runPiMem({
           store: retrievalContexts[slot - 1]!.store,
           operatorRegistry: retrievalContexts[slot - 1]!.operatorRegistry,
           modelRuntime: retrievalModelRuntime,
@@ -408,7 +411,7 @@ export async function benchmarkLongMemEval(
             question.scopeId,
           ),
         });
-        const answerResult = await runBenchmarkAnswer({
+        answerResult = await runBenchmarkAnswer({
           modelRuntime: answerModelRuntime,
           prompt: buildLongMemEvalAnswerPrompt(
             question.question,
@@ -441,6 +444,9 @@ export async function benchmarkLongMemEval(
           question_id: question.questionId,
           slot,
           error: message,
+          ...(retrievalResult === undefined ? {} : { retrieval: retrievalResult }),
+          ...(answerResult === undefined ? {} : { answer: answerResult }),
+          ...(error instanceof BenchmarkAnswerError ? { answerDiagnostics: error.diagnostics } : {}),
           ...(error instanceof PiMemRunError
             ? { diagnostics: error.diagnostics }
             : {}),

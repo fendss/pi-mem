@@ -1,7 +1,7 @@
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import type {
   Embedder,
   EmbeddingMetrics,
@@ -403,6 +403,29 @@ describe("PiMem hybrid search", () => {
     }
   });
 
+  it("continues date-route reservations past a depth containing only duplicates", async () => {
+    const { raw, embedder } = await createStore();
+    try {
+      vi.spyOn(raw, "search").mockReturnValue([]);
+      vi.spyOn(embedder, "embedQueries").mockResolvedValue([[1, 0], [0, 1]]);
+      const records = new Map(raw.listScopeRecords("scope-1").map((record) => [record.memoryId, record]));
+      const dense: DenseRetriever = {
+        retrievalProfile: "pimem-hybrid",
+        async search(request) {
+          return request.queryVectors.map((vector) => {
+            const ids = request.filters?.after === undefined ? ["m4", "m3", "m2", "m1"]
+              : vector[0] === 1 ? ["m1", "m2", "m3"] : ["m2", "m1", "m4"];
+            return ids.map((id, index) => ({ record: records.get(id)!, rank: index + 1, score: 1 / (index + 1) }));
+          });
+        },
+      };
+      const hybrid = new HybridRetriever(raw, embedder, dense);
+      const hits = await hybrid.search("scope-1", { queries: ["left 2024-01-01", "right 2024-01-01"], limit: 3 });
+      expect(hits.map((hit) => hit.record.memoryId)).toEqual(["m1", "m2", "m3"]);
+      expect(embedder.embedQueries).toHaveBeenCalledTimes(1);
+    } finally { raw.close(); }
+  });
+
   it("adds a bounded date-metadata route only for a date already in the query", async () => {
     const { raw, hybrid } = await createStore();
     try {
@@ -421,7 +444,7 @@ describe("PiMem hybrid search", () => {
         query: "left state on 2024-03-01",
         expression: "2024-03-01",
         after: "2024-03-01T00:00:00",
-        before: "2024-03-01T23:59:59",
+        before: "2024-03-01T23:59:59.999",
       }]);
 
       const ambiguous = await hybrid.search("scope-1", {

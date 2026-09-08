@@ -79,10 +79,14 @@ def _valid_runtime_contract(contract: dict[str, Any]) -> bool:
                 "max_tool_calls",
                 "max_search_calls",
                 "request_timeout_ms",
-                "request_max_retries",
-                "request_max_retry_delay_ms",
                 "max_concurrent_wraps",
             )
+        )
+        or not all(
+            isinstance(limits.get(field), int)
+            and not isinstance(limits.get(field), bool)
+            and limits[field] >= 0
+            for field in ("request_max_retries", "request_max_retry_delay_ms")
         )
         or not isinstance(handoff, dict)
     ):
