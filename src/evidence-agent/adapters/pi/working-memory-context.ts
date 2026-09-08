@@ -47,7 +47,7 @@ export function createWorkingMemoryContext(ledger: MemoryLedger, maxSearchCalls?
   const expiredReads = new Set<string>();
   let visible = new Set<string>();
   const work = progress ? createWorkProgress(ledger) : undefined;
-  const observation = createWorkingMemoryObservation(ledger, maxSearchCalls, work?.recordShown);
+  const observation = createWorkingMemoryObservation(ledger, maxSearchCalls, work ? { recordShown: work.recordShown } : {});
   const validateReferences = (text: string) => {
     const refs = [...new Set(text.match(/\b[CE][1-9]\d*\b/gu) ?? [])];
     const evidenceRefs = new Set(ledger.inspectedEvidence.map((e) => ledger.evidenceRef(e.memoryId)));

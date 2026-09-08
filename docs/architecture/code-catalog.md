@@ -706,6 +706,11 @@ _No top-level functions, classes, or class methods._
 | `renderUnreadFindings(candidates: readonly MemoryCandidate[], ledger: MemoryLedger, questionDate: string \| undefined, previewLength?: number): string[]` | Renders unread findings. | function | internal | [line 179](../../src/evidence-agent/adapters/pi/memory-observation.ts#L179) |
 | `renderCompactDirectory(candidates: readonly MemoryCandidate[], ledger: MemoryLedger, questionDate: string \| undefined, previewLength: number): string[]` | Renders compact directory. | function | internal | [line 214](../../src/evidence-agent/adapters/pi/memory-observation.ts#L214) |
 | `createMemoryObservation(options: CreateMemoryObservationOptions): MemoryObservation` | Maintains one model-facing memory snapshot for a run. | function | exported | [line 249](../../src/evidence-agent/adapters/pi/memory-observation.ts#L249) |
+## `src/evidence-agent/adapters/pi/read-receipts.ts`
+
+| Symbol | Purpose | Kind | Visibility | Source |
+|---|---|---|---|---|
+| `renderReadReceipts(ledger: MemoryLedger): string` | Bounded excerpts of actual reads, independent of model-authored progress. | function | exported | [line 5](../../src/evidence-agent/adapters/pi/read-receipts.ts#L5) |
 ## `src/evidence-agent/adapters/pi/retrieval-prompt.ts`
 
 | Symbol | Purpose | Kind | Visibility | Source |
@@ -716,7 +721,7 @@ _No top-level functions, classes, or class methods._
 
 | Symbol | Purpose | Kind | Visibility | Source |
 |---|---|---|---|---|
-| `createRewriteWorkingMemoryContext(ledger: MemoryLedger, maxSearchCalls?: number)` | Notes are optional annotations. | function | exported | [line 32](../../src/evidence-agent/adapters/pi/rewrite-working-memory-context.ts#L32) |
+| `createRewriteWorkingMemoryContext(ledger: MemoryLedger, maxSearchCalls?: number)` | Notes are optional annotations. | function | exported | [line 37](../../src/evidence-agent/adapters/pi/rewrite-working-memory-context.ts#L37) |
 ## `src/evidence-agent/adapters/pi/run-agent.ts`
 
 | Symbol | Purpose | Kind | Visibility | Source |
@@ -817,7 +822,7 @@ _No top-level functions, classes, or class methods._
 
 | Symbol | Purpose | Kind | Visibility | Source |
 |---|---|---|---|---|
-| `createWorkingMemoryObservation(ledger: MemoryLedger, maxSearchCalls?: number, recordShown?: (ref: string, text: string) => void)` | Navigation deltas only. | function | exported | [line 7](../../src/evidence-agent/adapters/pi/working-memory-observation.ts#L7) |
+| `createWorkingMemoryObservation(ledger: MemoryLedger, maxSearchCalls?: number, options: WorkingMemoryObservationOptions = {})` | Navigation deltas only. | function | exported | [line 13](../../src/evidence-agent/adapters/pi/working-memory-observation.ts#L13) |
 ## `src/evidence-agent/index.ts`
 
 _No top-level functions, classes, or class methods._

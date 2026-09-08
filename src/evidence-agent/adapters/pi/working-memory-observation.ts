@@ -1,13 +1,19 @@
 import type { MemoryCandidate } from "../../model/evidence.js";
 import type { MemoryLedger } from "../../model/ledger.js";
 import type { MemoryObservation } from "./memory-observation.js";
-import { compactPreview, sha256 } from "../../../util.js";
+import { compactPreview, queryCenteredEpisodicPreview, sha256 } from "../../../util.js";
+
+interface WorkingMemoryObservationOptions {
+  recordShown?: (ref: string, text: string) => void;
+  /** Re-expose the current result when earlier observations can leave context. */
+  refreshResults?: boolean;
+}
 
 /** Navigation deltas only. The context policy supplies the persistent note. */
 export function createWorkingMemoryObservation(
   ledger: MemoryLedger,
   maxSearchCalls?: number,
-  recordShown?: (ref: string, text: string) => void,
+  options: WorkingMemoryObservationOptions = {},
 ) {
   const displayed = new Set<string>();
   let searches = 0;
@@ -16,7 +22,11 @@ export function createWorkingMemoryObservation(
   function renderFinding(candidate: MemoryCandidate, limit: number): string | undefined {
     const ref = ledger.candidateRef(candidate.candidateId);
     if (ref === undefined) return undefined;
-    const text = compactPreview(candidate.passage?.content ?? candidate.preview, limit);
+    const preview = candidate.passage?.content ?? candidate.preview;
+    const queries = candidate.discoveries.flatMap(d => d.query ? [d.query] : []).slice(-2);
+    const text = options.refreshResults
+      ? queryCenteredEpisodicPreview(preview, queries.join(" "), limit)
+      : compactPreview(preview, limit);
     // Include coordinates and displayed text: a known parent can expose a new fact.
     const identity = sha256(JSON.stringify([
       candidate.candidateId, candidate.passage?.sourceContentHash,
@@ -24,8 +34,9 @@ export function createWorkingMemoryObservation(
     ]));
     if (displayed.has(identity)) return undefined;
     displayed.add(identity);
-    recordShown?.(ref, text);
-    return `- read ${ref}${candidate.inspected ? " (previously read; new presentation)" : ""}` +
+    options.recordShown?.(ref, text);
+    return `- read ${ref}${candidate.inspected ? (options.refreshResults ? " (previously read)" : " (previously read; new presentation)") : ""}` +
+      `${options.refreshResults ? ` · ${candidate.role}` : ""}` +
       `${candidate.timestamp === undefined ? "" : ` · ${candidate.timestamp}`}\n  ${text}`;
   }
 
@@ -42,6 +53,8 @@ export function createWorkingMemoryObservation(
     render() {
       const current = pending;
       pending = undefined;
+      // Deduplicate within this result only; a prior display is not current visibility.
+      if (options.refreshResults) displayed.clear();
       const status = maxSearchCalls === undefined
         ? `Searches completed: ${searches}`
         : `Searches remaining: ${Math.max(0, maxSearchCalls - searches)}`;
@@ -59,9 +72,9 @@ export function createWorkingMemoryObservation(
         "<MEMORY>", status,
         `Stored candidates: ${ledger.candidates.length}; read sources: ${ledger.inspectedEvidence.length}.`,
         ...(current === undefined ? [] : [
-          "New or changed findings from this search",
+          options.refreshResults ? "Findings from this search" : "New or changed findings from this search",
           ...findingLines,
-          "New or changed compact directory entries",
+          options.refreshResults ? "Compact directory from this search" : "New or changed compact directory entries",
           ...directoryLines,
           ...(findingLines.length + directoryLines.length === 0
             ? ["No new displayed text. This does not prove that the required evidence is complete."] : []),

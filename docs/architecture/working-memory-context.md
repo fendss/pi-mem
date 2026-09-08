@@ -27,8 +27,13 @@ A replacement is committed only after the native action succeeds. It
 acknowledges only observations present in the preceding model input, never
 outputs produced in the same batch. Omission, null, rejected notes and failed
 actions preserve observations. An unchanged but explicitly supplied valid string
-can acknowledge observations without adding a duplicate revision. Old notes are
+also preserves observations; only a changed note acknowledges them. Old notes are
 kept in the audit, not model context. There is no separate state model call.
+
+Each search presents its bounded current candidate set, including repeated hits.
+Short receipts from the actual read ledger remain visible independently of the
+note. Compact directory previews preserve query-relevant text and source roles.
+See [source visibility](source-visibility.md) for the retirement and reread contract.
 
 This policy trades forced acknowledgement for a consistent optional field.
 When the model never updates its note, prior tool observations accumulate until
