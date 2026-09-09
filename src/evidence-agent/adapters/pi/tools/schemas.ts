@@ -4,10 +4,10 @@ const WorkingMemory = Type.String({
   minLength: 1,
   maxLength: 1600,
   description:
-    "Replace the persistent working note with a compact statement of facts, " +
-    "their supporting E handles, and the evidence still missing. Exact read " +
-    "payloads are shown for one reasoning turn, so retain useful E handles " +
-    "before continuing. Do not copy long passages. Omit only when unchanged.",
+    "Replace the persistent working note with concise plain-text Established " +
+    "facts and Missing facts. The harness owns source handles, read receipts, " +
+    "and exact evidence. Do not include IDs, candidate lists, search history, " +
+    "or reasoning. Omit when unchanged.",
 });
 
 const SearchOperatorId = (description: string) => Type.String({

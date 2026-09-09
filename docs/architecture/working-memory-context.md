@@ -3,50 +3,34 @@
 ## Single-note rewrite (opt-in)
 
 `runPiMem({ contextPolicy: "working-memory-rewrite", ... })` uses one optional
-free-text note. Every tool accepts the same `workingMemory` field. A nonempty
-string replaces the note; omission and null both keep the note and pending
-observations. No initial note is required, and read never changes parameter
-schema based on whether a note exists. The default remains `current-window`.
+free-text progress note. A nonempty string replaces the note; omission and null
+keep it unchanged. The note contains only plain-text `Established` facts and
+`Missing` facts. It does not carry candidate handles, evidence handles, source
+IDs, candidate lists, search history or a reasoning transcript.
 
-The note is an annotation, not an executable reference list. It may discuss
-pending or discarded C handles without requiring those sources to be read.
-Program validation still applies to actual read arguments and the source ledger.
-A note mentioning a future or incorrect E handle cannot create source evidence.
-A sufficient finish still requires an exact source read, must be the only tool
-call in its assistant turn, and must observe previous results first. All read
-sources still enter the final handoff with the same source and budget checks.
+Source identity and context lifecycle belong to the harness. Search results are
+navigation for the next decision, so a promising candidate should be read before
+the Agent moves to another search. The harness validates the candidate handle in
+the actual `read` argument, records the exact returned source in the evidence
+ledger, and renders compact receipts from that ledger independently of the note.
+A model-authored note cannot create, select or remove source evidence.
 
-The note budget remains 1600 characters. A too-long or blank replacement is not
-saved or truncated, but does not block the native tool action. The receipt
-explicitly reports `workingMemoryUpdate.rejected` and a reason; previous notes
-and observations remain available. Report these warnings independently from
-successful tool execution when evaluating reliability. Other invalid tool
-arguments continue to fail normally.
+Every successful tool action retires raw tool results that were visible in its
+preceding model input. The result produced by the current action remains visible
+for the next decision. A failed action retires nothing, allowing the Agent to
+correct the call. Context retirement does not depend on whether the optional note
+was changed, omitted, repeated or rejected.
 
-A replacement is committed only after the native action succeeds. It
-acknowledges only observations present in the preceding model input, never
-outputs produced in the same batch. Omission, null, rejected notes and failed
-actions preserve observations. An unchanged but explicitly supplied valid string
-also preserves observations; only a changed note acknowledges them. Old notes are
-kept in the audit, not model context. There is no separate state model call.
+The note budget is 1600 characters. A blank or oversized replacement is rejected
+without blocking an otherwise valid tool action; the previous note remains. The
+harness reports this separately in `workingMemoryUpdate`. Old note revisions and
+full tool payloads remain in the audit rather than active model context. There is
+no separate state model call.
 
-Each search presents its bounded current candidate set, including repeated hits.
-Short receipts from the actual read ledger remain visible independently of the
-note. Compact directory previews preserve query-relevant text and source roles.
-See [source visibility](source-visibility.md) for the retirement and reread contract.
-
-This policy trades forced acknowledgement for a consistent optional field.
-When the model never updates its note, prior tool observations accumulate until
-the existing context limit; they are not silently discarded. This is a runtime
-limit to measure, not an automatic compaction or fallback policy.
-
-Finish normally needs only `status`; it does not require a final note.
-`evidenceSummary` remains an optional audit string; null and blank strings are
-normalized to omission. Invalid required fields and missing actual source reads
-are still errors. The two-failure finish guard resets after a successful
-intervening non-finish tool action; all overall turn, tool and search limits
-remain enforced. Repeated invalid finishes without successful intervening work
-still terminate after two failures.
+`finish` normally needs only `status`. A sufficient finish requires at least one
+exact source read and commits every source in the read ledger. `evidenceSummary`
+is an optional audit string. The note itself never enters the answer package.
+The default context policy remains `current-window`.
 
 ## Incremental entries (experimental)
 

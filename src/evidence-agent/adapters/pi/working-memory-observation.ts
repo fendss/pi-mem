@@ -83,8 +83,8 @@ export function createWorkingMemoryObservation(
           ...(current.operatorEvidence ? [current.operatorEvidence] : []),
           ...(current.planTrace ? [current.planTrace] : []),
         ]),
-        "Earlier candidate text is stored privately. Keep promising C refs and missing evidence in workingMemory; read a stored C ref to reopen its source.",
-        "Every source returned by read still enters the final source package.",
+        "Candidate text is navigation for this decision. Read promising candidates before moving to another search; do not copy candidate handles into workingMemory.",
+        "The harness retains every source returned by read and commits it to the final source package.",
         "</MEMORY>",
       ].join("\n");
     },

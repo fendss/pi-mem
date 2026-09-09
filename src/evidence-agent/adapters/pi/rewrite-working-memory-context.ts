@@ -8,29 +8,25 @@ import { renderReadReceipts } from "./read-receipts.js";
 
 export const REWRITE_WORKING_MEMORY_PROMPT = `
 Context policy: working-memory-rewrite.
-Every tool accepts the same optional workingMemory field. A string replaces your
-current note; omission or null keeps it unchanged. No initial note is required.
-Keep a short account of what the evidence supports, unresolved conflicts or gaps,
-and useful source handles. Carry forward still-relevant facts when replacing it.
-Do not invent evidence IDs or copy a transcript. Source handles are useful for
-reopening evidence, but prose references are not tool commands or proof of a read.
+workingMemory is an optional short progress note. A string replaces the note;
+omission or null keeps it unchanged. Write only the current state in plain text:
+- Established: facts that are supported by source text you have read.
+- Missing: facts or relationships still needed to answer the question.
+Preserve every still-relevant fact and gap when replacing the note. Remove a fact
+when later evidence overturns it. Do not put candidate handles, evidence handles,
+source IDs, search history, or a reasoning transcript in the note.
 
-The question, current note, brief read receipts and unacknowledged tool results
-are retained. Each search presents its current candidates, including repeated hits.
-A changed note after a successful action acknowledges the results you have already
-seen. An identical note, omission, null, a rejected note or a failed action preserves them.
-Keep the note within 1600 characters. A longer or empty note is not saved or
-truncated; the tool still runs and reports that the note was not updated.
-Read results produced by the current action remain visible for your next decision.
-Read receipts come from successful reads, independently of your note. They are
-short excerpts, not proof that the question is complete; reopen a listed C ref
-when exact wording is needed.
+Search results are navigation for the current decision. Read a promising candidate
+before moving to another search; previews alone are not established facts. The
+harness keeps source identity, exact read evidence, compact read receipts, audit
+history, and the final evidence package. You do not need to copy or maintain them.
+After your next successful tool action, the harness removes prior raw tool results
+from active context. A failed action keeps them visible for correction.
 
-Finish only after observing the previous results. Use sufficient when the exact
-sources read cover the question, otherwise insufficient. A final note is optional.
-The program commits the read sources, not the notebook. Pending or discarded
-handles mentioned in prose do not impose extra reads. Do not discard a useful
-lead merely to finish; continue when it can resolve a remaining evidence gap.
+Use the Missing facts to choose the next search. Finish sufficient only when the
+sources already read cover the question; otherwise continue searching or finish
+insufficient when the remaining budget cannot resolve the gap. The program commits
+all read sources. A final note and evidenceSummary are optional.
 `;
 
 /** Notes are optional annotations. Only real tool arguments authorize source reads. */
@@ -42,7 +38,7 @@ export function createRewriteWorkingMemoryContext(ledger: MemoryLedger, maxSearc
   const expiredReads = new Set<string>();
   let visible = new Set<string>();
   const noteParameters = Type.Optional(Type.Union([Type.String(), Type.Null()], {
-    description: "Optional replacement progress note, up to 1600 characters. Omit or use null to keep it. A rejected note leaves earlier observations intact and does not block the action. No note is required to finish.",
+    description: "Optional replacement progress note, up to 1600 characters. Use plain text with Established facts and Missing facts. Do not include source handles, IDs, candidate lists, search history, or reasoning. Omit or use null to keep the note unchanged.",
   }));
 
   return {
@@ -75,11 +71,15 @@ export function createRewriteWorkingMemoryContext(ledger: MemoryLedger, maxSearc
             // Failed native actions preserve both the previous note and observations.
             const result = await tool.execute(id, nativeParams, signal, onUpdate);
             const commit = memory.apply(unchanged || rejection ? undefined : next, id);
-            const acknowledgedToolCallIds = commit.mode === "replace" ? seen : [];
+            // Context retirement is a harness concern. Any successful action has
+            // consumed the results from the preceding model input, regardless of
+            // whether the optional progress note changed. Failed actions throw
+            // before this point and therefore preserve that input for correction.
+            const acknowledgedToolCallIds = seen;
             for (const resultId of acknowledgedToolCallIds) acknowledged.add(resultId);
             return { ...result,
               content: [...result.content, ...(rejection ? [{ type: "text" as const,
-                text: `Working-memory note was not updated: ${rejection} The action succeeded. The previous note and earlier observations are retained. Write a shorter note on a later action if useful.` }] : [])],
+                text: `Working-memory note was not updated: ${rejection} The action succeeded and the previous note remains. Prior raw results follow the normal harness-managed lifecycle. Write a shorter note on a later action if useful.` }] : [])],
               details: { ...result.details, workingMemoryUpdate: { ...commit, acknowledgedToolCallIds,
                 ...(rejection ? { rejected: true, reason: rejection } : {}) } },
             };

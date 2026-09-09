@@ -45,7 +45,7 @@ describe("source visibility across context retirement", () => {
     expect(ledger.resolveCandidateRefs(["C1"])).toEqual(["known"]);
   });
 
-  it("keeps a result when the submitted note is identical", async () => {
+  it("lets the harness retire a result when the submitted note is identical", async () => {
     const context = createRewriteWorkingMemoryContext(new MemoryLedger("visibility"), 8);
     const native: AgentTool = { name: "search", label: "Search", description: "Search",
       parameters: Type.Object({}), execute: async () => ({ content: [], details: {} }) };
@@ -54,8 +54,8 @@ describe("source visibility across context retirement", () => {
     const previous = [message("s1", "The candidate establishes ZX-83.")];
     await context.transformContext(previous);
     const result = await tool.execute("s2", { workingMemory: "Still investigating." });
-    expect(result.details.workingMemoryUpdate.acknowledgedToolCallIds).toEqual([]);
-    expect(JSON.stringify(await context.transformContext(previous))).toContain("establishes ZX-83");
+    expect(result.details.workingMemoryUpdate.acknowledgedToolCallIds).toEqual(["s1"]);
+    expect(JSON.stringify(await context.transformContext(previous))).not.toContain("establishes ZX-83");
   });
 
   it("retains actual read receipts after a changed note drops or contradicts the fact", async () => {

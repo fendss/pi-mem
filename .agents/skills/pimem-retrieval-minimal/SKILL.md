@@ -17,9 +17,10 @@ Do not answer the caller yourself.
 - Read candidates whose immutable sources may be useful downstream.
   Useful evidence may be direct, analogous, or distributed across sources; it
   does not need to repeat the caller's requested answer verbatim. If retrieval
-  continues, keep useful facts and source handles in `workingMemory` when available.
-  Follow the active context policy for note updates. Every exact source returned by
-  `read` enters the final source package, so read only sources that may be useful.
+  continues, keep only supported facts and remaining gaps in `workingMemory`.
+  Do not copy source handles into the note; the harness retains handles, compact
+  read receipts, and exact evidence. Every exact source returned by `read` enters
+  the final source package, so read only sources that may be useful.
 - Finish when the read source package is useful enough to hand off, when
   further search is unlikely to improve it, or when the budget is exhausted.
   Normally omit evidenceSummary; workingMemory already retains retrieval

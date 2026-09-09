@@ -721,7 +721,7 @@ _No top-level functions, classes, or class methods._
 
 | Symbol | Purpose | Kind | Visibility | Source |
 |---|---|---|---|---|
-| `createRewriteWorkingMemoryContext(ledger: MemoryLedger, maxSearchCalls?: number)` | Notes are optional annotations. | function | exported | [line 37](../../src/evidence-agent/adapters/pi/rewrite-working-memory-context.ts#L37) |
+| `createRewriteWorkingMemoryContext(ledger: MemoryLedger, maxSearchCalls?: number)` | Notes are optional annotations. | function | exported | [line 33](../../src/evidence-agent/adapters/pi/rewrite-working-memory-context.ts#L33) |
 ## `src/evidence-agent/adapters/pi/run-agent.ts`
 
 | Symbol | Purpose | Kind | Visibility | Source |
