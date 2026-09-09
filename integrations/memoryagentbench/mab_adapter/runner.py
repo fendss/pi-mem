@@ -203,6 +203,8 @@ def _new_document(
             "retries": 0,
             "thinking_level": getattr(chat, "thinking_level", "off"),
             "max_tokens": getattr(chat, "request_max_tokens", None),
+            "context_window": getattr(chat, "context_window", None),
+            "context_fit": "whole-memory-records-v1",
         },
         "operator_experiment": {
             "mode": settings.operator_mode,

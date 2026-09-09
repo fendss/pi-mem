@@ -11,6 +11,8 @@ from urllib.error import HTTPError, URLError
 from urllib.parse import urlsplit
 from urllib.request import ProxyHandler, Request, build_opener, urlopen
 
+from .context_fit import fit_memory_prompt_to_context_window
+
 
 class RemoteError(RuntimeError):
     def __init__(
@@ -417,14 +419,33 @@ class ChatClient:
     model: str
     thinking_level: str = "off"
     request_max_tokens: int | None = None
+    context_window: int | None = None
 
     def complete(self, system_prompt: str, prompt: str, max_tokens: int) -> str:
         effective_max_tokens = self.request_max_tokens or max_tokens
+        try:
+            effective_prompt = (
+                prompt
+                if self.context_window is None
+                else fit_memory_prompt_to_context_window(
+                    system_prompt,
+                    prompt,
+                    model=self.model,
+                    context_window=self.context_window,
+                    max_output_tokens=effective_max_tokens,
+                )
+            )
+        except ValueError as error:
+            raise RemoteError(
+                str(error),
+                error_code="answer_context_overflow",
+                retryable=False,
+            ) from error
         body: dict[str, Any] = {
             "model": self.model,
             "messages": [
                 {"role": "system", "content": system_prompt},
-                {"role": "user", "content": prompt},
+                {"role": "user", "content": effective_prompt},
             ],
         }
         if self.thinking_level == "off":

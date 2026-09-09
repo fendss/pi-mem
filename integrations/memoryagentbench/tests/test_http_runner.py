@@ -28,6 +28,7 @@ from mab_adapter.clients import (  # noqa: E402
     MemoryWrapResult,
     RemoteError,
 )
+from mab_adapter.context_fit import fit_memory_prompt_to_context_window  # noqa: E402
 from mab_adapter.config import task_config  # noqa: E402
 from mab_adapter.contracts import Context, Query  # noqa: E402
 from mab_adapter.load_control import (  # noqa: E402
@@ -528,6 +529,48 @@ class HttpRunnerTests(unittest.TestCase):
         self.assertEqual(MockHandler.last_chat_body["max_completion_tokens"], 4096)
         self.assertNotIn("temperature", MockHandler.last_chat_body)
         self.assertNotIn("max_tokens", MockHandler.last_chat_body)
+
+    def test_answer_context_fit_preserves_whole_memories_and_question(self):
+        blocks = [
+            "<memory>\n"
+            f"memory_id: m-{index}\ncontent:\n{'evidence ' * 500}\n"
+            "</memory>"
+            for index in range(6)
+        ]
+        prompt = (
+            '<memory_context authority="read_exact_sources">\n'
+            + "\n".join(blocks)
+            + "\n</memory_context>\nUser: Which fact is current?"
+        )
+
+        fitted = fit_memory_prompt_to_context_window(
+            "system",
+            prompt,
+            model="gpt-4o-mini-2024-07-18",
+            context_window=2_000,
+            max_output_tokens=256,
+        )
+
+        self.assertLess(len(fitted), len(prompt))
+        self.assertIn("selected memories omitted", fitted)
+        self.assertTrue(fitted.endswith("User: Which fact is current?"))
+        self.assertEqual(fitted.count("<memory>"), fitted.count("</memory>"))
+
+    def test_unstructured_answer_overflow_fails_before_http(self):
+        http = MagicMock()
+        chat = ChatClient(
+            http,
+            "gpt-4o-mini-2024-07-18",
+            "off",
+            256,
+            1_500,
+        )
+
+        with self.assertRaises(RemoteError) as raised:
+            chat.complete("system", "unstructured " * 2_000, 50)
+
+        self.assertEqual(raised.exception.error_code, "answer_context_overflow")
+        http.post.assert_not_called()
 
     def test_empty_answer_is_a_final_zero_without_resampling(self):
         task = replace(task_config("ruler-qa1"), expected_contexts=1, expected_questions=1)

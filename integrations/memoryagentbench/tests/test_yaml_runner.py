@@ -128,6 +128,10 @@ class YamlStageConcurrencyTests(unittest.TestCase):
                 "successesPerIncrease": 8,
             },
         )
+        timeout_index = loaded["args"].index("--memory-timeout-seconds")
+        self.assertEqual(loaded["args"][timeout_index + 1], "270")
+        context_index = loaded["args"].index("--answer-context-window")
+        self.assertEqual(loaded["args"][context_index + 1], "128000")
         self.assertIn("--adaptive-query-slots-initial", loaded["args"])
         self.assertNotIn("--adaptive-retrieval-slots-initial", loaded["args"])
 

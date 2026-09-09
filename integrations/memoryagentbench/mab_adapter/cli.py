@@ -30,10 +30,12 @@ def _parser() -> argparse.ArgumentParser:
     run.add_argument("--reuse-ingestion-from", type=Path)
     run.add_argument("--memory-base-url", default="http://127.0.0.1:3111")
     run.add_argument("--memory-system-name", default="pimem")
+    run.add_argument("--memory-timeout-seconds", type=float, default=300.0)
     run.add_argument("--answer-base-url", required=True)
     run.add_argument("--answer-model", required=True)
     run.add_argument("--answer-thinking-level", default="off")
     run.add_argument("--answer-max-tokens", type=int)
+    run.add_argument("--answer-context-window", type=int)
     run.add_argument("--answer-api-key-env", default="OPENAI_API_KEY")
     run.add_argument("--max-contexts", type=int)
     run.add_argument("--max-queries", type=int)
@@ -124,8 +126,15 @@ def main(argv: list[str] | None = None) -> int:
         return 0
     task = task_config(args.task)
     contexts = load_contexts(args.data_dir, task)
+    if args.memory_timeout_seconds <= 0:
+        raise ValueError("--memory-timeout-seconds must be positive")
+    if args.answer_context_window is not None and args.answer_context_window <= 0:
+        raise ValueError("--answer-context-window must be positive")
     memory = MemoryClient(
-        JsonHttpClient(args.memory_base_url),
+        JsonHttpClient(
+            args.memory_base_url,
+            timeout_seconds=args.memory_timeout_seconds,
+        ),
         memory_system_name=args.memory_system_name,
     )
     api_key = os.environ.get(args.answer_api_key_env)
@@ -139,6 +148,7 @@ def main(argv: list[str] | None = None) -> int:
         args.answer_model,
         args.answer_thinking_level,
         args.answer_max_tokens,
+        args.answer_context_window,
     )
     termination = _TerminationState()
     previous_handlers = {
