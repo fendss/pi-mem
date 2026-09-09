@@ -39,6 +39,15 @@ class ScoringTests(unittest.TestCase):
         )
         self.assertEqual(metrics["official_score"], 0.0)
 
+    def test_eventqa_full_uses_eventqa_recall(self):
+        metrics = score_prediction(
+            task_config("eventqa-full"),
+            "First event, then the second event.",
+            ["First event", "second event"],
+        )
+        self.assertEqual(metrics["eventqa_recall"], 1.0)
+        self.assertEqual(metrics["official_score"], 1.0)
+
     def test_longmemeval_requires_official_judge(self):
         metrics = score_prediction(task_config("longmemeval-s"), "Paris", ["Paris"])
         self.assertIsNone(metrics["official_score"])

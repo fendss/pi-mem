@@ -220,6 +220,21 @@ TASKS: dict[str, TaskConfig] = {
         memorize_template=FACT_MEMORIZE_TEMPLATE,
         query_template=FACT_QUERY_TEMPLATE,
     ),
+    "fact-sh-262k": TaskConfig(
+        task_id="fact-sh-262k",
+        capability="conflict_resolution",
+        split="Conflict_Resolution",
+        file_key="conflict_resolution",
+        source="factconsolidation_sh_262k",
+        expected_contexts=1,
+        expected_questions=100,
+        chunk_tokens=4096,
+        generation_max_tokens=10,
+        official_metric="substring_exact_match",
+        official_config="configs/data_conf/Conflict_Resolution/Factconsolidation_sh_262k.yaml",
+        memorize_template=FACT_MEMORIZE_TEMPLATE,
+        query_template=FACT_QUERY_TEMPLATE,
+    ),
     "fact-mh-262k": TaskConfig(
         task_id="fact-mh-262k",
         capability="conflict_resolution",
@@ -247,6 +262,28 @@ TASKS: dict[str, TaskConfig] = {
         generation_max_tokens=40,
         official_metric="substring_exact_match",
         official_config="configs/data_conf/Accurate_Retrieval/EventQA/Eventqa_64k.yaml",
+        memorize_template=(
+            "Dialogue between User and Assistant {time_stamp}\\n<User> The "
+            "following context is the book excerpt: \n{context}\n <Assistant> "
+            "I have read the book excerpt and I will answer the question you ask."
+        ),
+        query_template=(
+            "Search Archival Memory, complete the task below:\n\n{question}"
+            "\n\n The event that happens next is:"
+        ),
+    ),
+    "eventqa-full": TaskConfig(
+        task_id="eventqa-full",
+        capability="accurate_retrieval",
+        split="Accurate_Retrieval",
+        file_key="accurate_retrieval",
+        source="eventqa_full",
+        expected_contexts=5,
+        expected_questions=500,
+        chunk_tokens=4096,
+        generation_max_tokens=40,
+        official_metric="substring_exact_match",
+        official_config="configs/data_conf/Accurate_Retrieval/EventQA/Eventqa_full.yaml",
         memorize_template=(
             "Dialogue between User and Assistant {time_stamp}\\n<User> The "
             "following context is the book excerpt: \n{context}\n <Assistant> "

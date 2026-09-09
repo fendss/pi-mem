@@ -67,13 +67,16 @@ def score_prediction(
     task: TaskConfig, prediction: str, answers: Iterable[str]
 ) -> dict[str, float | None]:
     parsed = parse_output(prediction)
-    if task.capability == "test_time_learning" or task.task_id == "eventqa-64k":
+    if task.capability == "test_time_learning" or task.task_id in {
+        "eventqa-64k",
+        "eventqa-full",
+    }:
         metrics = _metrics(parsed, answers)
     else:
         raw = _metrics(prediction, answers)
         parsed_metrics = _metrics(parsed, answers)
         metrics = {key: max(value, parsed_metrics[key]) for key, value in raw.items()}
-    if task.task_id == "eventqa-64k":
+    if task.task_id in {"eventqa-64k", "eventqa-full"}:
         values = tuple(answers)
         metrics["eventqa_recall"] = float(
             all(answer.lower() in prediction.lower() for answer in values)

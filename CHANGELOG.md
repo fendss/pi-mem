@@ -2,6 +2,19 @@
 
 ## Unreleased
 
+## 1.4.0 - 2026-09-09
+
+- Add lightweight, optional working-memory progress notes and simplify finish
+  correction handling without adding a separate model call.
+- Preserve repeated-search sources and actual read receipts through retrieval,
+  context compaction, and the evidence-aware answer handoff.
+- Split search composition into smaller planning, discovery, execution, and
+  candidate-set modules while retaining the public search/read/finish protocol.
+- Strengthen temporal, numeric, provenance, transport, concurrency, and Qdrant
+  failure handling with regression coverage.
+- Register the official large Fact-SH 262K and EventQA Full MemoryAgentBench
+  tasks alongside Fact-MH 262K so the 1,600-query AMB-10 suite runs directly.
+
 ## 1.3.1
 
 - Classify dense-retrieval failures so exact SQLite fallback is used only for

@@ -14,7 +14,7 @@ from mab_adapter.contracts import ContractError, parse_context  # noqa: E402
 
 
 class ConfigContractTests(unittest.TestCase):
-    def test_supported_set_includes_the_selected_tasks_and_fact_mh_262k(self):
+    def test_supported_set_includes_small_and_official_large_variants(self):
         self.assertEqual(
             set(TASKS),
             {
@@ -27,11 +27,32 @@ class ConfigContractTests(unittest.TestCase):
                 "clinic150",
                 "fact-sh-6k",
                 "fact-mh-6k",
+                "fact-sh-262k",
                 "fact-mh-262k",
                 "eventqa-64k",
+                "eventqa-full",
             },
         )
-        self.assertEqual(sum(task.expected_questions for task in TASKS.values()), 1700)
+        self.assertEqual(sum(task.expected_questions for task in TASKS.values()), 2300)
+
+    def test_official_large_amb10_totals_1600_queries(self):
+        official_tasks = {
+            "fact-mh-262k",
+            "fact-sh-262k",
+            "eventqa-full",
+            "trec-fine",
+            "trec-coarse",
+            "banking77",
+            "nlu",
+            "clinic150",
+            "ruler-qa1",
+            "longmemeval-s",
+        }
+        self.assertEqual(len(official_tasks), 10)
+        self.assertEqual(
+            sum(TASKS[task_id].expected_questions for task_id in official_tasks),
+            1600,
+        )
 
     def test_icl_templates_keep_literal_label_placeholder(self):
         for task_id in ("trec-coarse", "trec-fine", "banking77", "nlu", "clinic150"):
@@ -86,11 +107,19 @@ class ConfigContractTests(unittest.TestCase):
                 "7fb298c148aeea82bb4029b7bd4a55489a9ae5e02ed85ee910d60b1ad33482a6",
                 "16dfd7ef2a32eb12197672ebfda42145602a6d214492e0a1f2f629694495f0da",
             ),
+            "fact-sh-262k": (
+                "7fb298c148aeea82bb4029b7bd4a55489a9ae5e02ed85ee910d60b1ad33482a6",
+                "16dfd7ef2a32eb12197672ebfda42145602a6d214492e0a1f2f629694495f0da",
+            ),
             "fact-mh-262k": (
                 "7fb298c148aeea82bb4029b7bd4a55489a9ae5e02ed85ee910d60b1ad33482a6",
                 "16dfd7ef2a32eb12197672ebfda42145602a6d214492e0a1f2f629694495f0da",
             ),
             "eventqa-64k": (
+                "29555812a5f91e7c519c57ca94c85340975c58df62ca438dfb0db4c17335331c",
+                "cab1615deaf8e06201f0384a03b2145d5dd5cb0d2dfdcae6c0b7eac6b77a167b",
+            ),
+            "eventqa-full": (
                 "29555812a5f91e7c519c57ca94c85340975c58df62ca438dfb0db4c17335331c",
                 "cab1615deaf8e06201f0384a03b2145d5dd5cb0d2dfdcae6c0b7eac6b77a167b",
             ),
