@@ -36,6 +36,7 @@ def _config(adaptive: str) -> str:
           answer:
             id: answer-model
             protocol: openai-completions
+            context_safety_tokens: 24576
         service:
           host: 127.0.0.1
           port: 3113
@@ -137,6 +138,8 @@ class YamlStageConcurrencyTests(unittest.TestCase):
         self.assertEqual(loaded["args"][answer_timeout_index + 1], "600")
         context_index = loaded["args"].index("--answer-context-window")
         self.assertEqual(loaded["args"][context_index + 1], "128000")
+        safety_index = loaded["args"].index("--answer-context-safety-tokens")
+        self.assertEqual(loaded["args"][safety_index + 1], "24576")
         self.assertIn("--adaptive-query-slots-initial", loaded["args"])
         self.assertNotIn("--adaptive-retrieval-slots-initial", loaded["args"])
 

@@ -36,6 +36,7 @@ def _parser() -> argparse.ArgumentParser:
     run.add_argument("--answer-thinking-level", default="off")
     run.add_argument("--answer-max-tokens", type=int)
     run.add_argument("--answer-context-window", type=int)
+    run.add_argument("--answer-context-safety-tokens", type=int, default=1024)
     run.add_argument("--answer-api-key-env", default="OPENAI_API_KEY")
     run.add_argument("--answer-timeout-seconds", type=float, default=120.0)
     run.add_argument("--max-contexts", type=int)
@@ -133,6 +134,8 @@ def main(argv: list[str] | None = None) -> int:
         raise ValueError("--answer-timeout-seconds must be positive")
     if args.answer_context_window is not None and args.answer_context_window <= 0:
         raise ValueError("--answer-context-window must be positive")
+    if args.answer_context_safety_tokens < 0:
+        raise ValueError("--answer-context-safety-tokens must be non-negative")
     memory = MemoryClient(
         JsonHttpClient(
             args.memory_base_url,
@@ -152,6 +155,7 @@ def main(argv: list[str] | None = None) -> int:
         args.answer_thinking_level,
         args.answer_max_tokens,
         args.answer_context_window,
+        args.answer_context_safety_tokens,
     )
     termination = _TerminationState()
     previous_handlers = {

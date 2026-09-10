@@ -556,6 +556,41 @@ class HttpRunnerTests(unittest.TestCase):
         self.assertTrue(fitted.endswith("User: Which fact is current?"))
         self.assertEqual(fitted.count("<memory>"), fitted.count("</memory>"))
 
+    def test_answer_context_fit_respects_configured_safety_reserve(self):
+        blocks = [
+            f"<memory>\nsource {index}: {'evidence ' * 300}\n</memory>"
+            for index in range(12)
+        ]
+        prompt = (
+            '<memory_context authority="read_exact_sources">\n'
+            + "\n".join(blocks)
+            + "\n</memory_context>\nUser: Which fact is current?"
+        )
+
+        ordinary = fit_memory_prompt_to_context_window(
+            "system",
+            prompt,
+            model="unknown-model",
+            context_window=3_000,
+            max_output_tokens=256,
+            safety_tokens=128,
+        )
+        conservative = fit_memory_prompt_to_context_window(
+            "system",
+            prompt,
+            model="unknown-model",
+            context_window=3_000,
+            max_output_tokens=256,
+            safety_tokens=1_024,
+        )
+
+        self.assertLess(len(conservative), len(ordinary))
+        self.assertTrue(conservative.endswith("User: Which fact is current?"))
+        self.assertEqual(
+            conservative.count("<memory>"),
+            conservative.count("</memory>"),
+        )
+
     def test_unstructured_answer_overflow_fails_before_http(self):
         http = MagicMock()
         chat = ChatClient(

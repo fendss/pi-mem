@@ -420,6 +420,7 @@ class ChatClient:
     thinking_level: str = "off"
     request_max_tokens: int | None = None
     context_window: int | None = None
+    context_safety_tokens: int = 1024
 
     def complete(self, system_prompt: str, prompt: str, max_tokens: int) -> str:
         effective_max_tokens = self.request_max_tokens or max_tokens
@@ -433,6 +434,7 @@ class ChatClient:
                     model=self.model,
                     context_window=self.context_window,
                     max_output_tokens=effective_max_tokens,
+                    safety_tokens=self.context_safety_tokens,
                 )
             )
         except ValueError as error:

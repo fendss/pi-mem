@@ -72,6 +72,7 @@ models:
   answer:
     id: gpt-4.1-mini
     protocol: openai-completions
+    context_safety_tokens: 24576
 service:
   host: 127.0.0.1
   port: 3113
@@ -120,6 +121,10 @@ describe("MemoryAgentBench YAML configuration", () => {
     });
     expect(invocation.command).toBe("/tools/uv");
     expect(invocation.args).toContain("gpt-4.1-mini");
+    expect(invocation.args.slice(
+      invocation.args.indexOf("--answer-context-safety-tokens"),
+      invocation.args.indexOf("--answer-context-safety-tokens") + 2,
+    )).toEqual(["--answer-context-safety-tokens", "24576"]);
     expect(invocation.args).toContain("http://127.0.0.1:3113");
     expect(invocation.env.OPENAI_API_KEY).toBe("test-key");
     expect(invocation.env.SSL_CERT_FILE).toContain("generation-ca.pem");

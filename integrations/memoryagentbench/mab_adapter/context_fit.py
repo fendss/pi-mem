@@ -37,9 +37,12 @@ def fit_memory_prompt_to_context_window(
     model: str,
     context_window: int,
     max_output_tokens: int,
+    safety_tokens: int = _CONTEXT_SAFETY_TOKENS,
 ) -> str:
     """Fit a structured evidence handoff without cutting source records."""
-    input_budget = context_window - max_output_tokens - _CONTEXT_SAFETY_TOKENS
+    if safety_tokens < 0:
+        raise ValueError("Answer context safety tokens must be non-negative")
+    input_budget = context_window - max_output_tokens - safety_tokens
     if input_budget <= _CHAT_TOKEN_OVERHEAD:
         raise ValueError("Answer model output reservation leaves no input context")
     encoding = _encoding_for_model(model)

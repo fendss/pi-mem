@@ -263,6 +263,14 @@ function modelAt(value, path) {
     maxTokens: model.max_tokens === undefined
       ? 4_096
       : integerAt(model.max_tokens, `${path}.max_tokens`, 1, 1_000_000),
+    contextSafetyTokens: model.context_safety_tokens === undefined
+      ? 1_024
+      : integerAt(
+          model.context_safety_tokens,
+          `${path}.context_safety_tokens`,
+          0,
+          1_000_000,
+        ),
   };
 }
 
@@ -860,6 +868,8 @@ export function runnerInvocation(
       "--answer-thinking-level", config.models.answer.thinkingLevel,
       "--answer-max-tokens", String(config.models.answer.maxTokens),
       "--answer-context-window", String(config.models.answer.contextWindow),
+      "--answer-context-safety-tokens",
+      String(config.models.answer.contextSafetyTokens),
       "--answer-timeout-seconds", String(config.run.answerTimeoutSeconds),
       "--operator-mode", mode,
       "--max-search-calls", String(config.run.maxSearchCalls),
