@@ -81,7 +81,9 @@ export function createWorkingMemoryContext(
 
   return {
     observation,
-    availableTools: (tools: readonly AgentTool[]) => optionalNotes && observation.searchesRemaining() === 0 ? tools.filter(t => t.name !== "search") : [...tools],
+    // Search remains in the schema after the budget is spent. Execution-time
+    // validation then reports the real budget error instead of a missing tool.
+    availableTools: (tools: readonly AgentTool[]) => [...tools],
     wrapTools(tools: readonly AgentTool[]): AgentTool[] {
       return tools.map((tool) => {
         const parameters = tool.parameters as ReturnType<typeof Type.Object>;

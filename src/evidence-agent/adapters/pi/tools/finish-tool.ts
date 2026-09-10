@@ -22,6 +22,8 @@ export function createFinishTool(
     executionMode: "sequential",
     async execute(_toolCallId, params) {
       const evidence = options.ledger.inspectedEvidence;
+      // This is an engineering invariant, not a semantic completeness proof.
+      // The model decides whether the acquired sources answer the question.
       if (params.status === "sufficient" && evidence.length === 0) {
         throw new Error(
           "Finish rejected: sufficient retrieval requires at least one exact " +

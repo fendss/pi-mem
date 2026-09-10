@@ -66,12 +66,12 @@ describe("current task progress", () => {
     expect(c.workingMemorySnapshot().revision).toBe(0);
     expect((finish!.parameters as {required?: string[]}).required).not.toContain("workingMemory");
   });
-  it("removes only new search after the semantic budget is exhausted", () => {
+  it("keeps the tool contract stable after the semantic budget is exhausted", () => {
     const c=createWorkingMemoryContext(new MemoryLedger("s"),1,"progress");
     const tools=["search","search_more","read","finish"].map(name=>({name,label:name,description:name,parameters:Type.Object({}),execute:async()=>({content:[],details:{}})}));
     expect(c.availableTools(tools)).toHaveLength(4);
     c.observation.recordSearch({queries:[],findings:[],directoryFindings:[]} as never);
-    expect(c.availableTools(tools).map(t=>t.name)).toEqual(["search_more","read","finish"]);
+    expect(c.availableTools(tools).map(t=>t.name)).toEqual(["search","search_more","read","finish"]);
   });
   it("keeps dependent judgments valid when C becomes E for the same supporting source", () => {
     const ledger=new MemoryLedger("s"),content="Lives in Paris. Paris is in France.";

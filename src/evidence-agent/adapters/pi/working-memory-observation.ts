@@ -7,9 +7,13 @@ interface WorkingMemoryObservationOptions {
   recordShown?: (ref: string, text: string) => void;
   /** Re-expose the current result when earlier observations can leave context. */
   refreshResults?: boolean;
-  /** Keep only the current ranked page and the next legal actions model-visible. */
+  /** Keep a bounded current page and a small unread shelf model-visible. */
   compact?: boolean;
 }
+
+const MAX_CURRENT_COMPACT_FINDINGS = 20;
+const MAX_RETAINED_COMPACT_FINDINGS = 8;
+const RETAINED_COMPACT_PREVIEW_CHARS = 160;
 
 /** Navigation deltas only. The context policy supplies the persistent note. */
 export function createWorkingMemoryObservation(
@@ -20,6 +24,37 @@ export function createWorkingMemoryObservation(
   const displayed = new Set<string>();
   let searches = 0;
   let pending: Parameters<MemoryObservation["recordSearch"]>[0] | undefined;
+  let currentFindings: MemoryCandidate[] = [];
+  let retainedFindings: MemoryCandidate[] = [];
+  let lastRetainedSignature: string | undefined;
+
+  function currentCandidate(candidate: MemoryCandidate): MemoryCandidate {
+    return ledger.selectCandidates([candidate.candidateId])[0] ?? candidate;
+  }
+
+  function unread(findings: readonly MemoryCandidate[]): MemoryCandidate[] {
+    return findings
+      .map(currentCandidate)
+      .filter((candidate) => !candidate.inspected);
+  }
+
+  function unique(findings: readonly MemoryCandidate[]): MemoryCandidate[] {
+    const seen = new Set<string>();
+    return findings.filter((candidate) => {
+      if (seen.has(candidate.candidateId)) return false;
+      seen.add(candidate.candidateId);
+      return true;
+    });
+  }
+
+  function renderRetainedFinding(candidate: MemoryCandidate): string | undefined {
+    const ref = ledger.candidateRef(candidate.candidateId);
+    if (ref === undefined) return undefined;
+    const preview = candidate.passage?.content ?? candidate.preview;
+    const text = compactPreview(preview, RETAINED_COMPACT_PREVIEW_CHARS);
+    options.recordShown?.(ref, text);
+    return `- read ${ref}${candidate.timestamp === undefined ? "" : ` · ${candidate.timestamp}`}\n  ${text}`;
+  }
 
   function renderFinding(candidate: MemoryCandidate, limit: number): string | undefined {
     const ref = ledger.candidateRef(candidate.candidateId);
@@ -50,6 +85,15 @@ export function createWorkingMemoryObservation(
     },
     recordSearch(input) {
       if (input.countsAgainstSearchBudget !== false) searches += 1;
+      if (options.compact) {
+        retainedFindings = unique([
+          ...unread(currentFindings),
+          ...unread(retainedFindings),
+        ]).slice(0, MAX_RETAINED_COMPACT_FINDINGS);
+        currentFindings = [...(input.findings ?? [])]
+          .slice(0, MAX_CURRENT_COMPACT_FINDINGS);
+        lastRetainedSignature = undefined;
+      }
       pending = input;
     },
     render() {
@@ -65,6 +109,20 @@ export function createWorkingMemoryObservation(
           const line = renderFinding(candidate, 280);
           return line === undefined ? [] : [line];
         });
+        const retained = unread(retainedFindings);
+        const shelf = unique([
+          ...unread(currentFindings),
+          ...retained,
+        ]);
+        const retainedSignature = shelf.map((candidate) => candidate.candidateId).join("|");
+        const showRetained = current === undefined && shelf.length > 0 &&
+          retainedSignature !== lastRetainedSignature;
+        const retainedLines = (showRetained ? shelf : current === undefined ? [] : retained)
+          .flatMap((candidate) => {
+            const line = renderRetainedFinding(candidate);
+            return line === undefined ? [] : [line];
+          });
+        if (current === undefined) lastRetainedSignature = retainedSignature;
         return [
           "<MEMORY>",
           status,
@@ -79,6 +137,14 @@ export function createWorkingMemoryObservation(
                 ...(current.pagination?.hasMore
                   ? ["More results are available through search_more."]
                   : []),
+              ]),
+          ...(retainedLines.length === 0
+            ? []
+            : [
+                current === undefined
+                  ? "Still-readable candidates from recent searches"
+                  : "Still-readable candidates from an earlier search",
+                ...retainedLines,
               ]),
           "Read only promising candidates. Search for a missing fact, or finish when the exact sources read cover the question.",
           "</MEMORY>",

@@ -4,8 +4,6 @@ import { renderInspectedEvidence } from "./render-tool-result.js";
 import {
   MAX_READ_RESULT_CHARS,
   projectMemoryEvidenceBatch,
-  projectPassageEvidence,
-  type MemoryEvidence,
 } from "../../../model/source-evidence.js";
 import { CompactReadParameters, ReadParameters } from "./schemas.js";
 import { candidateToolDetails } from "./candidate-details.js";
@@ -25,7 +23,7 @@ export function createReadTool(
     name: "read",
     label: "Read memory",
     description: compact
-      ? "Read up to six promising candidates from the visible search page. The harness retains exact sources and provenance for final handoff."
+      ? "Read up to six visible candidate references. The harness promotes them to their immutable parent sources and retains provenance for final handoff."
       : "Read selected immutable sources into the final exact-source package using candidate handles such as C1. " +
         "The exact payload is retained privately under short E handles and every " +
         "source returned by read is automatically committed when finish succeeds. " +
@@ -85,36 +83,7 @@ export function createReadTool(
           throw new Error(`Read did not return selected parent memory ${memoryId}`);
         }
       }
-      const exactPassages: Array<{
-        evidence: MemoryEvidence;
-        candidateId: string;
-      }> = selectedCandidates.flatMap((candidate) => {
-        if (candidate.passage === undefined) return [];
-        const memory = memoriesById.get(candidate.memoryId);
-        if (memory === undefined) {
-          throw new Error(`Read did not return parent memory ${candidate.memoryId}`);
-        }
-        return [{
-          evidence: projectPassageEvidence(memory, candidate.passage),
-          candidateId: candidate.candidateId,
-        }];
-      });
-      const passageParentIds = new Set(
-        exactPassages.map((item) => item.evidence.memoryId),
-      );
-      const selectedParentIds = new Set(selectedCandidates
-        .filter((candidate) => candidate.passage === undefined)
-        .map((candidate) => candidate.memoryId));
-      const boundedRecords = memories.filter((memory) =>
-        !passageParentIds.has(memory.memoryId) || selectedParentIds.has(memory.memoryId)
-      );
-      const passageChars = exactPassages.reduce((sum, item) => sum + item.evidence.content.length, 0);
-      if (passageChars > readResultChars) {
-        throw new Error(
-          `Selected exact passages exceed the ${String(readResultChars)} character compact read budget. Read fewer candidates.`,
-        );
-      }
-      const boundedEvidence = projectMemoryEvidenceBatch(boundedRecords, (memory) => {
+      const projected = projectMemoryEvidenceBatch(memories, (memory) => {
         const candidates = options.ledger.selectMemoryCandidates([memory.memoryId]);
         return [
           ...(options.question === undefined ? [] : [options.question]),
@@ -124,13 +93,7 @@ export function createReadTool(
             discovery.query === undefined ? [] : [discovery.query]
           )),
         ];
-      }, readResultChars - passageChars, (memory) =>
-        selectedParentIds.has(memory.memoryId) ? options.ledger.sourceSpansFor(memory) : []
-      );
-      const projected = [
-        ...exactPassages.map((item) => item.evidence),
-        ...boundedEvidence,
-      ];
+      }, readResultChars, (memory) => options.ledger.sourceSpansFor(memory));
       const renderedChars = projected.reduce(
         (sum, evidence) => sum + evidence.content.length,
         0,
@@ -141,9 +104,16 @@ export function createReadTool(
             "Read fewer candidate passages or request less neighboring context.",
         );
       }
-      const inspectedCandidateIds = selectedCandidates.map(
-        (candidate) => candidate.candidateId,
+      const completeParentIds = new Set(
+        projected
+          .filter((evidence) => !evidence.truncated)
+          .map((evidence) => evidence.memoryId),
       );
+      const inspectedCandidateIds = [...new Set([
+        ...selectedCandidates.map((candidate) => candidate.candidateId),
+        ...options.ledger.selectMemoryCandidates([...completeParentIds])
+          .map((candidate) => candidate.candidateId),
+      ])];
       const recorded = options.ledger.recordInspect(
         projected,
         undefined,
@@ -157,15 +127,11 @@ export function createReadTool(
         ...inspectedCandidateIds,
         ...expandedMemoryIds,
       ]);
-      const renderedCandidateIds = [
-        ...exactPassages.map((item) => item.candidateId),
-        ...boundedEvidence.map((memory) =>
-          selectedCandidates.find((candidate) =>
-            candidate.memoryId === memory.memoryId &&
-            candidate.passage === undefined
-          )?.candidateId ?? memory.memoryId
-        ),
-      ];
+      const renderedCandidateIds = projected.map((memory) =>
+        selectedCandidates.find((candidate) =>
+          candidate.memoryId === memory.memoryId
+        )?.candidateId ?? memory.memoryId
+      );
       const evidenceReferences = recorded.map((memory, index) => ({
         evidenceRef: options.ledger.evidenceRef(memory.memoryId)!,
         candidateRef: options.ledger.candidateRef(

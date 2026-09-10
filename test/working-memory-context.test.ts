@@ -176,7 +176,7 @@ describe("working-memory context policy", () => {
     await read.execute("r2",{workingMemory:null});
     expect(JSON.stringify(await context.transformContext(prior))).not.toContain("earlier source");
   });
-  it.each(["working-memory-v3", "working-memory-rewrite"] as const)("runs %s through the actual Agent protocol and keeps exhausted search hidden across nudges", async (policy) => {
+  it.each(["working-memory-v3", "working-memory-rewrite"] as const)("runs %s through the actual Agent protocol and keeps the tool contract stable across nudges", async (policy) => {
     const memory: MemoryRecord = { memoryId: "m", scopeId: "s", sessionId: "one", turnIndex: 0,
       role: "user", content: "The required fact is blue.", contentHash: sha256("The required fact is blue."), metadata: {} };
     const store: PiMemRuntimeStore = {
@@ -214,7 +214,7 @@ describe("working-memory context policy", () => {
     expect(output.workingMemory?.version).toBe(policy === "working-memory-rewrite" ? 1 : 3);
     expect(output.evidence[0]!.content).toContain("The required fact is blue.");
     for (const payload of inputs.slice(1).map(s=>JSON.parse(s))) {
-      expect(payload.tools.map((t: {name:string})=>t.name)).not.toContain("search");
+      expect(payload.tools.map((t: {name:string})=>t.name)).toContain("search");
       expect(payload.tools.map((t: {name:string})=>t.name)).toContain("read");
     }
     if (policy === "working-memory-v3") expect(inputs[2]).toContain('\\"read\\":true');

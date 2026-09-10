@@ -773,7 +773,7 @@ _No top-level functions, classes, or class methods._
 
 | Symbol | Purpose | Kind | Visibility | Source |
 |---|---|---|---|---|
-| `createReadTool(options: CreatePiMemToolsOptions): PiMemTools["read"]` | Creates read tool. | function | exported | [line 17](../../src/evidence-agent/adapters/pi/tools/read-tool.ts#L17) |
+| `createReadTool(options: CreatePiMemToolsOptions): PiMemTools["read"]` | Creates read tool. | function | exported | [line 15](../../src/evidence-agent/adapters/pi/tools/read-tool.ts#L15) |
 ## `src/evidence-agent/adapters/pi/tools/render-tool-result.ts`
 
 | Symbol | Purpose | Kind | Visibility | Source |
@@ -823,7 +823,7 @@ _No top-level functions, classes, or class methods._
 
 | Symbol | Purpose | Kind | Visibility | Source |
 |---|---|---|---|---|
-| `createWorkingMemoryObservation(ledger: MemoryLedger, maxSearchCalls?: number, options: WorkingMemoryObservationOptions = {})` | Navigation deltas only. | function | exported | [line 15](../../src/evidence-agent/adapters/pi/working-memory-observation.ts#L15) |
+| `createWorkingMemoryObservation(ledger: MemoryLedger, maxSearchCalls?: number, options: WorkingMemoryObservationOptions = {})` | Navigation deltas only. | function | exported | [line 19](../../src/evidence-agent/adapters/pi/working-memory-observation.ts#L19) |
 ## `src/evidence-agent/index.ts`
 
 _No top-level functions, classes, or class methods._

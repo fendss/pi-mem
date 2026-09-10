@@ -63,8 +63,11 @@ export function createRewriteWorkingMemoryContext(
 
   return {
     observation,
-    availableTools: (tools: readonly AgentTool[]) => observation.searchesRemaining() === 0
-      ? tools.filter(tool => tool.name !== "search") : [...tools],
+    // Keep the tool contract stable for the whole run. The search tool owns
+    // budget enforcement and returns a precise error after exhaustion. Removing
+    // the tool here turns an ordinary budget boundary into "tool not found",
+    // which gives the model no reliable way to recover.
+    availableTools: (tools: readonly AgentTool[]) => [...tools],
     workingMemorySnapshot: () => memory.snapshot(),
     wrapTools(tools: readonly AgentTool[]): AgentTool[] {
       return tools.map(tool => {

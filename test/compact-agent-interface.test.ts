@@ -5,6 +5,7 @@ import {
   type MemoryToolStore,
 } from "../src/evidence-agent/adapters/pi/tools.js";
 import { MemoryLedger } from "../src/evidence-agent/model/ledger.js";
+import { createWorkingMemoryContext } from "../src/evidence-agent/adapters/pi/working-memory-context.js";
 import type { MemoryRecord } from "../src/memory/index.js";
 
 function source(index: number, content = `Fact ${String(index)}.`): MemoryRecord {
@@ -112,7 +113,7 @@ describe("compact agent interface", () => {
     expect(secondText).toContain("read C30");
   });
 
-  it("uses no neighboring turns and reads the exact query-local passage", async () => {
+  it("uses no neighboring turns and promotes the selected passage to its complete parent", async () => {
     const long = source(
       1,
       `${"irrelevant context ".repeat(2_000)}The requested compact fact is here.`,
@@ -157,11 +158,72 @@ describe("compact agent interface", () => {
     expect(context).toEqual({ before: 0, after: 0 });
     expect(result.details.contextBefore).toBe(0);
     expect(result.details.contextAfter).toBe(0);
-    expect(JSON.stringify(result.content).length).toBeLessThan(15_000);
+    expect(JSON.stringify(result.content)).toContain(long.content);
     expect(JSON.stringify(result.content)).toContain(
       "The requested compact fact is here.",
     );
+    expect(result.details.evidence[0]?.truncated).toBe(false);
+  });
+
+  it("keeps the selected exact passage when its parent exceeds the compact read budget", async () => {
+    const target = "The oversized parent still contains this exact fact.";
+    const long = source(1, `${"head ".repeat(14_000)}${target}${" tail".repeat(14_000)}`);
+    const store: MemoryToolStore = {
+      search(_scopeId, request) {
+        return [{ record: long, query: request.queries[0]!, retriever: "fts5", rank: 1, score: 1, preview: target }];
+      },
+      read() {
+        return [long];
+      },
+    };
+    const tools = createPiMemTools({
+      store,
+      operatorRegistry: createSearchOperatorRegistry(store),
+      scopeId: "compact-scope",
+      ledger: new MemoryLedger("compact-scope"),
+      interfaceMode: "compact",
+    });
+    await tools.search.execute("search-1", { queries: ["oversized exact fact"] });
+    const result = await tools.read.execute("read-1", { candidateRefs: ["C1"] });
+
     expect(result.details.evidence[0]?.truncated).toBe(true);
+    expect(JSON.stringify(result.content)).toContain(target);
+    expect(result.details.evidence[0]!.excerpts.some((excerpt) =>
+      excerpt.start <= long.content.indexOf(target) &&
+      excerpt.end >= long.content.indexOf(target) + target.length
+    )).toBe(true);
+  });
+
+  it("keeps a bounded set of unread candidates actionable after later actions", async () => {
+    const records = [source(1, "first candidate"), source(2, "second candidate")];
+    let search = 0;
+    const store: MemoryToolStore = {
+      search(_scopeId, request) {
+        const record = records[search++]!;
+        return [{ record, query: request.queries[0]!, retriever: "fts5", rank: 1, score: 1, preview: record.content }];
+      },
+      read(_scopeId, memoryIds) {
+        return records.filter((record) => memoryIds.includes(record.memoryId));
+      },
+    };
+    const ledger = new MemoryLedger("compact-scope");
+    const context = createWorkingMemoryContext(ledger, undefined, "rewrite", true);
+    const tools = createPiMemTools({
+      store,
+      operatorRegistry: createSearchOperatorRegistry(store),
+      scopeId: "compact-scope",
+      ledger,
+      observation: context.observation,
+      interfaceMode: "compact",
+    });
+
+    await tools.search.execute("search-1", { queries: ["first"] });
+    const second = await tools.search.execute("search-2", { queries: ["second"] });
+    expect(JSON.stringify(second.content)).toContain("Still-readable candidates from an earlier search");
+    expect(JSON.stringify(second.content)).toContain("read C1");
+    const read = await tools.read.execute("read-2", { candidateRefs: ["C2"] });
+    expect(JSON.stringify(read.content)).toContain("Still-readable candidates from recent searches");
+    expect(JSON.stringify(read.content)).toContain("read C1");
   });
 
   it("keeps semantic parent reads complete when a six-parent batch fits 128 KiB", async () => {
