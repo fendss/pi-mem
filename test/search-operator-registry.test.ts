@@ -659,15 +659,24 @@ describe("SearchOperatorRegistry", () => {
     const definitionSchema = JSON.stringify(tools.defineOperator!.parameters);
     expect(definitionSchema).toContain('"steps"');
     expect(definitionSchema).toContain("diversify");
+    expect(definitionSchema).not.toContain('"filter"');
+    expect(definitionSchema).not.toContain('"roles"');
     expect(definitionSchema).not.toContain('"output"');
     expect(definitionSchema).not.toContain('"by"');
+    await expect(tools.defineOperator!.execute("define-stale-filter", {
+      id: "stale-role-plan",
+      summary: "A stale client attempts to restore a model-owned role filter.",
+      steps: [
+        { id: "source", kind: "search", operator: "left" },
+        { id: "user", kind: "filter", input: "source", roles: ["user"] },
+      ],
+    } as never)).rejects.toThrow(/harness-owned/iu);
     const definitionResult = await tools.defineOperator!.execute("define-1", {
       id: "focused-left",
       summary: "Reuse exact recall with a stable name.",
       steps: [
         { id: "source", kind: "search", operator: "left" },
-        { id: "user", kind: "filter", input: "source", roles: ["user"] },
-        { id: "unique", kind: "dedupe", input: "user" },
+        { id: "unique", kind: "dedupe", input: "source" },
         {
           id: "sessions",
           kind: "diversify",
@@ -706,7 +715,7 @@ describe("SearchOperatorRegistry", () => {
     expect(JSON.stringify(searchResult.content)).toContain(
       'Search left for \\"source\\"',
     );
-    expect(JSON.stringify(searchResult.content)).toContain("Keep user sources");
+    expect(JSON.stringify(searchResult.content)).toContain("Remove duplicate content");
     expect(JSON.stringify(searchResult.content)).not.toContain("users: filter");
     await expect(tools.defineOperator!.execute("define-2", {
       id: "nested",

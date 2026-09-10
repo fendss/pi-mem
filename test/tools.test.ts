@@ -8,6 +8,7 @@ import type { StoreSearchHit } from "../src/platform/sqlite/pimem-store.js";
 import {
   createFinishOnlyBeforeToolCall,
   createToolProtocolBeforeToolCall,
+  DefineOperatorParameters,
   createPiMemTools as createPiMemToolsWithRegistry,
   validateFinishToolBatch,
   type CreatePiMemToolsOptions,
@@ -83,9 +84,11 @@ describe("PiMem tools", () => {
     expect(searchSchema).toContain(
       "Optional additional retrieval paths executed in this same search call",
     );
-    expect(searchSchema).toContain(
-      "Optional source-role filter applied to every retrieval path",
-    );
+    expect(searchSchema).not.toContain('"roles"');
+    expect(searchSchema).toContain('"additionalProperties":false');
+    const defineOperatorSchema = JSON.stringify(DefineOperatorParameters);
+    expect(defineOperatorSchema).not.toContain('"filter"');
+    expect(defineOperatorSchema).not.toContain('"roles"');
     expect(searchSchema).toContain(
       "this does not change the hidden physical reservoir",
     );
@@ -216,7 +219,7 @@ describe("PiMem tools", () => {
     expect(JSON.stringify(result.content).length).toBeLessThan(10_000);
   });
 
-  it("keeps chronological retrieval primitive and leaves role filtering to plans", async () => {
+  it("keeps chronological retrieval primitive and applies its ordering", async () => {
     const searched = {
       ...record("m-time", 0),
       timestamp: "2024-01-01T00:00:00",
@@ -261,7 +264,7 @@ describe("PiMem tools", () => {
     );
   });
 
-  it("composes retrieval branches and source-shape modifiers inside one search call", async () => {
+  it("composes retrieval branches and result-shape modifiers inside one search call", async () => {
     const semantic = {
       ...record("m-semantic", 0),
       sessionId: "session-new",
@@ -327,29 +330,32 @@ describe("PiMem tools", () => {
         queries: ["earlier exact value"],
       }],
       combine: "union",
-      roles: ["user"],
       order: "chronological",
       maxPerSession: 1,
-    });
+      // Simulate a transport that skips schema validation and forwards a stale
+      // model-generated field. The execution boundary must still discard it.
+      roles: ["user"],
+    } as never);
 
     expect(requests).toHaveLength(2);
     expect(requests).toEqual(expect.arrayContaining([
-      expect.objectContaining({ roles: ["user"], maxPerSession: 1 }),
+      expect.objectContaining({ maxPerSession: 1 }),
     ]));
+    expect(requests.every((request) => request.roles === undefined)).toBe(true);
     expect(result.details.candidates.map((candidate) => candidate.memoryId)).toEqual([
+      "m-assistant",
       "m-exact",
       "m-semantic",
     ]);
     expect(result.details.request).toMatchObject({
-      roles: ["user"],
       order: "chronological",
       maxPerSession: 1,
     });
+    expect(result.details.request.roles).toBeUndefined();
     expect(result.details.composition?.steps.map((step) => step.kind)).toEqual([
       "search",
       "search",
       "combine",
-      "filter",
       "sort",
       "diversify",
     ]);

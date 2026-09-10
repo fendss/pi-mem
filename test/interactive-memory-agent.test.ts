@@ -339,7 +339,7 @@ describe("interactive PiMem agent runtime", () => {
     });
 
     expect(baseline).not.toContain("<active_skill");
-    expect(treatment).toBe(`${baseline}\n\n<active_skill name="pimem-knowledge-action" version="pimem-knowledge-action-evidence-transaction-v5">\n${PIMEM_ACTION_SKILL_TEXT}\n</active_skill>`);
+    expect(treatment).toBe(`${baseline}\n\n<active_skill name="pimem-knowledge-action" version="pimem-knowledge-action-evidence-transaction-v6">\n${PIMEM_ACTION_SKILL_TEXT}\n</active_skill>`);
   });
 
   it("preserves the official initial assistant greeting before the first user turn", async () => {

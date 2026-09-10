@@ -34,9 +34,9 @@ describe("runtime Skill experiment boundary", () => {
     expect(PIMEM_SKILL_TEXT).toContain(
       "without imposing a task-specific reasoning strategy",
     );
-    expect(PIMEM_SKILL_TEXT).toContain("Start with `queries` only");
+    expect(PIMEM_SKILL_TEXT).toContain("Search spans all source roles");
     expect(PIMEM_SKILL_TEXT).toContain(
-      "Add `roles`, `order`, or `maxPerSession`",
+      "`queries` only. Add `order` or `maxPerSession`",
     );
     expect(PIMEM_SKILL_TEXT).toContain(
       "hybrid primary path plus a lexical",

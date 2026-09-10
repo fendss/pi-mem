@@ -9,7 +9,7 @@ allowed-tools: search search_more define_operator read bash_ro
 
 The initial catalog contains primitive retrievers. Use one primitive for a
 simple evidence need. Compose a run-local plan when policy or procedure recall
-requires multiple retrieval channels, role filters, ordering, or candidate-set
+requires multiple retrieval channels, ordering, or candidate-set
 fusion. Do not assume a primitive exists unless it appears in the catalog.
 
 ## Routing loop
@@ -19,8 +19,9 @@ fusion. Do not assume a primitive exists unless it appears in the catalog.
 2. Select primitive candidate generators from their capability metadata. Use
    lexical retrieval for exact policy terms and hybrid retrieval for uncertain
    wording. When more than one channel or transformation is needed, compose an
-   ordered plan with search, `rrf`/`union`/`intersection`, role filtering,
-   sorting, session diversification, content deduplication, and limiting.
+   ordered plan with search, `rrf`/`union`/`intersection`, sorting, session
+   diversification, content deduplication, and limiting. Source roles are
+   harness-owned metadata and are not plan inputs.
    Every plan input references an earlier step. Do not build a plan for an
    ordinary one-source search.
 3. Treat search output as navigation. Explicitly `read` the strongest source

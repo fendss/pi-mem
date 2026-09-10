@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Keep source-role filtering in the harness-owned retrieval layer and remove it
+  from Agent-authored search requests and run-local operator definitions.
+
 ## 1.4.0 - 2026-09-09
 
 - Add lightweight, optional working-memory progress notes and simplify finish

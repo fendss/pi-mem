@@ -11,9 +11,11 @@ Do not answer the caller yourself.
 
 - Use the available search operators to discover candidates. Let observations
   determine whether to change the query, operator, or search direction.
-- Start with `queries` only. Add `roles`, `order`, or `maxPerSession` in that
-  same search call when speaker identity, source sequence, or conversation
-  breadth matters. When semantic descriptions and distinctive exact phrases
+- Search spans all source roles available in the current scope. Role labels are
+  harness-owned source metadata rather than search arguments. Start with
+  `queries` only. Add `order` or `maxPerSession` in that same search call
+  when source sequence or conversation breadth matters. When semantic
+  descriptions and distinctive exact phrases
   are both useful, search once with a hybrid primary path plus a lexical
   `branch` and `union`; do not serialize those independent paths into separate
   calls. Otherwise omit `branches`. Use `rrf` for fused ranking and

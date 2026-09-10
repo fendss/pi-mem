@@ -26,13 +26,6 @@ const SearchQueries = (description: string) => Type.Array(
   },
 );
 
-const MemoryRole = Type.Union([
-  Type.Literal("user"),
-  Type.Literal("assistant"),
-  Type.Literal("system"),
-  Type.Literal("other"),
-]);
-
 const SearchOrder = Type.Union([
   Type.Literal("relevance"),
   Type.Literal("chronological"),
@@ -78,12 +71,6 @@ export function createSearchParameters(operatorIds: readonly string[]) {
         "Use union for breadth and intersection only for evidence that must match every path. " +
         "It has no effect when branches are omitted.",
     })),
-    roles: Type.Optional(Type.Array(MemoryRole, {
-      minItems: 1,
-      maxItems: 4,
-      description:
-        "Optional source-role filter applied to every retrieval path, such as [\"user\"] for user-stated history.",
-    })),
     order: Type.Optional(SearchOrder),
     maxPerSession: Type.Optional(Type.Integer({
       minimum: 1,
@@ -100,7 +87,7 @@ export function createSearchParameters(operatorIds: readonly string[]) {
         "harness default; this does not change the hidden physical reservoir. " +
         "search_more reveals later bounded pages.",
     })),
-  });
+  }, { additionalProperties: false });
 }
 
 export type SearchParametersSchema = ReturnType<typeof createSearchParameters>;
@@ -153,12 +140,6 @@ const DefineOperatorStep = Type.Union([
       Type.Literal("intersection"),
     ]),
     limit: Type.Optional(Type.Integer({ minimum: 1, maximum: 100 })),
-  }),
-  Type.Object({
-    id: StepId,
-    kind: Type.Literal("filter"),
-    input: StepInput,
-    roles: Type.Array(MemoryRole, { minItems: 1, maxItems: 4 }),
   }),
   Type.Object({
     id: StepId,

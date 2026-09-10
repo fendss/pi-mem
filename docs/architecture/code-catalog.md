@@ -787,7 +787,7 @@ _No top-level functions, classes, or class methods._
 |---|---|---|---|---|
 | `SearchOperatorId(description: string)` | Implements the search operator id operation. | function | internal | [line 13](../../src/evidence-agent/adapters/pi/tools/schemas.ts#L13) |
 | `SearchQueries(description: string)` | Implements the search queries operation. | function | internal | [line 20](../../src/evidence-agent/adapters/pi/tools/schemas.ts#L20) |
-| `createSearchParameters(operatorIds: readonly string[])` | Creates search parameters. | function | exported | [line 42](../../src/evidence-agent/adapters/pi/tools/schemas.ts#L42) |
+| `createSearchParameters(operatorIds: readonly string[])` | Creates search parameters. | function | exported | [line 35](../../src/evidence-agent/adapters/pi/tools/schemas.ts#L35) |
 ## `src/evidence-agent/adapters/pi/tools/search-tool.ts`
 
 | Symbol | Purpose | Kind | Visibility | Source |

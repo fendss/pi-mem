@@ -40,7 +40,7 @@ const ACTION_SKILL_PATH = fileURLToPath(
 );
 
 export const PIMEM_ACTION_SKILL_TEXT = readFileSync(ACTION_SKILL_PATH, "utf8");
-export const PIMEM_ACTION_SKILL_VERSION = "pimem-knowledge-action-evidence-transaction-v5";
+export const PIMEM_ACTION_SKILL_VERSION = "pimem-knowledge-action-evidence-transaction-v6";
 export const PIMEM_ACTION_SKILL_HASH = sha256(PIMEM_ACTION_SKILL_TEXT);
 export const PIMEM_INTERACTIVE_HARNESS_VERSION = "pimem-interactive-agent-v6";
 export const DEFAULT_INTERACTIVE_MEMORY_MAX_TURNS_PER_INPUT = 64;

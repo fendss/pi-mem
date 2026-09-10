@@ -26,6 +26,17 @@ export function createDefineOperatorTool(
     ].join(" "),
     parameters: DefineOperatorParameters,
     async execute(_toolCallId, params) {
+      if (
+        Object.hasOwn(params, "roles") ||
+        params.steps.some((step) =>
+          String(step.kind) === "filter" || Object.hasOwn(step, "roles")
+        )
+      ) {
+        throw new Error(
+          "Source-role filtering is harness-owned and unavailable in " +
+          "Agent-defined operators.",
+        );
+      }
       const steps = structuredClone(params.steps).map((step) =>
         step.kind === "diversify"
           ? { ...step, by: "session" as const }

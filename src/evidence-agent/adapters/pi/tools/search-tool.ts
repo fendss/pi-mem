@@ -442,7 +442,7 @@ export function createSearchTools(
     label: "Search memory",
     description: [
       "Search is simple by default: provide queries and optionally one operator. " +
-      "For an inline retrieval program, add branches plus a combine method, then optionally filter roles, order results, or cap candidates per session. " +
+      "For an inline retrieval program, add branches plus a combine method, then optionally order results or cap candidates per session. Search always spans the source roles available in the current scope; role labels are harness-owned metadata. " +
       "A common high-recall program is hybrid semantic queries plus one lexical branch, combined with union. " +
       "Use define_operator only when a named plan must be reused. The harness never accepts SQL. " +
       "Use returned opaque candidate handles such as C1 with read; search_more only expands the same physical result.",
@@ -469,7 +469,27 @@ export function createSearchTools(
       executedSearchCalls += 1;
       let execution: SearchMemoryResult;
       try {
-        execution = await searchMemory({ ...params, limit: visibleLimit }, signal);
+        // Project the model payload onto the public retrieval contract. This
+        // remains safe even when a transport skips JSON-schema validation and
+        // sends unknown fields such as the former source-role filter.
+        execution = await searchMemory({
+          queries: [...params.queries],
+          ...(params.operator === undefined ? {} : { operator: params.operator }),
+          ...(params.branches === undefined
+            ? {}
+            : {
+                branches: params.branches.map((branch) => ({
+                  operator: branch.operator,
+                  queries: [...branch.queries],
+                })),
+              }),
+          ...(params.combine === undefined ? {} : { combine: params.combine }),
+          ...(params.order === undefined ? {} : { order: params.order }),
+          ...(params.maxPerSession === undefined
+            ? {}
+            : { maxPerSession: params.maxPerSession }),
+          limit: visibleLimit,
+        }, signal);
       } catch (error) {
         // A failed physical search produced no navigation result and is absent
         // from observation/metrics. Roll back the reservation so every public
