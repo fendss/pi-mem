@@ -70,7 +70,7 @@ describe("source fragments survive evidence transfer", () => {
     for (const e of evidence[0]!.excerpts) expect(prompt).toContain(e.content);
   });
 
-  it("promotes a selected passage to its complete parent and marks sibling passages read", async () => {
+  it("promotes a selected passage without hiding unread sibling passages", async () => {
     const source = record(`head fact.\n${"noise ".repeat(3000)}tail fact.`);
     const { ledger, tools } = setup(source);
     const passage = memoryPassages(source).at(-1)!;
@@ -78,7 +78,8 @@ describe("source fragments survive evidence transfer", () => {
     await tools.read.execute("r", { candidateRefs: ["C2"], contextBefore: 0, contextAfter: 0 });
     expect(ledger.inspectedEvidence[0]!.content).toContain("head fact.");
     expect(ledger.inspectedEvidence[0]!.content).toContain("tail fact.");
-    expect(ledger.candidates.every((candidate) => candidate.inspected)).toBe(true);
+    expect(ledger.resolveCandidates(["C2"])[0]?.inspected).toBe(true);
+    expect(ledger.resolveCandidates(["C1"])[0]?.inspected).toBe(false);
   });
 
   it("rejects impossible preservation atomically instead of silently dropping source fragments", async () => {

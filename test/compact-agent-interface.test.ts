@@ -138,11 +138,12 @@ describe("compact agent interface", () => {
         return [long];
       },
     };
+    const ledger = new MemoryLedger("compact-scope");
     const tools = createPiMemTools({
       store,
       operatorRegistry: createSearchOperatorRegistry(store),
       scopeId: "compact-scope",
-      ledger: new MemoryLedger("compact-scope"),
+      ledger,
       interfaceMode: "compact",
     });
     const search = await tools.search.execute("search-1", {
@@ -158,10 +159,11 @@ describe("compact agent interface", () => {
     expect(context).toEqual({ before: 0, after: 0 });
     expect(result.details.contextBefore).toBe(0);
     expect(result.details.contextAfter).toBe(0);
-    expect(JSON.stringify(result.content)).toContain(long.content);
+    expect(JSON.stringify(result.content)).not.toContain(long.content);
     expect(JSON.stringify(result.content)).toContain(
       "The requested compact fact is here.",
     );
+    expect(ledger.inspectedEvidence[0]?.content).toBe(long.content);
     expect(result.details.evidence[0]?.truncated).toBe(false);
   });
 

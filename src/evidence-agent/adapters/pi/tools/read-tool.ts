@@ -4,6 +4,8 @@ import { renderInspectedEvidence } from "./render-tool-result.js";
 import {
   MAX_READ_RESULT_CHARS,
   projectMemoryEvidenceBatch,
+  projectPassageEvidence,
+  type MemoryEvidence,
 } from "../../../model/source-evidence.js";
 import { CompactReadParameters, ReadParameters } from "./schemas.js";
 import { candidateToolDetails } from "./candidate-details.js";
@@ -83,7 +85,7 @@ export function createReadTool(
           throw new Error(`Read did not return selected parent memory ${memoryId}`);
         }
       }
-      const projected = projectMemoryEvidenceBatch(memories, (memory) => {
+      const handoffEvidence = projectMemoryEvidenceBatch(memories, (memory) => {
         const candidates = options.ledger.selectMemoryCandidates([memory.memoryId]);
         return [
           ...(options.question === undefined ? [] : [options.question]),
@@ -94,7 +96,36 @@ export function createReadTool(
           )),
         ];
       }, readResultChars, (memory) => options.ledger.sourceSpansFor(memory));
-      const renderedChars = projected.reduce(
+      const handoffByMemoryId = new Map(
+        handoffEvidence.map((evidence) => [evidence.memoryId, evidence]),
+      );
+      const displayedEvidence: MemoryEvidence[] = [];
+      const displayedCandidateIds: string[] = [];
+      const displayedMemoryIds = new Set<string>();
+      for (const candidate of selectedCandidates) {
+        const memory = memoriesById.get(candidate.memoryId)!;
+        if (candidate.passage !== undefined) {
+          displayedEvidence.push(projectPassageEvidence(memory, candidate.passage));
+          displayedCandidateIds.push(candidate.candidateId);
+          displayedMemoryIds.add(candidate.memoryId);
+          continue;
+        }
+        if (displayedMemoryIds.has(candidate.memoryId)) continue;
+        const evidence = handoffByMemoryId.get(candidate.memoryId);
+        if (evidence === undefined) {
+          throw new Error(`Read did not project selected parent memory ${candidate.memoryId}`);
+        }
+        displayedMemoryIds.add(candidate.memoryId);
+        displayedEvidence.push(evidence);
+        displayedCandidateIds.push(candidate.candidateId);
+      }
+      for (const evidence of handoffEvidence) {
+        if (displayedMemoryIds.has(evidence.memoryId)) continue;
+        displayedMemoryIds.add(evidence.memoryId);
+        displayedEvidence.push(evidence);
+        displayedCandidateIds.push(evidence.memoryId);
+      }
+      const renderedChars = displayedEvidence.reduce(
         (sum, evidence) => sum + evidence.content.length,
         0,
       );
@@ -104,18 +135,11 @@ export function createReadTool(
             "Read fewer candidate passages or request less neighboring context.",
         );
       }
-      const completeParentIds = new Set(
-        projected
-          .filter((evidence) => !evidence.truncated)
-          .map((evidence) => evidence.memoryId),
+      const inspectedCandidateIds = selectedCandidates.map(
+        (candidate) => candidate.candidateId,
       );
-      const inspectedCandidateIds = [...new Set([
-        ...selectedCandidates.map((candidate) => candidate.candidateId),
-        ...options.ledger.selectMemoryCandidates([...completeParentIds])
-          .map((candidate) => candidate.candidateId),
-      ])];
       const recorded = options.ledger.recordInspect(
-        projected,
+        handoffEvidence,
         undefined,
         inspectedCandidateIds,
       );
@@ -127,7 +151,7 @@ export function createReadTool(
         ...inspectedCandidateIds,
         ...expandedMemoryIds,
       ]);
-      const renderedCandidateIds = projected.map((memory) =>
+      const renderedCandidateIds = recorded.map((memory) =>
         selectedCandidates.find((candidate) =>
           candidate.memoryId === memory.memoryId
         )?.candidateId ?? memory.memoryId
@@ -168,15 +192,15 @@ export function createReadTool(
           type: "text",
           text: [
             "<READ_RESULT>",
-            "Inspected exact evidence (visible for this reasoning turn and " +
-              "retained privately in the evidence ledger; it will enter the final source package):",
+            "Inspected exact passages (visible for this reasoning turn). " +
+              "Their immutable parent sources are retained privately for final handoff:",
             renderInspectedEvidence(
-              recorded,
+              displayedEvidence,
               options.ledger,
               options.questionDate,
-              renderedCandidateIds,
+              displayedCandidateIds,
             ),
-            "Every exact source shown above will be committed when finish succeeds.",
+            "Every parent source selected above will be committed when finish succeeds.",
             "</READ_RESULT>",
             ...(options.observation === undefined
               ? []
