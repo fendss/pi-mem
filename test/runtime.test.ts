@@ -55,7 +55,7 @@ describe("runtime Skill experiment boundary", () => {
     );
   });
 
-  it("keeps the operator catalog out of the compact interface", () => {
+  it("keeps the operator catalog available in the compact presentation", () => {
     const catalog: SearchOperatorCatalogEntry[] = [{
       id: "entity-expand",
       version: "1",
@@ -71,8 +71,8 @@ describe("runtime Skill experiment boundary", () => {
       expect(prompt).toContain("id=entity-expand | version=1");
       expect(prompt).not.toContain("entity-expand@1");
     }
-    expect(piMemSystemPrompt("pimem-minimal", undefined, catalog)).not.toContain(
-      "entity-expand",
+    expect(piMemSystemPrompt("pimem-minimal", undefined, catalog)).toContain(
+      "id=entity-expand | version=1",
     );
   });
 });

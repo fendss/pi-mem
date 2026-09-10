@@ -715,13 +715,13 @@ _No top-level functions, classes, or class methods._
 
 | Symbol | Purpose | Kind | Visibility | Source |
 |---|---|---|---|---|
-| `activeSkillPrompt(skill: Exclude<PiMemSkill, "none">): string` | Implements the active skill prompt operation. | function | internal | [line 55](../../src/evidence-agent/adapters/pi/retrieval-prompt.ts#L55) |
-| `piMemSystemPrompt(skill: PiMemSkill = "pimem-v0", basePrompt?: string, operatorCatalog: readonly SearchOperatorCatalogEntry[] = []): string` | Implements the pi mem system prompt operation. | function | exported | [line 63](../../src/evidence-agent/adapters/pi/retrieval-prompt.ts#L63) |
+| `activeSkillPrompt(skill: Exclude<PiMemSkill, "none">): string` | Implements the active skill prompt operation. | function | internal | [line 56](../../src/evidence-agent/adapters/pi/retrieval-prompt.ts#L56) |
+| `piMemSystemPrompt(skill: PiMemSkill = "pimem-v0", basePrompt?: string, operatorCatalog: readonly SearchOperatorCatalogEntry[] = []): string` | Implements the pi mem system prompt operation. | function | exported | [line 64](../../src/evidence-agent/adapters/pi/retrieval-prompt.ts#L64) |
 ## `src/evidence-agent/adapters/pi/rewrite-working-memory-context.ts`
 
 | Symbol | Purpose | Kind | Visibility | Source |
 |---|---|---|---|---|
-| `createRewriteWorkingMemoryContext(ledger: MemoryLedger, maxSearchCalls?: number, compact = false)` | Notes are optional annotations. | function | exported | [line 45](../../src/evidence-agent/adapters/pi/rewrite-working-memory-context.ts#L45) |
+| `createRewriteWorkingMemoryContext(ledger: MemoryLedger, maxSearchCalls?: number, compact = false)` | Notes are optional annotations. | function | exported | [line 46](../../src/evidence-agent/adapters/pi/rewrite-working-memory-context.ts#L46) |
 ## `src/evidence-agent/adapters/pi/run-agent.ts`
 
 | Symbol | Purpose | Kind | Visibility | Source |
@@ -731,7 +731,7 @@ _No top-level functions, classes, or class methods._
 | `providerFailureKind(message: string): PiMemProviderFailureKind` | Implements the provider failure kind operation. | function | internal | [line 132](../../src/evidence-agent/adapters/pi/run-agent.ts#L132) |
 | `providerResponseModel(message: string): string \| undefined` | Implements the provider response model operation. | function | internal | [line 152](../../src/evidence-agent/adapters/pi/run-agent.ts#L152) |
 | `questionPrompt(question: string, questionDate?: string, compact = false): string` | Builds the user prompt from the question and optional question date. | function | internal | [line 158](../../src/evidence-agent/adapters/pi/run-agent.ts#L158) |
-| `runPiMem(options: RunPiMemOptions): Promise<PiMemResult>` | Runs one bounded evidence-agent session and returns its provenance-backed result. | function | exported | [line 197](../../src/evidence-agent/adapters/pi/run-agent.ts#L197) |
+| `runPiMem(options: RunPiMemOptions): Promise<PiMemResult>` | Runs one bounded evidence-agent session and returns its provenance-backed result. | function | exported | [line 198](../../src/evidence-agent/adapters/pi/run-agent.ts#L198) |
 ## `src/evidence-agent/adapters/pi/tools.ts`
 
 _No top-level functions, classes, or class methods._
@@ -787,18 +787,18 @@ _No top-level functions, classes, or class methods._
 |---|---|---|---|---|
 | `SearchOperatorId(description: string)` | Implements the search operator id operation. | function | internal | [line 13](../../src/evidence-agent/adapters/pi/tools/schemas.ts#L13) |
 | `SearchQueries(description: string)` | Implements the search queries operation. | function | internal | [line 20](../../src/evidence-agent/adapters/pi/tools/schemas.ts#L20) |
-| `createSearchParameters(operatorIds: readonly string[])` | Creates search parameters. | function | exported | [line 53](../../src/evidence-agent/adapters/pi/tools/schemas.ts#L53) |
+| `createSearchParameters(operatorIds: readonly string[])` | Creates search parameters. | function | exported | [line 40](../../src/evidence-agent/adapters/pi/tools/schemas.ts#L40) |
 ## `src/evidence-agent/adapters/pi/tools/search-tool.ts`
 
 | Symbol | Purpose | Kind | Visibility | Source |
 |---|---|---|---|---|
-| `renderPlanTrace(trace: SearchOperatorCompositionTrace \| undefined): string \| undefined` | Renders plan trace. | function | internal | [line 25](../../src/evidence-agent/adapters/pi/tools/search-tool.ts#L25) |
-| `hitQueryFingerprints(hit: RetrievalHit): Set<string>` | Implements the hit query fingerprints operation. | function | internal | [line 49](../../src/evidence-agent/adapters/pi/tools/search-tool.ts#L49) |
-| `coverageProgress(input: { call: number; hits: readonly RetrievalHit[]; executedQueries: readonly string[]; repeatedQueries: readonly string[]; previousCandidates: readonly MemoryCandidate[]; requestedLimit: number; consecutiveNoNewCandidateCalls: number; consecutiveNoNewSessionCalls: number; }): SearchCoverageProgress` | Implements the coverage progress operation. | function | internal | [line 53](../../src/evidence-agent/adapters/pi/tools/search-tool.ts#L53) |
-| `renderCoverageProgress(progress: SearchCoverageProgress): string` | Renders coverage progress. | function | internal | [line 137](../../src/evidence-agent/adapters/pi/tools/search-tool.ts#L137) |
-| `nextContinuationDepth(depth: number, maxDepth: number): number \| undefined` | Implements the next continuation depth operation. | function | internal | [line 181](../../src/evidence-agent/adapters/pi/tools/search-tool.ts#L181) |
-| `pageOperatorResult(result: EvidenceOperatorResult \| undefined, hits: readonly RetrievalHit[], reservoirHits: readonly RetrievalHit[], ledger: MemoryLedger): EvidenceOperatorResult \| undefined` | Implements the page operator result operation. | function | internal | [line 192](../../src/evidence-agent/adapters/pi/tools/search-tool.ts#L192) |
-| `createSearchTools(options: CreatePiMemToolsOptions): Pick<PiMemTools, "search" \| "searchMore">` | Creates search tools. | function | exported | [line 234](../../src/evidence-agent/adapters/pi/tools/search-tool.ts#L234) |
+| `renderPlanTrace(trace: SearchOperatorCompositionTrace \| undefined): string \| undefined` | Renders plan trace. | function | internal | [line 24](../../src/evidence-agent/adapters/pi/tools/search-tool.ts#L24) |
+| `hitQueryFingerprints(hit: RetrievalHit): Set<string>` | Implements the hit query fingerprints operation. | function | internal | [line 48](../../src/evidence-agent/adapters/pi/tools/search-tool.ts#L48) |
+| `coverageProgress(input: { call: number; hits: readonly RetrievalHit[]; executedQueries: readonly string[]; repeatedQueries: readonly string[]; previousCandidates: readonly MemoryCandidate[]; requestedLimit: number; consecutiveNoNewCandidateCalls: number; consecutiveNoNewSessionCalls: number; }): SearchCoverageProgress` | Implements the coverage progress operation. | function | internal | [line 52](../../src/evidence-agent/adapters/pi/tools/search-tool.ts#L52) |
+| `renderCoverageProgress(progress: SearchCoverageProgress): string` | Renders coverage progress. | function | internal | [line 136](../../src/evidence-agent/adapters/pi/tools/search-tool.ts#L136) |
+| `nextContinuationDepth(depth: number, maxDepth: number): number \| undefined` | Implements the next continuation depth operation. | function | internal | [line 180](../../src/evidence-agent/adapters/pi/tools/search-tool.ts#L180) |
+| `pageOperatorResult(result: EvidenceOperatorResult \| undefined, hits: readonly RetrievalHit[], reservoirHits: readonly RetrievalHit[], ledger: MemoryLedger): EvidenceOperatorResult \| undefined` | Implements the page operator result operation. | function | internal | [line 191](../../src/evidence-agent/adapters/pi/tools/search-tool.ts#L191) |
+| `createSearchTools(options: CreatePiMemToolsOptions): Pick<PiMemTools, "search" \| "searchMore">` | Creates search tools. | function | exported | [line 233](../../src/evidence-agent/adapters/pi/tools/search-tool.ts#L233) |
 ## `src/evidence-agent/adapters/pi/tools/tool-protocol.ts`
 
 | Symbol | Purpose | Kind | Visibility | Source |

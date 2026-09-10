@@ -11,7 +11,7 @@ import { CompactReadParameters, ReadParameters } from "./schemas.js";
 import { candidateToolDetails } from "./candidate-details.js";
 
 const DEFAULT_LOCAL_CONTEXT_TURNS = 1;
-const COMPACT_READ_RESULT_CHARS = 12 * 1024;
+const COMPACT_READ_RESULT_CHARS = 128 * 1024;
 const COMPACT_MAX_CANDIDATES_PER_READ = 6;
 
 export function createReadTool(

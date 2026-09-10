@@ -15,7 +15,6 @@ import type { CreatePiMemToolsOptions, PiMemTools, SearchToolDetails } from "./c
 import { renderCandidates, renderEvidenceOperator } from "./render-tool-result.js";
 import {
   CompactSearchMoreParameters,
-  CompactSearchParameters,
   createSearchParameters,
   SearchMoreParameters,
 } from "./schemas.js";
@@ -244,6 +243,10 @@ export function createSearchTools(
   const searchMemory = createSearchMemory({
     operatorRegistry: options.operatorRegistry,
     scopeId: options.scopeId,
+    // Compact search exposes source-bound passages whenever a parent has a
+    // local lexical or operator signal. Semantic parent hits without such a
+    // signal stay readable as parents instead of manufacturing a false span.
+    passageProjection: compact,
     ...(options.question === undefined ? {} : { question: options.question }),
     ...(options.questionDate === undefined
       ? {}
@@ -447,7 +450,12 @@ export function createSearchTools(
     name: "search",
     label: "Search memory",
     description: compact
-      ? "Search memory for the facts still missing. The harness manages retrieval strategy and limits. Read promising handles from the returned page."
+      ? [
+          "Search memory for the facts still missing. Start with queries and the default operator.",
+          "When useful, select another catalog operator or compose independent branches in this same call, then combine, order, or diversify the results.",
+          "The harness keeps the candidate view compact and manages source identity and limits. Read promising handles from the returned page.",
+          catalogText,
+        ].join("\n")
       : [
           "Search is simple by default: provide queries and optionally one operator. " +
           "For an inline retrieval program, add branches plus a combine method, then optionally order results or cap candidates per session. Search always spans the source roles available in the current scope; role labels are harness-owned metadata. " +
@@ -456,9 +464,9 @@ export function createSearchTools(
           "Use returned opaque candidate handles such as C1 with read; search_more only expands the same physical result.",
           catalogText,
         ].join("\n"),
-    parameters: (compact
-      ? CompactSearchParameters
-      : createSearchParameters(operatorCatalog.map((entry) => entry.id))) as PiMemTools["search"]["parameters"],
+    parameters: createSearchParameters(
+      operatorCatalog.map((entry) => entry.id),
+    ) as PiMemTools["search"]["parameters"],
     async execute(_toolCallId, params, signal) {
       if (params.workingMemory !== undefined) {
         options.observation?.recordWorkingMemory(params.workingMemory);

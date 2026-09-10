@@ -28,8 +28,7 @@ export function createPiMemTools(
   });
   const sharedOptions = { ...options, observation };
   const { search, searchMore } = createSearchTools(sharedOptions);
-  const defineOperator = compact ||
-    options.operatorDefinitions === undefined ||
+  const defineOperator = options.operatorDefinitions === undefined ||
     options.operatorDefinitions.remainingDefinitions() === 0
     ? undefined
     : createDefineOperatorTool({

@@ -169,6 +169,7 @@ function questionPrompt(
         : ["", `Question date (source timezone unspecified): ${questionDate}`]),
       "",
       "Find and read exact source evidence. Search from the facts still missing. " +
+        "Use or compose the available search operators when that improves the retrieval path. " +
         "Finish sufficient only when the sources read cover every required relationship. " +
         "Do not answer the question.",
     ].join("\n");

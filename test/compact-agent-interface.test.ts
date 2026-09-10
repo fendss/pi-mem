@@ -21,26 +21,40 @@ function source(index: number, content = `Fact ${String(index)}.`): MemoryRecord
 }
 
 describe("compact agent interface", () => {
-  it("keeps advanced controls private and pages a bounded candidate view", async () => {
+  it("keeps composable operators while paging a bounded candidate view", async () => {
     const records = Array.from({ length: 30 }, (_, index) => source(index + 1));
+    let semanticSearches = 0;
+    let lexicalSearches = 0;
+    const hits = (query: string) => records.map((record, index) => ({
+      record,
+      query,
+      retriever: "fts5" as const,
+      rank: index + 1,
+      score: 1 / (index + 1),
+      preview: record.content,
+    }));
     const store: MemoryToolStore = {
       search(_scopeId, request) {
-        return records.map((record, index) => ({
-          record,
-          query: request.queries[0]!,
-          retriever: "fts5",
-          rank: index + 1,
-          score: 1 / (index + 1),
-          preview: record.content,
-        }));
+        semanticSearches += 1;
+        return hits(request.queries[0]!);
+      },
+      searchLexical(_scopeId, request) {
+        lexicalSearches += 1;
+        return hits(request.queries[0]!);
       },
       read(_scopeId, memoryIds) {
         return records.filter((record) => memoryIds.includes(record.memoryId));
       },
     };
+    /*
+     * The compact presentation changes only what the model sees. It must not
+     * project away the composable v1.4 search contract.
+     */
+    const operatorCatalog = createSearchOperatorRegistry(store).forkForRun();
     const tools = createPiMemTools({
       store,
-      operatorRegistry: createSearchOperatorRegistry(store),
+      operatorRegistry: operatorCatalog,
+      operatorDefinitions: operatorCatalog,
       scopeId: "compact-scope",
       ledger: new MemoryLedger("compact-scope"),
       maxSearchCalls: 4,
@@ -50,16 +64,40 @@ describe("compact agent interface", () => {
     expect(tools.all.map((tool) => tool.name)).toEqual([
       "search",
       "search_more",
+      "define_operator",
       "read",
       "finish",
     ]);
-    expect(Object.keys(tools.search.parameters.properties!)).toEqual(["queries"]);
+    expect(Object.keys(tools.search.parameters.properties!)).toEqual([
+      "workingMemory",
+      "operator",
+      "queries",
+      "branches",
+      "combine",
+      "order",
+      "maxPerSession",
+      "limit",
+    ]);
     expect(Object.keys(tools.read.parameters.properties!)).toEqual([
       "candidateRefs",
     ]);
     expect(Object.keys(tools.finish.parameters.properties!)).toEqual(["status"]);
+    expect(tools.search.description).toContain("id=hybrid");
+    expect(tools.search.description).toContain("id=lexical");
 
-    const first = await tools.search.execute("search-1", { queries: ["Fact"] });
+    const first = await tools.search.execute("search-1", {
+      operator: "hybrid",
+      queries: ["Fact"],
+      branches: [{ operator: "lexical", queries: ["Fact 30"] }],
+      combine: "union",
+    });
+    expect(semanticSearches).toBe(1);
+    expect(lexicalSearches).toBe(1);
+    expect(first.details.composition?.steps.map((step) => step.kind)).toEqual([
+      "search",
+      "search",
+      "combine",
+    ]);
     const firstText = JSON.stringify(first.content);
     expect(firstText).toContain("Current search results");
     expect(firstText).toContain("read C1");
@@ -74,7 +112,7 @@ describe("compact agent interface", () => {
     expect(secondText).toContain("read C30");
   });
 
-  it("uses no neighboring turns and bounds exact read output", async () => {
+  it("uses no neighboring turns and reads the exact query-local passage", async () => {
     const long = source(
       1,
       `${"irrelevant context ".repeat(2_000)}The requested compact fact is here.`,
@@ -106,8 +144,11 @@ describe("compact agent interface", () => {
       ledger: new MemoryLedger("compact-scope"),
       interfaceMode: "compact",
     });
-    await tools.search.execute("search-1", {
+    const search = await tools.search.execute("search-1", {
       queries: ["requested compact fact"],
+    });
+    expect(search.details.candidates[0]?.passage).toMatchObject({
+      parentMemoryId: "m1",
     });
     const result = await tools.read.execute("read-1", {
       candidateRefs: ["C1"],
@@ -117,5 +158,57 @@ describe("compact agent interface", () => {
     expect(result.details.contextBefore).toBe(0);
     expect(result.details.contextAfter).toBe(0);
     expect(JSON.stringify(result.content).length).toBeLessThan(15_000);
+    expect(JSON.stringify(result.content)).toContain(
+      "The requested compact fact is here.",
+    );
+    expect(result.details.evidence[0]?.truncated).toBe(true);
+  });
+
+  it("keeps semantic parent reads complete when a six-parent batch fits 128 KiB", async () => {
+    const records = Array.from({ length: 6 }, (_, index) => source(
+      index + 1,
+      `${`Distractor ${String(index)}. `.repeat(900)}` +
+        (index === 4 ? "The exact middle-hop fact is preserved. " : "") +
+        `${`Tail ${String(index)}. `.repeat(300)}`,
+    ));
+    const store: MemoryToolStore = {
+      search(_scopeId, request) {
+        return records.map((record, index) => ({
+          record,
+          query: request.queries[0]!,
+          retriever: "pimem-hybrid",
+          rank: index + 1,
+          score: 1 / (index + 1),
+          preview: "Semantic parent match without a lexical source location.",
+        }));
+      },
+      read(_scopeId, memoryIds) {
+        return records.filter((record) => memoryIds.includes(record.memoryId));
+      },
+    };
+    const tools = createPiMemTools({
+      store,
+      operatorRegistry: createSearchOperatorRegistry(store),
+      scopeId: "compact-scope",
+      ledger: new MemoryLedger("compact-scope"),
+      interfaceMode: "compact",
+    });
+    const search = await tools.search.execute("search-1", {
+      queries: ["unseen semantic relation"],
+    });
+    expect(search.details.candidates.every(candidate =>
+      candidate.passage === undefined
+    )).toBe(true);
+    const result = await tools.read.execute("read-1", {
+      candidateRefs: ["C1", "C2", "C3", "C4", "C5", "C6"],
+    });
+
+    expect(result.details.evidence).toHaveLength(6);
+    expect(result.details.evidence.every(evidence => !evidence.truncated)).toBe(
+      true,
+    );
+    expect(JSON.stringify(result.content)).toContain(
+      "The exact middle-hop fact is preserved.",
+    );
   });
 });

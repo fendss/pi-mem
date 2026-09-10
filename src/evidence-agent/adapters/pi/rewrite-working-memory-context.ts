@@ -37,8 +37,9 @@ changes, replace it with only:
 - Established: source-supported facts still relevant to the question.
 - Missing: facts or relationships still needed.
 Do not include handles, candidate lists, search history, or reasoning. Use the
-missing fact to choose the next query. Finish sufficient only when exact sources
-already read cover every required relationship.
+missing fact to choose the next query and, when useful, the next operator or
+operator composition. Finish sufficient only when exact sources already read
+cover every required relationship.
 `;
 
 /** Notes are optional annotations. Only real tool arguments authorize source reads. */

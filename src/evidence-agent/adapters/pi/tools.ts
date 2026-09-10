@@ -18,7 +18,6 @@ export {
   CompactFinishParameters,
   CompactReadParameters,
   CompactSearchMoreParameters,
-  CompactSearchParameters,
   createSearchParameters,
   DefineOperatorParameters,
   FinishParameters,

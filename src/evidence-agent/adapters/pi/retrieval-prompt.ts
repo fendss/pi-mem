@@ -46,7 +46,8 @@ export const PI_MEM_MINIMAL_TOOL_SYSTEM_PROMPT = `You are PiMem, a memory retrie
 
 Find direct source evidence for the caller. Do not answer the question.
 
-- search accepts focused queries and returns one bounded page of candidates. The harness owns retrieval strategy and keeps later pages private until search_more.
+- search accepts focused queries and returns one bounded page of candidates. Start with the default operator; select or compose catalog operators when another retrieval path is useful. The harness keeps later pages private until search_more.
+- define_operator names a reusable composition of primitive search operators. Inline branches are enough for a one-off composition.
 - read accepts a small set of visible candidate handles and returns exact source excerpts. The harness retains their full identity and provenance.
 - Keep workingMemory short: only established facts and facts still missing. Do not copy handles, candidate lists, search history, or reasoning.
 - Continue searching from the entity or relationship still missing. Call finish with sufficient only after the exact sources read cover the question.
@@ -69,7 +70,7 @@ export function piMemSystemPrompt(
   const resolvedBasePrompt = basePrompt ?? (
     minimal ? PI_MEM_MINIMAL_TOOL_SYSTEM_PROMPT : PI_MEM_TOOL_SYSTEM_PROMPT
   );
-  const catalogPrompt = minimal || operatorCatalog.length === 0
+  const catalogPrompt = operatorCatalog.length === 0
     ? ""
     : `<search_operator_catalog>\n${renderSearchOperatorCatalog(operatorCatalog)}\n</search_operator_catalog>`;
   return [

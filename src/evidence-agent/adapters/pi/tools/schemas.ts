@@ -26,19 +26,6 @@ const SearchQueries = (description: string) => Type.Array(
   },
 );
 
-export const CompactSearchParameters = Type.Object({
-  queries: Type.Array(Type.String({ minLength: 1 }), {
-    minItems: 1,
-    maxItems: 8,
-    description:
-      "Focused searches for the facts still needed. Use distinct queries, not paraphrases.",
-  }),
-}, {
-  additionalProperties: false,
-  description:
-    "Search memory with the harness-managed default retriever. Retrieval strategy and result limits are handled by the harness.",
-});
-
 export const CompactSearchMoreParameters = Type.Object({}, {
   additionalProperties: false,
   description: "Show the next page from the latest search without running a new retrieval.",
