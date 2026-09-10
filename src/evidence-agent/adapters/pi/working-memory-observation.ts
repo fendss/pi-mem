@@ -101,12 +101,9 @@ export function createWorkingMemoryObservation(
       pending = undefined;
       // Deduplicate within this result only; a prior display is not current visibility.
       if (options.refreshResults) displayed.clear();
-      const remaining = maxSearchCalls === undefined
-        ? undefined
-        : Math.max(0, maxSearchCalls - searches);
-      const status = remaining === undefined
+      const status = maxSearchCalls === undefined
         ? `Searches completed: ${searches}`
-        : `Searches remaining: ${remaining}`;
+        : `Searches remaining: ${Math.max(0, maxSearchCalls - searches)}`;
       if (options.compact) {
         const findingLines = (current?.findings ?? []).flatMap((candidate) => {
           const line = renderFinding(candidate, 280);
@@ -149,9 +146,7 @@ export function createWorkingMemoryObservation(
                   : "Still-readable candidates from an earlier search",
                 ...retainedLines,
               ]),
-          remaining === 0
-            ? "The new-search budget is exhausted. Use search_more only for another page of the latest search; otherwise read listed candidates or finish."
-            : "Read promising candidates. Use source-supported facts for the next query; decide from the acquired evidence whether to search again or finish.",
+          "Read promising candidates. Use source-supported facts for the next query; decide from the acquired evidence whether to search again or finish.",
           "</MEMORY>",
         ].join("\n");
       }
@@ -180,9 +175,7 @@ export function createWorkingMemoryObservation(
           ...(current.operatorEvidence ? [current.operatorEvidence] : []),
           ...(current.planTrace ? [current.planTrace] : []),
         ]),
-        remaining === 0
-          ? "The new-search budget is exhausted. Use search_more only for another page of the latest search; otherwise read listed candidates or finish."
-          : "Candidate text is navigation for this decision. Read promising candidates before moving to another search; do not copy candidate handles into workingMemory.",
+        "Candidate text is navigation for this decision. Read promising candidates before moving to another search; do not copy candidate handles into workingMemory.",
         "The harness retains every source returned by read and commits it to the final source package.",
         "</MEMORY>",
       ].join("\n");
