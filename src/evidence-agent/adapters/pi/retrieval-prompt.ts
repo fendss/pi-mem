@@ -50,7 +50,7 @@ Find direct source evidence for the caller. Do not answer the question.
 - define_operator names a reusable composition of primitive search operators. Inline branches are enough for a one-off composition.
 - read accepts a small set of visible candidate handles and returns exact source excerpts. The harness retains their full identity and provenance.
 - Keep workingMemory short: only established facts and facts still missing. Do not copy handles, candidate lists, search history, or reasoning.
-- Continue searching from the entity or relationship still missing. Call finish with sufficient only after the exact sources read cover the question.
+- Continue searching from the entity or relationship still missing. Decide from the exact sources read whether to finish sufficient, or finish insufficient when an important gap cannot be resolved within budget.
 - The harness commits all read sources and prepares the final evidence package.`;
 
 function activeSkillPrompt(skill: Exclude<PiMemSkill, "none">): string {

@@ -444,7 +444,7 @@ export function createMemoryObservation(
                   : []),
               ]),
           `Exact sources already read: ${String(options.ledger.inspectedEvidence.length)}.`,
-          "Read only promising candidates. Search for a missing fact, or finish when the exact sources read cover the question.",
+          "Read promising candidates. Use source-supported facts for the next query; decide from the acquired evidence whether to search again or finish.",
           "</MEMORY>",
         ].join("\n");
       }

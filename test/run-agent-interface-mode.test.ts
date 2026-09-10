@@ -111,6 +111,11 @@ describe("PiMem prompt and interface selection", () => {
       "read",
       "finish",
     ]);
+    const finish = observedTools.find((tool) => tool.name === "finish");
+    expect(JSON.stringify(finish?.parameters)).toContain(
+      "consider the exact sources already read adequate for answering",
+    );
+    expect(JSON.stringify(finish?.parameters)).not.toContain("cover every fact");
     const search = observedTools.find((tool) => tool.name === "search");
     expect(Object.keys((search?.parameters as { properties: object }).properties)).toEqual([
       "workingMemory",

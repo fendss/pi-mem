@@ -248,8 +248,8 @@ export const FinishParameters = Type.Object({
     Type.Literal("insufficient"),
   ], {
     description:
-      "Use sufficient only when the exact sources read so far cover the " +
-      "question. Reading one source does not establish coverage.",
+      "Use sufficient when you consider the exact sources read so far adequate " +
+      "for answering; otherwise use insufficient.",
   }),
   evidenceSummary: Type.Optional(Type.Union([Type.String({
     maxLength: 2000,
@@ -273,7 +273,7 @@ export const CompactFinishParameters = Type.Object({
     Type.Literal("insufficient"),
   ], {
     description:
-      "Use sufficient only when the exact sources already read cover every fact needed by the question.",
+      "Use sufficient when you consider the exact sources already read adequate for answering; otherwise use insufficient.",
   }),
 }, {
   additionalProperties: false,

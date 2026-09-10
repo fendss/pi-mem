@@ -106,6 +106,10 @@ describe("compact agent interface", () => {
     expect(firstText).not.toContain("read C21");
     expect(firstText).not.toContain("Latest retrieval frontier");
     expect(firstText).not.toContain("Caller question");
+    expect(firstText).toContain(
+      "decide from the acquired evidence whether to search again or finish",
+    );
+    expect(firstText).not.toContain("cover the question");
 
     const second = await tools.searchMore.execute("more-1", {});
     const secondText = JSON.stringify(second.content);

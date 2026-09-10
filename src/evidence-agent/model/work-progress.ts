@@ -155,7 +155,7 @@ export class WorkProgress {
     return `<WORKING_MEMORY revision="${this.revision}" authority="model-authored-progress">
 ` +
       ([...this.entries.values()].map(e => JSON.stringify({ ...e, delivery: e.sources.map(s => ({ ref: s.ref, read: this.sources.delivered(s) })) })).join("\n") || "No tasks yet.") +
-      "\nOpen checks: " + (this.gaps().join("; ") || "All declared tasks have source coverage; verify that they cover the whole question.") + "\n</WORKING_MEMORY>";
+      "\nOpen checks: " + (this.gaps().join("; ") || "No declared gaps remain; decide whether the acquired sources are adequate for answering.") + "\n</WORKING_MEMORY>";
   }
   snapshot(): WorkProgressSnapshot {
     return structuredClone({ version: 3, revision: this.revision, entries: [...this.entries.values()], history: this.history });
