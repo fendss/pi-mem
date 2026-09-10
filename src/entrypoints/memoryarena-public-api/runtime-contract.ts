@@ -6,6 +6,7 @@ import {
 import {
   PIMEM_MINIMAL_SKILL_HASH,
   PIMEM_SKILL_HASH,
+  type PiMemInterfaceMode,
   type PiMemSkill,
 } from "../../evidence-agent/index.js";
 import type { PiModelRuntime } from "../../platform/pi/load-model-runtime.js";
@@ -19,6 +20,7 @@ export interface MemoryArenaRuntimeContract {
     id: PiMemSkill;
     sha256: string;
   };
+  agent_interface: PiMemInterfaceMode;
   retrieval: {
     provider_id: string;
     logical_model_id: string;
@@ -83,6 +85,7 @@ export function createMemoryArenaRuntimeIdentity(options: {
   sourceIdentity: string;
   buildIdentity: string;
   skill: PiMemSkill;
+  interfaceMode: PiMemInterfaceMode;
   modelRuntime: PiModelRuntime;
   logicalModelId: string;
   protocol: string;
@@ -105,6 +108,7 @@ export function createMemoryArenaRuntimeIdentity(options: {
       id: options.skill,
       sha256: skillHash(options.skill),
     },
+    agent_interface: options.interfaceMode,
     retrieval: {
       provider_id: options.modelRuntime.providerId,
       logical_model_id: nonEmpty(

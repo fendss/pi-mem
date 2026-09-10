@@ -197,28 +197,28 @@ _No top-level functions, classes, or class methods._
 
 | Symbol | Purpose | Kind | Visibility | Source |
 |---|---|---|---|---|
-| `memoryArenaPublicScopeId(userId: string, generation: number): string` | Implements the memory arena public scope id operation. | function | exported | [line 49](../../src/benchmark/memoryarena-public/adapters/pimem-memory-runtime.ts#L49) |
-| `appendRequestIdentity(options: { userId: string; generation: number; ordinal: number; chunk: string; messages?: readonly MemoryArenaAppendMessage[]; }): { requestId: string; requestHash: string; sourceSessionId: string }` | Implements the append request identity operation. | function | internal | [line 56](../../src/benchmark/memoryarena-public/adapters/pimem-memory-runtime.ts#L56) |
-| `memoryArenaRetryableUpstreamError(error: unknown): boolean` | Implements the memory arena retryable upstream error operation. | function | exported | [line 79](../../src/benchmark/memoryarena-public/adapters/pimem-memory-runtime.ts#L79) |
-| `memoryArenaUpstreamAuthStatus(error: unknown): 401 \| 403 \| undefined` | Implements the memory arena upstream auth status operation. | function | exported | [line 86](../../src/benchmark/memoryarena-public/adapters/pimem-memory-runtime.ts#L86) |
-| `mapUpstreamError(error: unknown, operation: string): never` | Implements the map upstream error operation. | function | internal | [line 103](../../src/benchmark/memoryarena-public/adapters/pimem-memory-runtime.ts#L103) |
-| `errorRecord(error: unknown): Record<string, unknown> \| undefined` | Implements the error record operation. | function | internal | [line 139](../../src/benchmark/memoryarena-public/adapters/pimem-memory-runtime.ts#L139) |
-| `memoryArenaPiMemRunFailure(error: unknown): MemoryArenaPublicError \| undefined` | Converts PiMem method/provider failures into a stable, content-free API policy. | function | exported | [line 146](../../src/benchmark/memoryarena-public/adapters/pimem-memory-runtime.ts#L146) |
-| `PiMemMemoryArenaAdapter` | Maps the official memory backend lifecycle onto immutable PiMem source chunks. | class | exported | [line 214](../../src/benchmark/memoryarena-public/adapters/pimem-memory-runtime.ts#L214) |
-| `PiMemMemoryArenaAdapter.constructor(private readonly options: PiMemMemoryArenaAdapterOptions)` | Creates a pi mem memory arena adapter instance. | method | public | [line 218](../../src/benchmark/memoryarena-public/adapters/pimem-memory-runtime.ts#L218) |
-| `PiMemMemoryArenaAdapter.appendOriginalChunk(options: { userId: string; generation: number; ordinal: number; chunk: string; messages?: readonly MemoryArenaAppendMessage[]; }): Promise<void>` | Implements the append original chunk operation. | method | public | [line 222](../../src/benchmark/memoryarena-public/adapters/pimem-memory-runtime.ts#L222) |
-| `PiMemMemoryArenaAdapter.readOriginalChunks(options: { userId: string; generation: number; memoryIds: readonly string[]; }): Promise<MemoryArenaOriginalChunk[]>` | Reads original chunks. | method | public | [line 267](../../src/benchmark/memoryarena-public/adapters/pimem-memory-runtime.ts#L267) |
-| `PiMemMemoryArenaAdapter.retrieve(options: { userId: string; generation: number; question: string; operatorExperiment?: MemoryArenaOperatorExperimentInput; }): Promise<MemoryArenaRetrievalResult>` | Implements the retrieve operation. | method | public | [line 278](../../src/benchmark/memoryarena-public/adapters/pimem-memory-runtime.ts#L278) |
+| `memoryArenaPublicScopeId(userId: string, generation: number): string` | Implements the memory arena public scope id operation. | function | exported | [line 51](../../src/benchmark/memoryarena-public/adapters/pimem-memory-runtime.ts#L51) |
+| `appendRequestIdentity(options: { userId: string; generation: number; ordinal: number; chunk: string; messages?: readonly MemoryArenaAppendMessage[]; }): { requestId: string; requestHash: string; sourceSessionId: string }` | Implements the append request identity operation. | function | internal | [line 58](../../src/benchmark/memoryarena-public/adapters/pimem-memory-runtime.ts#L58) |
+| `memoryArenaRetryableUpstreamError(error: unknown): boolean` | Implements the memory arena retryable upstream error operation. | function | exported | [line 81](../../src/benchmark/memoryarena-public/adapters/pimem-memory-runtime.ts#L81) |
+| `memoryArenaUpstreamAuthStatus(error: unknown): 401 \| 403 \| undefined` | Implements the memory arena upstream auth status operation. | function | exported | [line 88](../../src/benchmark/memoryarena-public/adapters/pimem-memory-runtime.ts#L88) |
+| `mapUpstreamError(error: unknown, operation: string): never` | Implements the map upstream error operation. | function | internal | [line 105](../../src/benchmark/memoryarena-public/adapters/pimem-memory-runtime.ts#L105) |
+| `errorRecord(error: unknown): Record<string, unknown> \| undefined` | Implements the error record operation. | function | internal | [line 141](../../src/benchmark/memoryarena-public/adapters/pimem-memory-runtime.ts#L141) |
+| `memoryArenaPiMemRunFailure(error: unknown): MemoryArenaPublicError \| undefined` | Converts PiMem method/provider failures into a stable, content-free API policy. | function | exported | [line 148](../../src/benchmark/memoryarena-public/adapters/pimem-memory-runtime.ts#L148) |
+| `PiMemMemoryArenaAdapter` | Maps the official memory backend lifecycle onto immutable PiMem source chunks. | class | exported | [line 216](../../src/benchmark/memoryarena-public/adapters/pimem-memory-runtime.ts#L216) |
+| `PiMemMemoryArenaAdapter.constructor(private readonly options: PiMemMemoryArenaAdapterOptions)` | Creates a pi mem memory arena adapter instance. | method | public | [line 220](../../src/benchmark/memoryarena-public/adapters/pimem-memory-runtime.ts#L220) |
+| `PiMemMemoryArenaAdapter.appendOriginalChunk(options: { userId: string; generation: number; ordinal: number; chunk: string; messages?: readonly MemoryArenaAppendMessage[]; }): Promise<void>` | Implements the append original chunk operation. | method | public | [line 224](../../src/benchmark/memoryarena-public/adapters/pimem-memory-runtime.ts#L224) |
+| `PiMemMemoryArenaAdapter.readOriginalChunks(options: { userId: string; generation: number; memoryIds: readonly string[]; }): Promise<MemoryArenaOriginalChunk[]>` | Reads original chunks. | method | public | [line 269](../../src/benchmark/memoryarena-public/adapters/pimem-memory-runtime.ts#L269) |
+| `PiMemMemoryArenaAdapter.retrieve(options: { userId: string; generation: number; question: string; operatorExperiment?: MemoryArenaOperatorExperimentInput; }): Promise<MemoryArenaRetrievalResult>` | Implements the retrieve operation. | method | public | [line 280](../../src/benchmark/memoryarena-public/adapters/pimem-memory-runtime.ts#L280) |
 ## `src/benchmark/memoryarena-public/composition/create-runtime.ts`
 
 | Symbol | Purpose | Kind | Visibility | Source |
 |---|---|---|---|---|
-| `loadOrCreatePersistenceIdentity(path: string): Promise<string>` | Loads or create persistence identity. | function | internal | [line 82](../../src/benchmark/memoryarena-public/composition/create-runtime.ts#L82) |
-| `exists(path: string): Promise<boolean>` | Implements the exists operation. | function | internal | [line 122](../../src/benchmark/memoryarena-public/composition/create-runtime.ts#L122) |
-| `fileErrorCode(error: unknown): string \| undefined` | Implements the file error code operation. | function | internal | [line 137](../../src/benchmark/memoryarena-public/composition/create-runtime.ts#L137) |
-| `processIsAlive(pid: number): boolean` | Implements the process is alive operation. | function | internal | [line 143](../../src/benchmark/memoryarena-public/composition/create-runtime.ts#L143) |
-| `acquireMemoryArenaPublicDataDirectoryLease(dataDir: string): Promise<MemoryArenaPublicDataDirectoryLease>` | Prevents independent server processes from corrupting one generation sidecar. | function | exported | [line 153](../../src/benchmark/memoryarena-public/composition/create-runtime.ts#L153) |
-| `createMemoryArenaPublicRuntime(options: CreateMemoryArenaPublicRuntimeOptions): Promise<MemoryArenaPublicRuntime>` | Wires the official HTTP memory contract to PiMem without benchmark policy. | function | exported | [line 221](../../src/benchmark/memoryarena-public/composition/create-runtime.ts#L221) |
+| `loadOrCreatePersistenceIdentity(path: string): Promise<string>` | Loads or create persistence identity. | function | internal | [line 86](../../src/benchmark/memoryarena-public/composition/create-runtime.ts#L86) |
+| `exists(path: string): Promise<boolean>` | Implements the exists operation. | function | internal | [line 126](../../src/benchmark/memoryarena-public/composition/create-runtime.ts#L126) |
+| `fileErrorCode(error: unknown): string \| undefined` | Implements the file error code operation. | function | internal | [line 141](../../src/benchmark/memoryarena-public/composition/create-runtime.ts#L141) |
+| `processIsAlive(pid: number): boolean` | Implements the process is alive operation. | function | internal | [line 147](../../src/benchmark/memoryarena-public/composition/create-runtime.ts#L147) |
+| `acquireMemoryArenaPublicDataDirectoryLease(dataDir: string): Promise<MemoryArenaPublicDataDirectoryLease>` | Prevents independent server processes from corrupting one generation sidecar. | function | exported | [line 157](../../src/benchmark/memoryarena-public/composition/create-runtime.ts#L157) |
+| `createMemoryArenaPublicRuntime(options: CreateMemoryArenaPublicRuntimeOptions): Promise<MemoryArenaPublicRuntime>` | Wires the official HTTP memory contract to PiMem without benchmark policy. | function | exported | [line 225](../../src/benchmark/memoryarena-public/composition/create-runtime.ts#L225) |
 ## `src/benchmark/memoryarena-public/index.ts`
 
 _No top-level functions, classes, or class methods._
@@ -640,22 +640,23 @@ _No top-level functions, classes, or class methods._
 
 | Symbol | Purpose | Kind | Visibility | Source |
 |---|---|---|---|---|
-| `requiredEnvironment(name: string): string` | Implements the required environment operation. | function | internal | [line 27](../../src/entrypoints/memoryarena-public-api/main.ts#L27) |
-| `integerEnvironment(name: string, fallback: number, maximum: number): number` | Implements the integer environment operation. | function | internal | [line 33](../../src/entrypoints/memoryarena-public-api/main.ts#L33) |
-| `thinkingLevelEnvironment(): NonNullable< LoadPiModelRuntimeOptions["thinkingLevel"] >` | Implements the thinking level environment operation. | function | internal | [line 47](../../src/entrypoints/memoryarena-public-api/main.ts#L47) |
-| `skillEnvironment(): PiMemSkill` | Implements the skill environment operation. | function | internal | [line 65](../../src/entrypoints/memoryarena-public-api/main.ts#L65) |
-| `jsonBody(request: IncomingMessage): Promise<unknown>` | Implements the json body operation. | function | internal | [line 73](../../src/entrypoints/memoryarena-public-api/main.ts#L73) |
-| `respond(response: ServerResponse, status: number, body: unknown, retryable = false, errorCode?: string): void` | Implements the respond operation. | function | internal | [line 106](../../src/entrypoints/memoryarena-public-api/main.ts#L106) |
-| `main(): Promise<void>` | Implements the main operation. | function | internal | [line 129](../../src/entrypoints/memoryarena-public-api/main.ts#L129) |
+| `requiredEnvironment(name: string): string` | Implements the required environment operation. | function | internal | [line 28](../../src/entrypoints/memoryarena-public-api/main.ts#L28) |
+| `integerEnvironment(name: string, fallback: number, maximum: number): number` | Implements the integer environment operation. | function | internal | [line 34](../../src/entrypoints/memoryarena-public-api/main.ts#L34) |
+| `thinkingLevelEnvironment(): NonNullable< LoadPiModelRuntimeOptions["thinkingLevel"] >` | Implements the thinking level environment operation. | function | internal | [line 48](../../src/entrypoints/memoryarena-public-api/main.ts#L48) |
+| `skillEnvironment(): PiMemSkill` | Implements the skill environment operation. | function | internal | [line 66](../../src/entrypoints/memoryarena-public-api/main.ts#L66) |
+| `interfaceModeEnvironment(skill: PiMemSkill): PiMemInterfaceMode` | Implements the interface mode environment operation. | function | internal | [line 74](../../src/entrypoints/memoryarena-public-api/main.ts#L74) |
+| `jsonBody(request: IncomingMessage): Promise<unknown>` | Implements the json body operation. | function | internal | [line 83](../../src/entrypoints/memoryarena-public-api/main.ts#L83) |
+| `respond(response: ServerResponse, status: number, body: unknown, retryable = false, errorCode?: string): void` | Implements the respond operation. | function | internal | [line 116](../../src/entrypoints/memoryarena-public-api/main.ts#L116) |
+| `main(): Promise<void>` | Implements the main operation. | function | internal | [line 139](../../src/entrypoints/memoryarena-public-api/main.ts#L139) |
 ## `src/entrypoints/memoryarena-public-api/runtime-contract.ts`
 
 | Symbol | Purpose | Kind | Visibility | Source |
 |---|---|---|---|---|
-| `nonEmpty(value: string, label: string): string` | Implements the non empty operation. | function | internal | [line 53](../../src/entrypoints/memoryarena-public-api/runtime-contract.ts#L53) |
-| `canonical(value: unknown): string` | Checks whether onical. | function | internal | [line 59](../../src/entrypoints/memoryarena-public-api/runtime-contract.ts#L59) |
-| `memoryArenaRuntimeContractHash(contract: MemoryArenaRuntimeContract): string` | Implements the memory arena runtime contract hash operation. | function | exported | [line 70](../../src/entrypoints/memoryarena-public-api/runtime-contract.ts#L70) |
-| `skillHash(skill: PiMemSkill): string` | Implements the skill hash operation. | function | exported | [line 76](../../src/entrypoints/memoryarena-public-api/runtime-contract.ts#L76) |
-| `createMemoryArenaRuntimeIdentity(options: { sourceIdentity: string; buildIdentity: string; skill: PiMemSkill; modelRuntime: PiModelRuntime; logicalModelId: string; protocol: string; baseUrl: string; maxRunMs: number; maxTurns: number; maxToolCalls: number; maxSearchCalls: number; requestTimeoutMs: number; requestMaxRetries: number; requestMaxRetryDelayMs: number; maxConcurrentWraps: number; memoryIndex?: RetrievalMetadata; }): MemoryArenaRuntimeIdentity` | Creates memory arena runtime identity. | function | exported | [line 82](../../src/entrypoints/memoryarena-public-api/runtime-contract.ts#L82) |
+| `nonEmpty(value: string, label: string): string` | Implements the non empty operation. | function | internal | [line 55](../../src/entrypoints/memoryarena-public-api/runtime-contract.ts#L55) |
+| `canonical(value: unknown): string` | Checks whether onical. | function | internal | [line 61](../../src/entrypoints/memoryarena-public-api/runtime-contract.ts#L61) |
+| `memoryArenaRuntimeContractHash(contract: MemoryArenaRuntimeContract): string` | Implements the memory arena runtime contract hash operation. | function | exported | [line 72](../../src/entrypoints/memoryarena-public-api/runtime-contract.ts#L72) |
+| `skillHash(skill: PiMemSkill): string` | Implements the skill hash operation. | function | exported | [line 78](../../src/entrypoints/memoryarena-public-api/runtime-contract.ts#L78) |
+| `createMemoryArenaRuntimeIdentity(options: { sourceIdentity: string; buildIdentity: string; skill: PiMemSkill; interfaceMode: PiMemInterfaceMode; modelRuntime: PiModelRuntime; logicalModelId: string; protocol: string; baseUrl: string; maxRunMs: number; maxTurns: number; maxToolCalls: number; maxSearchCalls: number; requestTimeoutMs: number; requestMaxRetries: number; requestMaxRetryDelayMs: number; maxConcurrentWraps: number; memoryIndex?: RetrievalMetadata; }): MemoryArenaRuntimeIdentity` | Creates memory arena runtime identity. | function | exported | [line 84](../../src/entrypoints/memoryarena-public-api/runtime-contract.ts#L84) |
 ## `src/entrypoints/tau-knowledge-bridge/main.ts`
 
 | Symbol | Purpose | Kind | Visibility | Source |
@@ -726,12 +727,12 @@ _No top-level functions, classes, or class methods._
 
 | Symbol | Purpose | Kind | Visibility | Source |
 |---|---|---|---|---|
-| `PiMemRunError` | Implements pi mem run error. | class | exported | [line 114](../../src/evidence-agent/adapters/pi/run-agent.ts#L114) |
-| `PiMemRunError.constructor(message: string, diagnostics: PiMemFailureDiagnostics, code: PiMemFailureCode = "runtime_error")` | Creates a pi mem run error instance. | method | public | [line 118](../../src/evidence-agent/adapters/pi/run-agent.ts#L118) |
-| `providerFailureKind(message: string): PiMemProviderFailureKind` | Implements the provider failure kind operation. | function | internal | [line 132](../../src/evidence-agent/adapters/pi/run-agent.ts#L132) |
-| `providerResponseModel(message: string): string \| undefined` | Implements the provider response model operation. | function | internal | [line 152](../../src/evidence-agent/adapters/pi/run-agent.ts#L152) |
-| `questionPrompt(question: string, questionDate?: string, compact = false): string` | Builds the user prompt from the question and optional question date. | function | internal | [line 158](../../src/evidence-agent/adapters/pi/run-agent.ts#L158) |
-| `runPiMem(options: RunPiMemOptions): Promise<PiMemResult>` | Runs one bounded evidence-agent session and returns its provenance-backed result. | function | exported | [line 198](../../src/evidence-agent/adapters/pi/run-agent.ts#L198) |
+| `PiMemRunError` | Implements pi mem run error. | class | exported | [line 118](../../src/evidence-agent/adapters/pi/run-agent.ts#L118) |
+| `PiMemRunError.constructor(message: string, diagnostics: PiMemFailureDiagnostics, code: PiMemFailureCode = "runtime_error")` | Creates a pi mem run error instance. | method | public | [line 122](../../src/evidence-agent/adapters/pi/run-agent.ts#L122) |
+| `providerFailureKind(message: string): PiMemProviderFailureKind` | Implements the provider failure kind operation. | function | internal | [line 136](../../src/evidence-agent/adapters/pi/run-agent.ts#L136) |
+| `providerResponseModel(message: string): string \| undefined` | Implements the provider response model operation. | function | internal | [line 156](../../src/evidence-agent/adapters/pi/run-agent.ts#L156) |
+| `questionPrompt(question: string, questionDate?: string, compact = false): string` | Builds the user prompt from the question and optional question date. | function | internal | [line 162](../../src/evidence-agent/adapters/pi/run-agent.ts#L162) |
+| `runPiMem(options: RunPiMemOptions): Promise<PiMemResult>` | Runs one bounded evidence-agent session and returns its provenance-backed result. | function | exported | [line 202](../../src/evidence-agent/adapters/pi/run-agent.ts#L202) |
 ## `src/evidence-agent/adapters/pi/tools.ts`
 
 _No top-level functions, classes, or class methods._

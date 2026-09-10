@@ -21,7 +21,8 @@ describe("MemoryArena retrieval runtime identity", () => {
     const identity = createMemoryArenaRuntimeIdentity({
       sourceIdentity: "source-v1",
       buildIdentity: "build-v1",
-      skill: "pimem-minimal",
+      skill: "pimem-v0",
+      interfaceMode: "compact",
       modelRuntime: runtime,
       logicalModelId: "logical-model",
       protocol: "openai-reasoning-completions",
@@ -58,6 +59,8 @@ describe("MemoryArena retrieval runtime identity", () => {
       runtime_contract: {
         source_identity: "source-v1",
         build_identity: "build-v1",
+        skill: { id: "pimem-v0" },
+        agent_interface: "compact",
         retrieval: {
           logical_model_id: "logical-model",
           route_model_id: "route-model",

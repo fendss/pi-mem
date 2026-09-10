@@ -55,6 +55,7 @@ export interface MemoryAgentBenchYamlConfiguration {
       verificationTimeoutMs: number;
     } | null;
     skill: "none" | "pimem-minimal" | "pimem-v0";
+    interfaceMode: "full" | "compact";
     maxRunMs: number;
     maxTurns: number;
     maxToolCalls: number;

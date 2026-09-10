@@ -76,6 +76,7 @@ service:
   source_identity: source-test-v1
   build_identity: build-test-v1
   skill: pimem-minimal
+  interface_mode: compact
   max_run_ms: 240000
   max_turns: 64
   max_tool_calls: 80
@@ -125,8 +126,11 @@ describe("MemoryAgentBench YAML configuration", () => {
     });
     expect(config.service.maxConcurrentWraps).toBe(16);
     expect(config.service.skill).toBe("pimem-minimal");
+    expect(config.service.interfaceMode).toBe("compact");
     expect(serviceEnvironment(config, {}).PIMEM_MAX_CONCURRENT_WRAPS).toBe("16");
     expect(serviceEnvironment(config, {}).PIMEM_SKILL).toBe("pimem-minimal");
+    expect(serviceEnvironment(config, {}).PIMEM_INTERFACE_MODE).toBe("compact");
+    expect(runtimeIdentityForConfig(config).contract.agent_interface).toBe("compact");
     expect(invocation.args).toContain("--context-slots");
     expect(invocation.args).toContain("5");
     expect(invocation.args).toContain("--adaptive-query-slots");

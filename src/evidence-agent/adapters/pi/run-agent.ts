@@ -43,6 +43,8 @@ import type { ReadOnlyNavigationBinding } from "../../ports/read-only-navigation
 
 export const PIMEM_HARNESS_VERSION = "pimem-evidence-transaction-v2";
 
+export type PiMemInterfaceMode = "full" | "compact";
+
 export interface PiMemRuntimeStore extends MemoryToolStore {
   findMentionedMemoryIds(scopeId: string, text: string): string[];
   getRecords(scopeId: string, memoryIds: string[]): MemoryRecord[];
@@ -67,6 +69,8 @@ export interface RunPiMemOptions {
   signal?: AbortSignal;
   systemPrompt?: string;
   skill?: PiMemSkill;
+  /** Controls presentation and history compaction independently of retrieval guidance. */
+  interfaceMode?: PiMemInterfaceMode;
   /** Opt-in note-driven context with acknowledged tool-result expiry. */
   contextPolicy?: "current-window" | "working-memory-rewrite" | "working-memory-v2" | "working-memory-v3";
   /** Approved declarative operators loaded into this run before the Agent starts. */
@@ -200,7 +204,10 @@ export async function runPiMem(
 ): Promise<PiMemResult> {
   options.signal?.throwIfAborted();
   const skill = options.skill ?? "pimem-v0";
-  const compactInterface = skill === "pimem-minimal";
+  const interfaceMode = options.interfaceMode ?? (
+    skill === "pimem-minimal" ? "compact" : "full"
+  );
+  const compactInterface = interfaceMode === "compact";
   const contextPolicy = options.contextPolicy ?? (
     compactInterface ? "working-memory-rewrite" : undefined
   );
@@ -279,7 +286,7 @@ export async function runPiMem(
       limit: 20,
       order: "relevance",
     },
-    interfaceMode: compactInterface ? "compact" : "full",
+    interfaceMode,
     ...(options.maxSearchCalls === undefined
       ? {}
       : { maxSearchCalls: options.maxSearchCalls }),

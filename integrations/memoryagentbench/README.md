@@ -109,6 +109,19 @@ service:
 Both values are required and must identify the exact deployed source/build;
 they are not display labels.
 
+Retrieval guidance and the harness presentation are independent settings. For
+full operator-selection guidance with bounded candidate/read observations, use:
+
+```yaml
+service:
+  skill: pimem-v0
+  interface_mode: compact
+```
+
+Omitting `interface_mode` preserves compatibility: `pimem-minimal` defaults to
+`compact`, while the other skills default to `full`. Both values are recorded
+in the runtime identity.
+
 For the Qdrant profile, pin its externally visible identity in the same
 protected YAML instead of relying on ambient environment variables:
 

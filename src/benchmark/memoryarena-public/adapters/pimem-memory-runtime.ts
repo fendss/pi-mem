@@ -3,6 +3,7 @@ import {
   runPiMem,
   type PiMemResult,
   type PiMemRuntimeStore,
+  type PiMemInterfaceMode,
   type PiMemSkill,
   type RunPiMemOptions,
 } from "../../../evidence-agent/index.js";
@@ -40,6 +41,7 @@ export interface PiMemMemoryArenaAdapterOptions {
   embedder: Embedder;
   modelRuntime: PiModelRuntime;
   skill?: PiMemSkill;
+  interfaceMode?: PiMemInterfaceMode;
   maxRunMs?: number;
   maxTurns?: number;
   maxToolCalls?: number;
@@ -306,6 +308,9 @@ export class PiMemMemoryArenaAdapter
         scopeId,
         question: options.question,
         skill: this.options.skill ?? "pimem-v0",
+        ...(this.options.interfaceMode === undefined
+          ? {}
+          : { interfaceMode: this.options.interfaceMode }),
         ...(experiment === undefined
           ? {}
           : {

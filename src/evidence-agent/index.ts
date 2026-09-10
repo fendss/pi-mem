@@ -31,6 +31,7 @@ export {
   type PiMemFailureDiagnostics,
   type PiMemProviderFailureKind,
   type PiMemRuntimeStore,
+  type PiMemInterfaceMode,
   type RunPiMemOptions,
 } from "./adapters/pi/run-agent.js";
 export {

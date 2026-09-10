@@ -6,6 +6,7 @@ import {
 } from "../../benchmark/memoryarena-public/index.js";
 import { createMemoryArenaPublicRuntime } from "../../benchmark/memoryarena-public/composition/create-runtime.js";
 import {
+  type PiMemInterfaceMode,
   type PiMemSkill,
 } from "../../evidence-agent/index.js";
 import {
@@ -68,6 +69,15 @@ function skillEnvironment(): PiMemSkill {
     throw new Error("PIMEM_SKILL is invalid");
   }
   return value as PiMemSkill;
+}
+
+function interfaceModeEnvironment(skill: PiMemSkill): PiMemInterfaceMode {
+  const fallback = skill === "pimem-minimal" ? "compact" : "full";
+  const value = process.env.PIMEM_INTERFACE_MODE?.trim() || fallback;
+  if (!new Set(["full", "compact"]).has(value)) {
+    throw new Error("PIMEM_INTERFACE_MODE is invalid");
+  }
+  return value as PiMemInterfaceMode;
 }
 
 async function jsonBody(request: IncomingMessage): Promise<unknown> {
@@ -172,6 +182,7 @@ async function main(): Promise<void> {
     );
   }
   const skill = skillEnvironment();
+  const interfaceMode = interfaceModeEnvironment(skill);
   const maxRunMs = integerEnvironment("PIMEM_MAX_RUN_MS", 300_000, 1_800_000);
   const maxTurns = integerEnvironment("PIMEM_MAX_TURNS", 64, 256);
   const maxToolCalls = integerEnvironment("PIMEM_MAX_TOOL_CALLS", 80, 512);
@@ -189,6 +200,7 @@ async function main(): Promise<void> {
       process.env.PIMEM_MEMORY_SYSTEM_NAME?.trim() ||
       MEMORYARENA_PUBLIC_MEMORY_SYSTEM,
     skill,
+    interfaceMode,
     maxRunMs,
     maxTurns,
     maxToolCalls,
@@ -198,6 +210,7 @@ async function main(): Promise<void> {
     sourceIdentity: requiredEnvironment("PIMEM_SOURCE_IDENTITY"),
     buildIdentity: requiredEnvironment("PIMEM_BUILD_IDENTITY"),
     skill,
+    interfaceMode,
     modelRuntime,
     logicalModelId: requiredEnvironment("PIMEM_LOGICAL_MODEL_ID"),
     protocol: requiredEnvironment("PIMEM_RETRIEVAL_PROTOCOL"),

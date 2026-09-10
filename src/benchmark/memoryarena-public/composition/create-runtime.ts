@@ -35,7 +35,10 @@ import type {
   MemoryArenaOperationAuditSink,
   MemoryArenaWrapAuditSink,
 } from "../ports/memory-backend.js";
-import type { PiMemSkill } from "../../../evidence-agent/index.js";
+import type {
+  PiMemInterfaceMode,
+  PiMemSkill,
+} from "../../../evidence-agent/index.js";
 import type { PiModelRuntime } from "../../../platform/pi/load-model-runtime.js";
 import { MemoryStore } from "../../../platform/sqlite/pimem-store.js";
 import type { RetrievalMetadata } from "../../../retrieval/index.js";
@@ -51,6 +54,7 @@ export interface CreateMemoryArenaPublicRuntimeOptions {
   embedder: MemoryArenaAttemptMeteredEmbedder;
   memorySystemName?: string;
   skill?: PiMemSkill;
+  interfaceMode?: PiMemInterfaceMode;
   maxRunMs?: number;
   maxTurns?: number;
   maxToolCalls?: number;
@@ -289,6 +293,9 @@ export async function createMemoryArenaPublicRuntime(
       embedder: measuredEmbedder,
       modelRuntime: options.modelRuntime,
       ...(options.skill === undefined ? {} : { skill: options.skill }),
+      ...(options.interfaceMode === undefined
+        ? {}
+        : { interfaceMode: options.interfaceMode }),
       ...(options.maxRunMs === undefined ? {} : { maxRunMs: options.maxRunMs }),
       ...(options.maxTurns === undefined ? {} : { maxTurns: options.maxTurns }),
       ...(options.maxToolCalls === undefined
