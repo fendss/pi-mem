@@ -101,4 +101,34 @@ describe("source visibility across context retirement", () => {
     observation.recordSearch({ findingCount: 1, findings });
     expect(observation.render()).not.toContain("ZX-83");
   });
+
+  it("keeps search callable but exposes an exhausted new-search budget", async () => {
+    const ledger = new MemoryLedger("visibility");
+    const context = createRewriteWorkingMemoryContext(ledger, 1, true);
+    const search: AgentTool = {
+      name: "search",
+      label: "Search",
+      description: "Run a new search.",
+      parameters: Type.Object({}),
+      execute: async () => ({ content: [], details: {} }),
+    };
+    const read: AgentTool = {
+      name: "read",
+      label: "Read",
+      description: "Read a candidate.",
+      parameters: Type.Object({}),
+      execute: async () => ({ content: [], details: {} }),
+    };
+
+    expect(context.availableTools([search, read])[0]!.description).toBe("Run a new search.");
+    context.observation.recordSearch({ findingCount: 0, findings: [] });
+    const tools = context.availableTools([search, read]);
+    expect(tools.map(tool => tool.name)).toEqual(["search", "read"]);
+    expect(tools[0]!.description).toContain("budget is exhausted");
+    expect(tools[1]!.description).toBe("Read a candidate.");
+    expect(context.observation.render()).toContain("new-search budget is exhausted");
+
+    const transformed = await context.transformContext([]);
+    expect(JSON.stringify(transformed)).toContain("New search is unavailable");
+  });
 });

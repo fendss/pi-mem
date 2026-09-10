@@ -67,11 +67,22 @@ export function createRewriteWorkingMemoryContext(
 
   return {
     observation,
-    // Keep the tool contract stable for the whole run. The search tool owns
-    // budget enforcement and returns a precise error after exhaustion. Removing
-    // the tool here turns an ordinary budget boundary into "tool not found",
-    // which gives the model no reliable way to recover.
-    availableTools: (tools: readonly AgentTool[]) => [...tools],
+    // Keep the action space stable while making the execution boundary visible
+    // in the same tool description the model uses to choose its next action.
+    // The search implementation remains the authority and still rejects calls
+    // after exhaustion.
+    availableTools: (tools: readonly AgentTool[]) => tools.map(tool =>
+      tool.name === "search" && observation.searchesRemaining() === 0
+        ? {
+            ...tool,
+            label: "Search (new-search budget exhausted)",
+            description:
+              "The new-search budget is exhausted and this call will fail. " +
+              "Use search_more only to reveal another page of the latest search; " +
+              "otherwise read an already displayed candidate or finish.",
+          }
+        : tool
+    ),
     workingMemorySnapshot: () => memory.snapshot(),
     wrapTools(tools: readonly AgentTool[]): AgentTool[] {
       return tools.map(tool => {
@@ -135,7 +146,11 @@ export function createRewriteWorkingMemoryContext(
       retained.splice(firstAction < 0 ? retained.length : firstAction, 0, {
         role: "user", timestamp: 0,
         content: memory.render() + "\n" + renderReadReceipts(ledger) +
-          `\nSearch calls remaining: ${observation.searchesRemaining() ?? "unbounded"}.`,
+          `\nSearch calls remaining: ${observation.searchesRemaining() ?? "unbounded"}.` +
+          (observation.searchesRemaining() === 0
+            ? " New search is unavailable. Use search_more only for another page " +
+              "of the latest search; otherwise read a listed candidate or finish."
+            : ""),
       });
       return retained;
     },
