@@ -157,7 +157,11 @@ async function main(): Promise<void> {
       : "sse",
   });
   const requestPolicy = {
-    timeoutMs: loadedModelRuntime.model.reasoning ? 120_000 : 90_000,
+    timeoutMs: integerEnvironment(
+      "PIMEM_REQUEST_TIMEOUT_MS",
+      loadedModelRuntime.model.reasoning ? 120_000 : 90_000,
+      1_800_000,
+    ),
     maxRetries: 1,
     maxRetryDelayMs: 5_000,
   };

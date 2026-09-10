@@ -82,6 +82,7 @@ service:
   max_run_ms: 240000
   max_turns: 64
   max_tool_calls: 80
+  request_timeout_ms: 150000
 run:
   task: trec-fine
   label: smoke
@@ -94,6 +95,8 @@ run:
   slots: 1
   context_slots: 5
   query_slots: 16
+  answer_timeout_seconds: 600
+  memory_timeout_seconds: 1260
   adaptive_query_slots:
     minimum: 1
     initial: 4
@@ -133,6 +136,7 @@ describe("MemoryAgentBench YAML configuration", () => {
     expect(config.service.skill).toBe("pimem-minimal");
     expect(config.service.interfaceMode).toBe("compact");
     expect(serviceEnvironment(config, {}).PIMEM_MAX_CONCURRENT_WRAPS).toBe("16");
+    expect(serviceEnvironment(config, {}).PIMEM_REQUEST_TIMEOUT_MS).toBe("150000");
     expect(serviceEnvironment(config, {}).PIMEM_SKILL).toBe("pimem-minimal");
     expect(serviceEnvironment(config, {}).PIMEM_INTERFACE_MODE).toBe("compact");
     expect(serviceEnvironment(config, {}).NODE_EXTRA_CA_CERTS).toContain(
@@ -148,7 +152,18 @@ describe("MemoryAgentBench YAML configuration", () => {
       identityBeforeCaChange,
     );
     expect(runtimeIdentityForConfig(config).contract.agent_interface).toBe("compact");
+    expect(runtimeIdentityForConfig(config).contract).toMatchObject({
+      limits: { request_timeout_ms: 150000 },
+    });
     expect(invocation.args).toContain("--context-slots");
+    expect(invocation.args.slice(
+      invocation.args.indexOf("--answer-timeout-seconds"),
+      invocation.args.indexOf("--answer-timeout-seconds") + 2,
+    )).toEqual(["--answer-timeout-seconds", "600"]);
+    expect(invocation.args.slice(
+      invocation.args.indexOf("--memory-timeout-seconds"),
+      invocation.args.indexOf("--memory-timeout-seconds") + 2,
+    )).toEqual(["--memory-timeout-seconds", "1260"]);
     expect(invocation.args).toContain("5");
     expect(invocation.args).toContain("--adaptive-query-slots");
     expect(invocation.args).toContain("--adaptive-query-slots-initial");

@@ -37,6 +37,7 @@ def _parser() -> argparse.ArgumentParser:
     run.add_argument("--answer-max-tokens", type=int)
     run.add_argument("--answer-context-window", type=int)
     run.add_argument("--answer-api-key-env", default="OPENAI_API_KEY")
+    run.add_argument("--answer-timeout-seconds", type=float, default=120.0)
     run.add_argument("--max-contexts", type=int)
     run.add_argument("--max-queries", type=int)
     run.add_argument(
@@ -128,6 +129,8 @@ def main(argv: list[str] | None = None) -> int:
     contexts = load_contexts(args.data_dir, task)
     if args.memory_timeout_seconds <= 0:
         raise ValueError("--memory-timeout-seconds must be positive")
+    if args.answer_timeout_seconds <= 0:
+        raise ValueError("--answer-timeout-seconds must be positive")
     if args.answer_context_window is not None and args.answer_context_window <= 0:
         raise ValueError("--answer-context-window must be positive")
     memory = MemoryClient(
@@ -142,7 +145,7 @@ def main(argv: list[str] | None = None) -> int:
         JsonHttpClient(
             args.answer_base_url,
             api_key=api_key,
-            timeout_seconds=120.0,
+            timeout_seconds=args.answer_timeout_seconds,
             retries=0,
         ),
         args.answer_model,

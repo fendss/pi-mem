@@ -474,6 +474,12 @@ export function loadMemoryAgentBenchYaml(configPath) {
         1,
         256,
       ) ?? 16,
+      requestTimeoutMs: optionalIntegerAt(
+        service.request_timeout_ms,
+        "config.service.request_timeout_ms",
+        1,
+        1_800_000,
+      ) ?? 120_000,
     },
     run: {
       tasks,
@@ -497,6 +503,21 @@ export function loadMemoryAgentBenchYaml(configPath) {
         1,
         3600,
       ) ?? 60,
+      answerTimeoutSeconds: optionalIntegerAt(
+        run.answer_timeout_seconds,
+        "config.run.answer_timeout_seconds",
+        1,
+        86_400,
+      ) ?? 120,
+      memoryTimeoutSeconds: optionalIntegerAt(
+        run.memory_timeout_seconds,
+        "config.run.memory_timeout_seconds",
+        1,
+        86_400,
+      ) ?? Math.ceil(
+        integerAt(service.max_run_ms, "config.service.max_run_ms", 1, 1_800_000) /
+          1_000,
+      ) + 30,
       reuseIngestionFrom: taskPathMapAt(
         run.reuse_ingestion_from,
         "config.run.reuse_ingestion_from",
@@ -623,7 +644,7 @@ export function runtimeIdentityForConfig(config) {
       max_turns: config.service.maxTurns,
       max_tool_calls: config.service.maxToolCalls,
       max_search_calls: config.run.maxSearchCalls,
-      request_timeout_ms: 120_000,
+      request_timeout_ms: config.service.requestTimeoutMs,
       request_max_retries: 1,
       request_max_retry_delay_ms: 5_000,
       max_concurrent_wraps: config.service.maxConcurrentWraps,
@@ -653,6 +674,8 @@ export function runConfigIdentity(config, task, mode) {
     context_slots: config.run.contextSlots,
     query_slots: config.run.querySlots,
     adaptive_query_slots: config.run.adaptiveQuerySlots,
+    answer_timeout_seconds: config.run.answerTimeoutSeconds,
+    memory_timeout_seconds: config.run.memoryTimeoutSeconds,
     reuse_ingestion_from: config.run.reuseIngestionFrom[task] ?? null,
   }));
 }
@@ -732,6 +755,7 @@ export function serviceEnvironment(config, inherited = process.env) {
     PIMEM_MAX_TOOL_CALLS: String(config.service.maxToolCalls),
     PIMEM_MAX_SEARCH_CALLS: String(config.run.maxSearchCalls),
     PIMEM_MAX_CONCURRENT_WRAPS: String(config.service.maxConcurrentWraps),
+    PIMEM_REQUEST_TIMEOUT_MS: String(config.service.requestTimeoutMs),
     PIMEM_SKILL: config.service.skill,
     PIMEM_INTERFACE_MODE: config.service.interfaceMode,
     PIMEM_SOURCE_IDENTITY: config.service.sourceIdentity,
@@ -830,14 +854,13 @@ export function runnerInvocation(
       "--data-dir", config.paths.dataDir,
       "--output", output,
       "--memory-base-url", `http://${config.service.host}:${String(config.service.port)}`,
-      "--memory-timeout-seconds", String(
-        Math.ceil(config.service.maxRunMs / 1_000) + 30,
-      ),
+      "--memory-timeout-seconds", String(config.run.memoryTimeoutSeconds),
       "--answer-base-url", config.credentials.generation.baseUrl,
       "--answer-model", config.models.answer.id,
       "--answer-thinking-level", config.models.answer.thinkingLevel,
       "--answer-max-tokens", String(config.models.answer.maxTokens),
       "--answer-context-window", String(config.models.answer.contextWindow),
+      "--answer-timeout-seconds", String(config.run.answerTimeoutSeconds),
       "--operator-mode", mode,
       "--max-search-calls", String(config.run.maxSearchCalls),
       "--context-slots", String(config.run.contextSlots),
@@ -869,6 +892,9 @@ function sanitized(config) {
     modes: config.run.modes,
     max_search_calls: config.run.maxSearchCalls,
     max_concurrent_wraps: config.service.maxConcurrentWraps,
+    retrieval_request_timeout_ms: config.service.requestTimeoutMs,
+    answer_timeout_seconds: config.run.answerTimeoutSeconds,
+    memory_timeout_seconds: config.run.memoryTimeoutSeconds,
     retrieval_skill: config.service.skill,
     agent_interface: config.service.interfaceMode,
     context_slots: config.run.contextSlots,

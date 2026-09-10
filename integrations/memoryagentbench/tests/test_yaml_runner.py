@@ -46,6 +46,7 @@ def _config(adaptive: str) -> str:
           max_turns: 64
           max_tool_calls: 80
           max_concurrent_wraps: 16
+          request_timeout_ms: 150000
         run:
           task: longmemeval-s
           label: concurrency-test
@@ -53,6 +54,8 @@ def _config(adaptive: str) -> str:
           max_search_calls: 4
           slots: 1
           query_slots: 16
+          answer_timeout_seconds: 600
+          memory_timeout_seconds: 1260
           adaptive_query_slots:
         """
     )
@@ -129,7 +132,9 @@ class YamlStageConcurrencyTests(unittest.TestCase):
             },
         )
         timeout_index = loaded["args"].index("--memory-timeout-seconds")
-        self.assertEqual(loaded["args"][timeout_index + 1], "270")
+        self.assertEqual(loaded["args"][timeout_index + 1], "1260")
+        answer_timeout_index = loaded["args"].index("--answer-timeout-seconds")
+        self.assertEqual(loaded["args"][answer_timeout_index + 1], "600")
         context_index = loaded["args"].index("--answer-context-window")
         self.assertEqual(loaded["args"][context_index + 1], "128000")
         self.assertIn("--adaptive-query-slots-initial", loaded["args"])
