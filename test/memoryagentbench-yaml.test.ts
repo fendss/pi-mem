@@ -43,6 +43,7 @@ async function configFile(mode = 0o600): Promise<string> {
     "test skill\n",
   );
   await writeFile(join(directory, "embedding.env"), "PIMEM_EMBEDDING_MODEL=test\n");
+  await writeFile(join(directory, "generation-ca.pem"), "test generation CA\n");
   await writeFile(path, `
 schema_version: 1
 paths:
@@ -59,6 +60,7 @@ credentials:
   generation:
     api_key: test-key
     base_url: https://generation.example/v1/
+    ca_bundle: ./generation-ca.pem
 models:
   retrieval:
     id: gpt-5-mini
@@ -103,7 +105,8 @@ run:
 
 describe("MemoryAgentBench YAML configuration", () => {
   it("drives both model identities and runner arguments from one protected file", async () => {
-    const config = loadMemoryAgentBenchYaml(await configFile());
+    const path = await configFile();
+    const config = loadMemoryAgentBenchYaml(path);
     const invocation = runnerInvocation(config, "static");
 
     expect(config.credentials.generation.apiKey).toBe("test-key");
@@ -116,6 +119,8 @@ describe("MemoryAgentBench YAML configuration", () => {
     expect(invocation.args).toContain("gpt-4.1-mini");
     expect(invocation.args).toContain("http://127.0.0.1:3113");
     expect(invocation.env.OPENAI_API_KEY).toBe("test-key");
+    expect(invocation.env.SSL_CERT_FILE).toContain("generation-ca.pem");
+    expect(invocation.env.REQUESTS_CA_BUNDLE).toContain("generation-ca.pem");
     expect(config.run.contextSlots).toBe(5);
     expect(config.run.querySlots).toBe(16);
     expect(config.run.adaptiveQuerySlots).toEqual({
@@ -130,6 +135,18 @@ describe("MemoryAgentBench YAML configuration", () => {
     expect(serviceEnvironment(config, {}).PIMEM_MAX_CONCURRENT_WRAPS).toBe("16");
     expect(serviceEnvironment(config, {}).PIMEM_SKILL).toBe("pimem-minimal");
     expect(serviceEnvironment(config, {}).PIMEM_INTERFACE_MODE).toBe("compact");
+    expect(serviceEnvironment(config, {}).NODE_EXTRA_CA_CERTS).toContain(
+      "generation-ca.pem",
+    );
+    const identityBeforeCaChange = runConfigIdentity(config, "trec-fine", "static");
+    await writeFile(
+      join(path, "..", "generation-ca.pem"),
+      "changed test generation CA\n",
+    );
+    const changedCaConfig = loadMemoryAgentBenchYaml(config.configPath);
+    expect(runConfigIdentity(changedCaConfig, "trec-fine", "static")).not.toBe(
+      identityBeforeCaChange,
+    );
     expect(runtimeIdentityForConfig(config).contract.agent_interface).toBe("compact");
     expect(invocation.args).toContain("--context-slots");
     expect(invocation.args).toContain("5");
@@ -154,6 +171,20 @@ describe("MemoryAgentBench YAML configuration", () => {
     const path = await configFile(0o644);
     expect(() => loadMemoryAgentBenchYaml(path)).toThrow(
       /mode 0600/iu,
+    );
+  });
+
+  it("rejects a configured generation CA bundle that is missing", async () => {
+    const path = await configFile();
+    const source = await import("node:fs/promises");
+    const current = await source.readFile(path, "utf8");
+    await source.writeFile(
+      path,
+      current.replace("./generation-ca.pem", "./missing-generation-ca.pem"),
+    );
+    await chmod(path, 0o600);
+    expect(() => loadMemoryAgentBenchYaml(path)).toThrow(
+      /ca_bundle must identify an existing file/iu,
     );
   });
 

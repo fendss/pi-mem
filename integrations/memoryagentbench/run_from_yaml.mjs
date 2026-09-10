@@ -85,6 +85,15 @@ function pathAt(value, path, configDirectory) {
   return isAbsolute(raw) ? raw : resolve(configDirectory, raw);
 }
 
+function optionalFilePathAt(value, path, configDirectory) {
+  if (value === undefined || value === null) return null;
+  const file = pathAt(value, path, configDirectory);
+  if (!existsSync(file) || !statSync(file).isFile()) {
+    throw new Error(`${path} must identify an existing file: ${file}`);
+  }
+  return file;
+}
+
 function taskPathMapAt(value, path, configDirectory, tasks) {
   if (value === undefined || value === null) return {};
   const mapping = recordAt(value, path);
@@ -380,6 +389,11 @@ export function loadMemoryAgentBenchYaml(configPath) {
   if (!baseUrl.startsWith("https://")) {
     throw new Error("config.credentials.generation.base_url must use https://");
   }
+  const caBundle = optionalFilePathAt(
+    generation.ca_bundle,
+    "config.credentials.generation.ca_bundle",
+    configDirectory,
+  );
   const querySlots = optionalIntegerAt(
     run.query_slots,
     "config.run.query_slots",
@@ -429,6 +443,7 @@ export function loadMemoryAgentBenchYaml(configPath) {
       generation: {
         apiKey: stringAt(generation.api_key, "config.credentials.generation.api_key"),
         baseUrl,
+        caBundle,
       },
     },
     models: {
@@ -629,6 +644,9 @@ export function runConfigIdentity(config, task, mode) {
     runtime_identity_sha256: runtimeIdentityForConfig(config).sha256,
     memory_base_url: `http://${config.service.host}:${String(config.service.port)}`,
     answer_base_url: config.credentials.generation.baseUrl,
+    generation_ca_sha256: config.credentials.generation.caBundle === null
+      ? null
+      : sha256(readFileSync(config.credentials.generation.caBundle, "utf8")),
     answer_model: config.models.answer,
     max_contexts: config.run.maxContexts,
     max_queries: config.run.maxQueries,
@@ -748,6 +766,16 @@ export function serviceEnvironment(config, inherited = process.env) {
     HOST: config.service.host,
     PORT: String(config.service.port),
   };
+  const caBundle = config.credentials.generation.caBundle;
+  if (caBundle === null) {
+    delete environment.NODE_EXTRA_CA_CERTS;
+    delete environment.SSL_CERT_FILE;
+    delete environment.REQUESTS_CA_BUNDLE;
+  } else {
+    environment.NODE_EXTRA_CA_CERTS = caBundle;
+    environment.SSL_CERT_FILE = caBundle;
+    environment.REQUESTS_CA_BUNDLE = caBundle;
+  }
   if (qdrant !== null && qdrant.apiKey === undefined) {
     delete environment.PIMEM_QDRANT_API_KEY;
   }
@@ -777,14 +805,25 @@ export function runnerInvocation(
       : ["--max-queries", String(config.run.maxQueries)]),
   ];
   const reuseIngestionFrom = config.run.reuseIngestionFrom[task];
+  const environment = {
+    ...process.env,
+    OPENAI_API_KEY: config.credentials.generation.apiKey,
+    NLTK_DATA: config.paths.nltkData,
+  };
+  const caBundle = config.credentials.generation.caBundle;
+  if (caBundle === null) {
+    delete environment.NODE_EXTRA_CA_CERTS;
+    delete environment.SSL_CERT_FILE;
+    delete environment.REQUESTS_CA_BUNDLE;
+  } else {
+    environment.NODE_EXTRA_CA_CERTS = caBundle;
+    environment.SSL_CERT_FILE = caBundle;
+    environment.REQUESTS_CA_BUNDLE = caBundle;
+  }
   return {
     command: config.paths.uv,
     cwd: join(config.paths.source, "integrations", "memoryagentbench"),
-    env: {
-      ...process.env,
-      OPENAI_API_KEY: config.credentials.generation.apiKey,
-      NLTK_DATA: config.paths.nltkData,
-    },
+    env: environment,
     args: [
       "run", "--with-requirements", "requirements.txt", "python", "run.py", "run",
       "--task", task,
@@ -822,6 +861,9 @@ function sanitized(config) {
     retrieval_route: config.models.retrieval.routeId,
     answer_model: config.models.answer.id,
     endpoint: config.credentials.generation.baseUrl,
+    generation_ca_sha256: config.credentials.generation.caBundle === null
+      ? null
+      : sha256(readFileSync(config.credentials.generation.caBundle, "utf8")),
     port: config.service.port,
     tasks: config.run.tasks,
     modes: config.run.modes,
