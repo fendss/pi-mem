@@ -113,7 +113,7 @@ describe("compact agent interface", () => {
     expect(secondText).toContain("read C30");
   });
 
-  it("uses no neighboring turns and promotes the selected passage to its complete parent", async () => {
+  it("uses no neighboring turns and retains the complete parent when it fits", async () => {
     const long = source(
       1,
       `${"irrelevant context ".repeat(2_000)}The requested compact fact is here.`,

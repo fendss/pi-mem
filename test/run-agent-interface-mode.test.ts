@@ -95,7 +95,15 @@ describe("PiMem prompt and interface selection", () => {
     expect(observedSystemPrompt).toContain(PIMEM_SKILL_TEXT);
     expect(observedSystemPrompt).toContain("Context policy: compact working memory.");
     expect(observedSystemPrompt).toContain("<search_operator_catalog>");
+    expect(observedSystemPrompt).toContain(
+      "do not substitute world knowledge for a missing relation",
+    );
+    expect(observedSystemPrompt).not.toContain("cover every required relationship");
     expect(observedQuestion).toContain("Use or compose the available search operators");
+    expect(observedQuestion).toContain(
+      "Decide whether the acquired sources are adequate for answering",
+    );
+    expect(observedQuestion).not.toContain("cover every required relationship");
     expect(observedTools.map((tool) => tool.name)).toEqual([
       "search",
       "search_more",

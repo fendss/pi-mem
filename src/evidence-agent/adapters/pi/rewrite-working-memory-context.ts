@@ -23,10 +23,12 @@ history, and the final evidence package. You do not need to copy or maintain the
 After your next successful tool action, the harness removes prior raw tool results
 from active context. A failed action keeps them visible for correction.
 
-Use the Missing facts to choose the next search. Finish sufficient only when the
-sources already read cover the question; otherwise continue searching or finish
-insufficient when the remaining budget cannot resolve the gap. The program commits
-all read sources. A final note and evidenceSummary are optional.
+Use the Missing facts to choose the next search. Treat a relationship as established
+only after reading source text that states it; do not fill a missing relationship
+from world knowledge. Decide whether the acquired sources are adequate for answering.
+If the remaining budget cannot resolve an important gap, finish insufficient. The
+program commits all read parent-backed evidence. A final note and evidenceSummary
+are optional.
 `;
 
 export const COMPACT_REWRITE_WORKING_MEMORY_PROMPT = `
@@ -38,8 +40,10 @@ changes, replace it with only:
 - Missing: facts or relationships still needed.
 Do not include handles, candidate lists, search history, or reasoning. Use the
 missing fact to choose the next query and, when useful, the next operator or
-operator composition. Finish sufficient only when exact sources already read
-cover every required relationship.
+operator composition. Treat only relationships stated by source text you have
+read as established; do not substitute world knowledge for a missing relation.
+Decide whether the acquired sources are adequate for answering, or finish
+insufficient when an important gap cannot be resolved within the remaining budget.
 `;
 
 /** Notes are optional annotations. Only real tool arguments authorize source reads. */

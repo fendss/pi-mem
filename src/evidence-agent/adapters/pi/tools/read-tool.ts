@@ -200,7 +200,7 @@ export function createReadTool(
               options.questionDate,
               displayedCandidateIds,
             ),
-            "Every parent source selected above will be committed when finish succeeds.",
+            "Every exact parent-backed evidence item selected above will be committed when finish succeeds.",
             "</READ_RESULT>",
             ...(options.observation === undefined
               ? []

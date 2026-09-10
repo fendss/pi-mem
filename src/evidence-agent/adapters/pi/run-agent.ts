@@ -174,7 +174,9 @@ function questionPrompt(
       "",
       "Find and read exact source evidence. Search from the facts still missing. " +
         "Use or compose the available search operators when that improves the retrieval path. " +
-        "Finish sufficient only when the sources read cover every required relationship. " +
+        "Treat only relationships stated by sources you have read as established; " +
+        "do not substitute world knowledge for a missing relation. " +
+        "Decide whether the acquired sources are adequate for answering. " +
         "Do not answer the question.",
     ].join("\n");
   }
