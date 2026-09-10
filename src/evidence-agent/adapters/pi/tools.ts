@@ -15,6 +15,10 @@ export { createFinishTool } from "./tools/finish-tool.js";
 export { createReadTool } from "./tools/read-tool.js";
 export {
   BashRoParameters,
+  CompactFinishParameters,
+  CompactReadParameters,
+  CompactSearchMoreParameters,
+  CompactSearchParameters,
   createSearchParameters,
   DefineOperatorParameters,
   FinishParameters,

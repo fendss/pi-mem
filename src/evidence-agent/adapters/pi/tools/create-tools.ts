@@ -9,6 +9,7 @@ import { createMemoryObservation } from "../memory-observation.js";
 export function createPiMemTools(
   options: CreatePiMemToolsOptions,
 ): PiMemTools {
+  const compact = options.interfaceMode === "compact";
   if (options.scopeId !== options.ledger.scopeId) {
     throw new Error(
       `Tool scope ${options.scopeId} does not match ledger scope ${options.ledger.scopeId}`,
@@ -16,6 +17,7 @@ export function createPiMemTools(
   }
   const observation = options.observation ?? createMemoryObservation({
     ledger: options.ledger,
+    ...(compact ? { compact: true } : {}),
     ...(options.question === undefined ? {} : { question: options.question }),
     ...(options.questionDate === undefined
       ? {}
@@ -26,7 +28,7 @@ export function createPiMemTools(
   });
   const sharedOptions = { ...options, observation };
   const { search, searchMore } = createSearchTools(sharedOptions);
-  const defineOperator =
+  const defineOperator = compact ||
     options.operatorDefinitions === undefined ||
     options.operatorDefinitions.remainingDefinitions() === 0
     ? undefined
@@ -36,7 +38,7 @@ export function createPiMemTools(
       });
   const read = createReadTool(sharedOptions);
   const bashRo =
-    options.bashRo === undefined
+    compact || options.bashRo === undefined
       ? undefined
       : createBashRoTool({
           ...sharedOptions,

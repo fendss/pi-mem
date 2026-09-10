@@ -3,7 +3,10 @@ import { Type } from "@earendil-works/pi-ai";
 import type { MemoryLedger } from "../../model/ledger.js";
 import { IncrementalWorkingMemory, WORKING_MEMORY_MAX_CHARS, WORKING_MEMORY_MAX_OPERATIONS } from "../../model/working-memory.js";
 import { createRewriteWorkingMemoryContext } from "./rewrite-working-memory-context.js";
-export { REWRITE_WORKING_MEMORY_PROMPT } from "./rewrite-working-memory-context.js";
+export {
+  COMPACT_REWRITE_WORKING_MEMORY_PROMPT,
+  REWRITE_WORKING_MEMORY_PROMPT,
+} from "./rewrite-working-memory-context.js";
 import { createWorkProgress, WorkProgressParameters } from "./work-progress-contract.js";
 import { createWorkingMemoryObservation } from "./working-memory-observation.js";
 
@@ -38,8 +41,15 @@ explicit unchanged decision acknowledges them. No separate state tool is needed.
 The final answer handoff still uses exact read sources, not the working note.
 `;
 
-export function createWorkingMemoryContext(ledger: MemoryLedger, maxSearchCalls?: number, mode: "entries" | "progress" | "rewrite" = "entries") {
-  if (mode === "rewrite") return createRewriteWorkingMemoryContext(ledger, maxSearchCalls);
+export function createWorkingMemoryContext(
+  ledger: MemoryLedger,
+  maxSearchCalls?: number,
+  mode: "entries" | "progress" | "rewrite" = "entries",
+  compact = false,
+) {
+  if (mode === "rewrite") {
+    return createRewriteWorkingMemoryContext(ledger, maxSearchCalls, compact);
+  }
   const progress = mode === "progress";
   const optionalNotes = mode !== "entries";
   const acknowledged = new Set<string>();

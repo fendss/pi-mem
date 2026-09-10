@@ -26,6 +26,24 @@ const SearchQueries = (description: string) => Type.Array(
   },
 );
 
+export const CompactSearchParameters = Type.Object({
+  queries: Type.Array(Type.String({ minLength: 1 }), {
+    minItems: 1,
+    maxItems: 8,
+    description:
+      "Focused searches for the facts still needed. Use distinct queries, not paraphrases.",
+  }),
+}, {
+  additionalProperties: false,
+  description:
+    "Search memory with the harness-managed default retriever. Retrieval strategy and result limits are handled by the harness.",
+});
+
+export const CompactSearchMoreParameters = Type.Object({}, {
+  additionalProperties: false,
+  description: "Show the next page from the latest search without running a new retrieval.",
+});
+
 const SearchOrder = Type.Union([
   Type.Literal("relevance"),
   Type.Literal("chronological"),
@@ -225,6 +243,18 @@ export const ReadParameters = Type.Object({
     "returned by read is automatically committed when finish succeeds.",
 });
 
+export const CompactReadParameters = Type.Object({
+  candidateRefs: Type.Array(CandidateReference, {
+    minItems: 1,
+    maxItems: 6,
+    description: "Candidate handles from the currently visible search page.",
+  }),
+}, {
+  additionalProperties: false,
+  description:
+    "Read a small set of promising candidates. Exact sources and provenance are retained by the harness.",
+});
+
 export const FinishParameters = Type.Object({
   status: Type.Union([
     Type.Literal("sufficient"),
@@ -248,6 +278,19 @@ export const FinishParameters = Type.Object({
     "assistant turn, after observing the latest search or read result in an " +
     "earlier turn. The harness automatically commits every exact source " +
     "returned by read and generates citations, hashes, provenance, and package formatting.",
+});
+
+export const CompactFinishParameters = Type.Object({
+  status: Type.Union([
+    Type.Literal("sufficient"),
+    Type.Literal("insufficient"),
+  ], {
+    description:
+      "Use sufficient only when the exact sources already read cover every fact needed by the question.",
+  }),
+}, {
+  additionalProperties: false,
+  description: "Stop retrieval and let the harness commit all exact sources read so far.",
 });
 
 export const BashRoParameters = Type.Object({

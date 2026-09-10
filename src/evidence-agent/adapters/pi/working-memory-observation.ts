@@ -7,6 +7,8 @@ interface WorkingMemoryObservationOptions {
   recordShown?: (ref: string, text: string) => void;
   /** Re-expose the current result when earlier observations can leave context. */
   refreshResults?: boolean;
+  /** Keep only the current ranked page and the next legal actions model-visible. */
+  compact?: boolean;
 }
 
 /** Navigation deltas only. The context policy supplies the persistent note. */
@@ -58,6 +60,30 @@ export function createWorkingMemoryObservation(
       const status = maxSearchCalls === undefined
         ? `Searches completed: ${searches}`
         : `Searches remaining: ${Math.max(0, maxSearchCalls - searches)}`;
+      if (options.compact) {
+        const findingLines = (current?.findings ?? []).flatMap((candidate) => {
+          const line = renderFinding(candidate, 280);
+          return line === undefined ? [] : [line];
+        });
+        return [
+          "<MEMORY>",
+          status,
+          ...(current === undefined
+            ? []
+            : [
+                "Current search results",
+                ...findingLines,
+                ...(findingLines.length === 0
+                  ? ["No candidate text was returned for this page."]
+                  : []),
+                ...(current.pagination?.hasMore
+                  ? ["More results are available through search_more."]
+                  : []),
+              ]),
+          "Read only promising candidates. Search for a missing fact, or finish when the exact sources read cover the question.",
+          "</MEMORY>",
+        ].join("\n");
+      }
       const findingLines = (current?.findings ?? []).flatMap((candidate) => {
         const line = renderFinding(candidate, candidate.passage?.content.length ?? 360);
         return line === undefined ? [] : [line];

@@ -694,18 +694,18 @@ _No top-level functions, classes, or class methods._
 
 | Symbol | Purpose | Kind | Visibility | Source |
 |---|---|---|---|---|
-| `renderCoverageProgress(progress: SearchCoverageProgress): string[]` | Renders coverage progress. | function | internal | [line 47](../../src/evidence-agent/adapters/pi/memory-observation.ts#L47) |
-| `relativeTime(timestamp: string \| undefined, questionDate: string \| undefined): string` | Implements the relative time operation. | function | internal | [line 82](../../src/evidence-agent/adapters/pi/memory-observation.ts#L82) |
-| `roleLabel(role: string): string` | Implements the role label operation. | function | internal | [line 90](../../src/evidence-agent/adapters/pi/memory-observation.ts#L90) |
-| `indent(text: string): string` | Implements the indent operation. | function | internal | [line 96](../../src/evidence-agent/adapters/pi/memory-observation.ts#L96) |
-| `sourceLine(source: MemoryCandidate \| MemoryEvidence, action: string, questionDate: string \| undefined): string` | Implements the source line operation. | function | internal | [line 100](../../src/evidence-agent/adapters/pi/memory-observation.ts#L100) |
-| `conversationHeading(sources: readonly (MemoryCandidate \| MemoryEvidence)[]): string` | Implements the conversation heading operation. | function | internal | [line 111](../../src/evidence-agent/adapters/pi/memory-observation.ts#L111) |
-| `renderInLedgerOrder(sources: readonly T[], renderSource: (source: T) => string): string[]` | Preserve the supplied order: the current operator order for latest results, and stable discovery order for older findings. | function | internal | [line 127](../../src/evidence-agent/adapters/pi/memory-observation.ts#L127) |
-| `searchQueries(candidate: MemoryCandidate): string[]` | Searches queries. | function | internal | [line 143](../../src/evidence-agent/adapters/pi/memory-observation.ts#L143) |
-| `renderInspectReceipts(candidates: readonly MemoryCandidate[], ledger: MemoryLedger, questionDate: string \| undefined): string[]` | Renders inspect receipts. | function | internal | [line 154](../../src/evidence-agent/adapters/pi/memory-observation.ts#L154) |
-| `renderUnreadFindings(candidates: readonly MemoryCandidate[], ledger: MemoryLedger, questionDate: string \| undefined, previewLength?: number): string[]` | Renders unread findings. | function | internal | [line 179](../../src/evidence-agent/adapters/pi/memory-observation.ts#L179) |
-| `renderCompactDirectory(candidates: readonly MemoryCandidate[], ledger: MemoryLedger, questionDate: string \| undefined, previewLength: number): string[]` | Renders compact directory. | function | internal | [line 214](../../src/evidence-agent/adapters/pi/memory-observation.ts#L214) |
-| `createMemoryObservation(options: CreateMemoryObservationOptions): MemoryObservation` | Maintains one model-facing memory snapshot for a run. | function | exported | [line 249](../../src/evidence-agent/adapters/pi/memory-observation.ts#L249) |
+| `renderCoverageProgress(progress: SearchCoverageProgress): string[]` | Renders coverage progress. | function | internal | [line 48](../../src/evidence-agent/adapters/pi/memory-observation.ts#L48) |
+| `relativeTime(timestamp: string \| undefined, questionDate: string \| undefined): string` | Implements the relative time operation. | function | internal | [line 83](../../src/evidence-agent/adapters/pi/memory-observation.ts#L83) |
+| `roleLabel(role: string): string` | Implements the role label operation. | function | internal | [line 91](../../src/evidence-agent/adapters/pi/memory-observation.ts#L91) |
+| `indent(text: string): string` | Implements the indent operation. | function | internal | [line 97](../../src/evidence-agent/adapters/pi/memory-observation.ts#L97) |
+| `sourceLine(source: MemoryCandidate \| MemoryEvidence, action: string, questionDate: string \| undefined): string` | Implements the source line operation. | function | internal | [line 101](../../src/evidence-agent/adapters/pi/memory-observation.ts#L101) |
+| `conversationHeading(sources: readonly (MemoryCandidate \| MemoryEvidence)[]): string` | Implements the conversation heading operation. | function | internal | [line 112](../../src/evidence-agent/adapters/pi/memory-observation.ts#L112) |
+| `renderInLedgerOrder(sources: readonly T[], renderSource: (source: T) => string): string[]` | Preserve the supplied order: the current operator order for latest results, and stable discovery order for older findings. | function | internal | [line 128](../../src/evidence-agent/adapters/pi/memory-observation.ts#L128) |
+| `searchQueries(candidate: MemoryCandidate): string[]` | Searches queries. | function | internal | [line 144](../../src/evidence-agent/adapters/pi/memory-observation.ts#L144) |
+| `renderInspectReceipts(candidates: readonly MemoryCandidate[], ledger: MemoryLedger, questionDate: string \| undefined): string[]` | Renders inspect receipts. | function | internal | [line 155](../../src/evidence-agent/adapters/pi/memory-observation.ts#L155) |
+| `renderUnreadFindings(candidates: readonly MemoryCandidate[], ledger: MemoryLedger, questionDate: string \| undefined, previewLength?: number): string[]` | Renders unread findings. | function | internal | [line 180](../../src/evidence-agent/adapters/pi/memory-observation.ts#L180) |
+| `renderCompactDirectory(candidates: readonly MemoryCandidate[], ledger: MemoryLedger, questionDate: string \| undefined, previewLength: number): string[]` | Renders compact directory. | function | internal | [line 215](../../src/evidence-agent/adapters/pi/memory-observation.ts#L215) |
+| `createMemoryObservation(options: CreateMemoryObservationOptions): MemoryObservation` | Maintains one model-facing memory snapshot for a run. | function | exported | [line 250](../../src/evidence-agent/adapters/pi/memory-observation.ts#L250) |
 ## `src/evidence-agent/adapters/pi/read-receipts.ts`
 
 | Symbol | Purpose | Kind | Visibility | Source |
@@ -715,23 +715,23 @@ _No top-level functions, classes, or class methods._
 
 | Symbol | Purpose | Kind | Visibility | Source |
 |---|---|---|---|---|
-| `activeSkillPrompt(skill: Exclude<PiMemSkill, "none">): string` | Implements the active skill prompt operation. | function | internal | [line 45](../../src/evidence-agent/adapters/pi/retrieval-prompt.ts#L45) |
-| `piMemSystemPrompt(skill: PiMemSkill = "pimem-v0", basePrompt?: string, operatorCatalog: readonly SearchOperatorCatalogEntry[] = []): string` | Implements the pi mem system prompt operation. | function | exported | [line 53](../../src/evidence-agent/adapters/pi/retrieval-prompt.ts#L53) |
+| `activeSkillPrompt(skill: Exclude<PiMemSkill, "none">): string` | Implements the active skill prompt operation. | function | internal | [line 55](../../src/evidence-agent/adapters/pi/retrieval-prompt.ts#L55) |
+| `piMemSystemPrompt(skill: PiMemSkill = "pimem-v0", basePrompt?: string, operatorCatalog: readonly SearchOperatorCatalogEntry[] = []): string` | Implements the pi mem system prompt operation. | function | exported | [line 63](../../src/evidence-agent/adapters/pi/retrieval-prompt.ts#L63) |
 ## `src/evidence-agent/adapters/pi/rewrite-working-memory-context.ts`
 
 | Symbol | Purpose | Kind | Visibility | Source |
 |---|---|---|---|---|
-| `createRewriteWorkingMemoryContext(ledger: MemoryLedger, maxSearchCalls?: number)` | Notes are optional annotations. | function | exported | [line 33](../../src/evidence-agent/adapters/pi/rewrite-working-memory-context.ts#L33) |
+| `createRewriteWorkingMemoryContext(ledger: MemoryLedger, maxSearchCalls?: number, compact = false)` | Notes are optional annotations. | function | exported | [line 45](../../src/evidence-agent/adapters/pi/rewrite-working-memory-context.ts#L45) |
 ## `src/evidence-agent/adapters/pi/run-agent.ts`
 
 | Symbol | Purpose | Kind | Visibility | Source |
 |---|---|---|---|---|
-| `PiMemRunError` | Implements pi mem run error. | class | exported | [line 110](../../src/evidence-agent/adapters/pi/run-agent.ts#L110) |
-| `PiMemRunError.constructor(message: string, diagnostics: PiMemFailureDiagnostics, code: PiMemFailureCode = "runtime_error")` | Creates a pi mem run error instance. | method | public | [line 114](../../src/evidence-agent/adapters/pi/run-agent.ts#L114) |
-| `providerFailureKind(message: string): PiMemProviderFailureKind` | Implements the provider failure kind operation. | function | internal | [line 128](../../src/evidence-agent/adapters/pi/run-agent.ts#L128) |
-| `providerResponseModel(message: string): string \| undefined` | Implements the provider response model operation. | function | internal | [line 148](../../src/evidence-agent/adapters/pi/run-agent.ts#L148) |
-| `questionPrompt(question: string, questionDate?: string): string` | Builds the user prompt from the question and optional question date. | function | internal | [line 154](../../src/evidence-agent/adapters/pi/run-agent.ts#L154) |
-| `runPiMem(options: RunPiMemOptions): Promise<PiMemResult>` | Runs one bounded evidence-agent session and returns its provenance-backed result. | function | exported | [line 176](../../src/evidence-agent/adapters/pi/run-agent.ts#L176) |
+| `PiMemRunError` | Implements pi mem run error. | class | exported | [line 114](../../src/evidence-agent/adapters/pi/run-agent.ts#L114) |
+| `PiMemRunError.constructor(message: string, diagnostics: PiMemFailureDiagnostics, code: PiMemFailureCode = "runtime_error")` | Creates a pi mem run error instance. | method | public | [line 118](../../src/evidence-agent/adapters/pi/run-agent.ts#L118) |
+| `providerFailureKind(message: string): PiMemProviderFailureKind` | Implements the provider failure kind operation. | function | internal | [line 132](../../src/evidence-agent/adapters/pi/run-agent.ts#L132) |
+| `providerResponseModel(message: string): string \| undefined` | Implements the provider response model operation. | function | internal | [line 152](../../src/evidence-agent/adapters/pi/run-agent.ts#L152) |
+| `questionPrompt(question: string, questionDate?: string, compact = false): string` | Builds the user prompt from the question and optional question date. | function | internal | [line 158](../../src/evidence-agent/adapters/pi/run-agent.ts#L158) |
+| `runPiMem(options: RunPiMemOptions): Promise<PiMemResult>` | Runs one bounded evidence-agent session and returns its provenance-backed result. | function | exported | [line 197](../../src/evidence-agent/adapters/pi/run-agent.ts#L197) |
 ## `src/evidence-agent/adapters/pi/tools.ts`
 
 _No top-level functions, classes, or class methods._
@@ -772,7 +772,7 @@ _No top-level functions, classes, or class methods._
 
 | Symbol | Purpose | Kind | Visibility | Source |
 |---|---|---|---|---|
-| `createReadTool(options: CreatePiMemToolsOptions): PiMemTools["read"]` | Creates read tool. | function | exported | [line 15](../../src/evidence-agent/adapters/pi/tools/read-tool.ts#L15) |
+| `createReadTool(options: CreatePiMemToolsOptions): PiMemTools["read"]` | Creates read tool. | function | exported | [line 17](../../src/evidence-agent/adapters/pi/tools/read-tool.ts#L17) |
 ## `src/evidence-agent/adapters/pi/tools/render-tool-result.ts`
 
 | Symbol | Purpose | Kind | Visibility | Source |
@@ -787,18 +787,18 @@ _No top-level functions, classes, or class methods._
 |---|---|---|---|---|
 | `SearchOperatorId(description: string)` | Implements the search operator id operation. | function | internal | [line 13](../../src/evidence-agent/adapters/pi/tools/schemas.ts#L13) |
 | `SearchQueries(description: string)` | Implements the search queries operation. | function | internal | [line 20](../../src/evidence-agent/adapters/pi/tools/schemas.ts#L20) |
-| `createSearchParameters(operatorIds: readonly string[])` | Creates search parameters. | function | exported | [line 35](../../src/evidence-agent/adapters/pi/tools/schemas.ts#L35) |
+| `createSearchParameters(operatorIds: readonly string[])` | Creates search parameters. | function | exported | [line 53](../../src/evidence-agent/adapters/pi/tools/schemas.ts#L53) |
 ## `src/evidence-agent/adapters/pi/tools/search-tool.ts`
 
 | Symbol | Purpose | Kind | Visibility | Source |
 |---|---|---|---|---|
-| `renderPlanTrace(trace: SearchOperatorCompositionTrace \| undefined): string \| undefined` | Renders plan trace. | function | internal | [line 20](../../src/evidence-agent/adapters/pi/tools/search-tool.ts#L20) |
-| `hitQueryFingerprints(hit: RetrievalHit): Set<string>` | Implements the hit query fingerprints operation. | function | internal | [line 44](../../src/evidence-agent/adapters/pi/tools/search-tool.ts#L44) |
-| `coverageProgress(input: { call: number; hits: readonly RetrievalHit[]; executedQueries: readonly string[]; repeatedQueries: readonly string[]; previousCandidates: readonly MemoryCandidate[]; requestedLimit: number; consecutiveNoNewCandidateCalls: number; consecutiveNoNewSessionCalls: number; }): SearchCoverageProgress` | Implements the coverage progress operation. | function | internal | [line 48](../../src/evidence-agent/adapters/pi/tools/search-tool.ts#L48) |
-| `renderCoverageProgress(progress: SearchCoverageProgress): string` | Renders coverage progress. | function | internal | [line 132](../../src/evidence-agent/adapters/pi/tools/search-tool.ts#L132) |
-| `nextContinuationDepth(depth: number, maxDepth: number): number \| undefined` | Implements the next continuation depth operation. | function | internal | [line 176](../../src/evidence-agent/adapters/pi/tools/search-tool.ts#L176) |
-| `pageOperatorResult(result: EvidenceOperatorResult \| undefined, hits: readonly RetrievalHit[], reservoirHits: readonly RetrievalHit[], ledger: MemoryLedger): EvidenceOperatorResult \| undefined` | Implements the page operator result operation. | function | internal | [line 187](../../src/evidence-agent/adapters/pi/tools/search-tool.ts#L187) |
-| `createSearchTools(options: CreatePiMemToolsOptions): Pick<PiMemTools, "search" \| "searchMore">` | Creates search tools. | function | exported | [line 229](../../src/evidence-agent/adapters/pi/tools/search-tool.ts#L229) |
+| `renderPlanTrace(trace: SearchOperatorCompositionTrace \| undefined): string \| undefined` | Renders plan trace. | function | internal | [line 25](../../src/evidence-agent/adapters/pi/tools/search-tool.ts#L25) |
+| `hitQueryFingerprints(hit: RetrievalHit): Set<string>` | Implements the hit query fingerprints operation. | function | internal | [line 49](../../src/evidence-agent/adapters/pi/tools/search-tool.ts#L49) |
+| `coverageProgress(input: { call: number; hits: readonly RetrievalHit[]; executedQueries: readonly string[]; repeatedQueries: readonly string[]; previousCandidates: readonly MemoryCandidate[]; requestedLimit: number; consecutiveNoNewCandidateCalls: number; consecutiveNoNewSessionCalls: number; }): SearchCoverageProgress` | Implements the coverage progress operation. | function | internal | [line 53](../../src/evidence-agent/adapters/pi/tools/search-tool.ts#L53) |
+| `renderCoverageProgress(progress: SearchCoverageProgress): string` | Renders coverage progress. | function | internal | [line 137](../../src/evidence-agent/adapters/pi/tools/search-tool.ts#L137) |
+| `nextContinuationDepth(depth: number, maxDepth: number): number \| undefined` | Implements the next continuation depth operation. | function | internal | [line 181](../../src/evidence-agent/adapters/pi/tools/search-tool.ts#L181) |
+| `pageOperatorResult(result: EvidenceOperatorResult \| undefined, hits: readonly RetrievalHit[], reservoirHits: readonly RetrievalHit[], ledger: MemoryLedger): EvidenceOperatorResult \| undefined` | Implements the page operator result operation. | function | internal | [line 192](../../src/evidence-agent/adapters/pi/tools/search-tool.ts#L192) |
+| `createSearchTools(options: CreatePiMemToolsOptions): Pick<PiMemTools, "search" \| "searchMore">` | Creates search tools. | function | exported | [line 234](../../src/evidence-agent/adapters/pi/tools/search-tool.ts#L234) |
 ## `src/evidence-agent/adapters/pi/tools/tool-protocol.ts`
 
 | Symbol | Purpose | Kind | Visibility | Source |
@@ -817,12 +817,12 @@ _No top-level functions, classes, or class methods._
 
 | Symbol | Purpose | Kind | Visibility | Source |
 |---|---|---|---|---|
-| `createWorkingMemoryContext(ledger: MemoryLedger, maxSearchCalls?: number, mode: "entries" \| "progress" \| "rewrite" = "entries")` | Creates working memory context. | function | exported | [line 41](../../src/evidence-agent/adapters/pi/working-memory-context.ts#L41) |
+| `createWorkingMemoryContext(ledger: MemoryLedger, maxSearchCalls?: number, mode: "entries" \| "progress" \| "rewrite" = "entries", compact = false)` | Creates working memory context. | function | exported | [line 44](../../src/evidence-agent/adapters/pi/working-memory-context.ts#L44) |
 ## `src/evidence-agent/adapters/pi/working-memory-observation.ts`
 
 | Symbol | Purpose | Kind | Visibility | Source |
 |---|---|---|---|---|
-| `createWorkingMemoryObservation(ledger: MemoryLedger, maxSearchCalls?: number, options: WorkingMemoryObservationOptions = {})` | Navigation deltas only. | function | exported | [line 13](../../src/evidence-agent/adapters/pi/working-memory-observation.ts#L13) |
+| `createWorkingMemoryObservation(ledger: MemoryLedger, maxSearchCalls?: number, options: WorkingMemoryObservationOptions = {})` | Navigation deltas only. | function | exported | [line 15](../../src/evidence-agent/adapters/pi/working-memory-observation.ts#L15) |
 ## `src/evidence-agent/index.ts`
 
 _No top-level functions, classes, or class methods._

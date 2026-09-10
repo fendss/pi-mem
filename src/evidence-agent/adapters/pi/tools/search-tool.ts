@@ -13,7 +13,12 @@ import type { MemoryCandidate } from "../../../model/evidence.js";
 import type { MemoryLedger } from "../../../model/ledger.js";
 import type { CreatePiMemToolsOptions, PiMemTools, SearchToolDetails } from "./contracts.js";
 import { renderCandidates, renderEvidenceOperator } from "./render-tool-result.js";
-import { createSearchParameters, SearchMoreParameters } from "./schemas.js";
+import {
+  CompactSearchMoreParameters,
+  CompactSearchParameters,
+  createSearchParameters,
+  SearchMoreParameters,
+} from "./schemas.js";
 import { candidateToolDetails } from "./candidate-details.js";
 import { candidatePreview } from "../../../model/source-preview-spans.js";
 
@@ -229,6 +234,7 @@ function pageOperatorResult(
 export function createSearchTools(
   options: CreatePiMemToolsOptions,
 ): Pick<PiMemTools, "search" | "searchMore"> {
+  const compact = options.interfaceMode === "compact";
   let executedSearchCalls = 0;
   let executedRetrievalOperations = 0;
   let consecutiveNoNewCandidateCalls = 0;
@@ -440,15 +446,19 @@ export function createSearchTools(
   const search: PiMemTools["search"] = {
     name: "search",
     label: "Search memory",
-    description: [
-      "Search is simple by default: provide queries and optionally one operator. " +
-      "For an inline retrieval program, add branches plus a combine method, then optionally order results or cap candidates per session. Search always spans the source roles available in the current scope; role labels are harness-owned metadata. " +
-      "A common high-recall program is hybrid semantic queries plus one lexical branch, combined with union. " +
-      "Use define_operator only when a named plan must be reused. The harness never accepts SQL. " +
-      "Use returned opaque candidate handles such as C1 with read; search_more only expands the same physical result.",
-      catalogText,
-    ].join("\n"),
-    parameters: createSearchParameters(operatorCatalog.map((entry) => entry.id)),
+    description: compact
+      ? "Search memory for the facts still missing. The harness manages retrieval strategy and limits. Read promising handles from the returned page."
+      : [
+          "Search is simple by default: provide queries and optionally one operator. " +
+          "For an inline retrieval program, add branches plus a combine method, then optionally order results or cap candidates per session. Search always spans the source roles available in the current scope; role labels are harness-owned metadata. " +
+          "A common high-recall program is hybrid semantic queries plus one lexical branch, combined with union. " +
+          "Use define_operator only when a named plan must be reused. The harness never accepts SQL. " +
+          "Use returned opaque candidate handles such as C1 with read; search_more only expands the same physical result.",
+          catalogText,
+        ].join("\n"),
+    parameters: (compact
+      ? CompactSearchParameters
+      : createSearchParameters(operatorCatalog.map((entry) => entry.id))) as PiMemTools["search"]["parameters"],
     async execute(_toolCallId, params, signal) {
       if (params.workingMemory !== undefined) {
         options.observation?.recordWorkingMemory(params.workingMemory);
@@ -542,12 +552,15 @@ export function createSearchTools(
   const searchMore: PiMemTools["searchMore"] = {
     name: "search_more",
     label: "Continue latest search",
-    description:
-      "Expand the next compact directory page from the most recent search into " +
-      "full passage findings. Every directory C ref is already directly readable. " +
-      "This presentation-only action reuses the exact physical result and does " +
-      "not run an operator or consume a semantic search call.",
-    parameters: SearchMoreParameters,
+    description: compact
+      ? "Show the next page from the latest search without running a new retrieval."
+      : "Expand the next compact directory page from the most recent search into " +
+        "full passage findings. Every directory C ref is already directly readable. " +
+        "This presentation-only action reuses the exact physical result and does " +
+        "not run an operator or consume a semantic search call.",
+    parameters: (compact
+      ? CompactSearchMoreParameters
+      : SearchMoreParameters) as PiMemTools["searchMore"]["parameters"],
     async execute(_toolCallId, params, _signal) {
       if (params.workingMemory !== undefined) {
         options.observation?.recordWorkingMemory(params.workingMemory);

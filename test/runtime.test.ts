@@ -16,7 +16,7 @@ describe("runtime Skill experiment boundary", () => {
     const current = piMemSystemPrompt("pimem-v0");
 
     expect(none).not.toContain("<active_skill");
-    expect(minimal.startsWith(`${none}\n\n`)).toBe(true);
+    expect(minimal.startsWith(`${none}\n\n`)).toBe(false);
     expect(current.startsWith(`${none}\n\n`)).toBe(true);
     expect(minimal).toContain(PIMEM_MINIMAL_SKILL_TEXT);
     expect(current).toContain(PIMEM_SKILL_TEXT);
@@ -55,7 +55,7 @@ describe("runtime Skill experiment boundary", () => {
     );
   });
 
-  it("gives all experiment arms the same runtime catalog", () => {
+  it("keeps the operator catalog out of the compact interface", () => {
     const catalog: SearchOperatorCatalogEntry[] = [{
       id: "entity-expand",
       version: "1",
@@ -66,10 +66,13 @@ describe("runtime Skill experiment boundary", () => {
       },
     }];
 
-    for (const skill of ["none", "pimem-minimal", "pimem-v0"] as const) {
+    for (const skill of ["none", "pimem-v0"] as const) {
       const prompt = piMemSystemPrompt(skill, undefined, catalog);
       expect(prompt).toContain("id=entity-expand | version=1");
       expect(prompt).not.toContain("entity-expand@1");
     }
+    expect(piMemSystemPrompt("pimem-minimal", undefined, catalog)).not.toContain(
+      "entity-expand",
+    );
   });
 });

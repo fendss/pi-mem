@@ -7,37 +7,53 @@ import {
   projectPassageEvidence,
   type MemoryEvidence,
 } from "../../../model/source-evidence.js";
-import { ReadParameters } from "./schemas.js";
+import { CompactReadParameters, ReadParameters } from "./schemas.js";
 import { candidateToolDetails } from "./candidate-details.js";
 
 const DEFAULT_LOCAL_CONTEXT_TURNS = 1;
+const COMPACT_READ_RESULT_CHARS = 12 * 1024;
+const COMPACT_MAX_CANDIDATES_PER_READ = 6;
 
 export function createReadTool(
   options: CreatePiMemToolsOptions,
 ): PiMemTools["read"] {
+  const compact = options.interfaceMode === "compact";
+  const readResultChars = compact
+    ? COMPACT_READ_RESULT_CHARS
+    : MAX_READ_RESULT_CHARS;
   return {
     name: "read",
     label: "Read memory",
-    description:
-      "Read selected immutable sources into the final exact-source package using candidate handles such as C1. " +
-      "The exact payload is retained privately under short E handles and every " +
-      "source returned by read is automatically committed when finish succeeds. " +
-      "One same-session turn on each side is included by default.",
-    parameters: ReadParameters,
+    description: compact
+      ? "Read up to six promising candidates from the visible search page. The harness retains exact sources and provenance for final handoff."
+      : "Read selected immutable sources into the final exact-source package using candidate handles such as C1. " +
+        "The exact payload is retained privately under short E handles and every " +
+        "source returned by read is automatically committed when finish succeeds. " +
+        "One same-session turn on each side is included by default.",
+    parameters: (compact
+      ? CompactReadParameters
+      : ReadParameters) as PiMemTools["read"]["parameters"],
     async execute(_toolCallId, params) {
       if (params.workingMemory !== undefined) {
         options.observation?.recordWorkingMemory(params.workingMemory);
       }
       const candidateRefs = uniqueCandidateRefs(params.candidateRefs);
+      if (compact && candidateRefs.length > COMPACT_MAX_CANDIDATES_PER_READ) {
+        throw new Error(
+          `Compact read accepts at most ${String(COMPACT_MAX_CANDIDATES_PER_READ)} candidates.`,
+        );
+      }
       if (options.ledger.candidates.length === 0) {
+        const contextBefore = compact ? 0 : params.contextBefore ?? DEFAULT_LOCAL_CONTEXT_TURNS;
+        const contextAfter = compact ? 0 : params.contextAfter ?? DEFAULT_LOCAL_CONTEXT_TURNS;
         return {
           content: [{ type: "text", text: "No candidates exist. Call search again; do not guess a candidate handle." }],
           details: {
             kind: "read",
             requestedCandidateRefs: candidateRefs,
             requestedMemoryIds: [],
-            contextBefore: params.contextBefore ?? DEFAULT_LOCAL_CONTEXT_TURNS,
-            contextAfter: params.contextAfter ?? DEFAULT_LOCAL_CONTEXT_TURNS,
+            contextBefore,
+            contextAfter,
             evidence: [],
             evidenceReferences: [],
             expandedMemoryIds: [],
@@ -49,8 +65,12 @@ export function createReadTool(
       const memoryIds = [...new Set(
         selectedCandidates.map((candidate) => candidate.memoryId),
       )];
-      const contextBefore = params.contextBefore ?? DEFAULT_LOCAL_CONTEXT_TURNS;
-      const contextAfter = params.contextAfter ?? DEFAULT_LOCAL_CONTEXT_TURNS;
+      const contextBefore = compact
+        ? 0
+        : params.contextBefore ?? DEFAULT_LOCAL_CONTEXT_TURNS;
+      const contextAfter = compact
+        ? 0
+        : params.contextAfter ?? DEFAULT_LOCAL_CONTEXT_TURNS;
       const memories = options.store.read(
         options.scopeId,
         memoryIds,
@@ -89,6 +109,11 @@ export function createReadTool(
         !passageParentIds.has(memory.memoryId) || selectedParentIds.has(memory.memoryId)
       );
       const passageChars = exactPassages.reduce((sum, item) => sum + item.evidence.content.length, 0);
+      if (passageChars > readResultChars) {
+        throw new Error(
+          `Selected exact passages exceed the ${String(readResultChars)} character compact read budget. Read fewer candidates.`,
+        );
+      }
       const boundedEvidence = projectMemoryEvidenceBatch(boundedRecords, (memory) => {
         const candidates = options.ledger.selectMemoryCandidates([memory.memoryId]);
         return [
@@ -99,7 +124,7 @@ export function createReadTool(
             discovery.query === undefined ? [] : [discovery.query]
           )),
         ];
-      }, MAX_READ_RESULT_CHARS - passageChars, (memory) =>
+      }, readResultChars - passageChars, (memory) =>
         selectedParentIds.has(memory.memoryId) ? options.ledger.sourceSpansFor(memory) : []
       );
       const projected = [
@@ -110,9 +135,9 @@ export function createReadTool(
         (sum, evidence) => sum + evidence.content.length,
         0,
       );
-      if (renderedChars > MAX_READ_RESULT_CHARS) {
+      if (renderedChars > readResultChars) {
         throw new Error(
-          `Read result would exceed ${String(MAX_READ_RESULT_CHARS)} characters. ` +
+          `Read result would exceed ${String(readResultChars)} characters. ` +
             "Read fewer candidate passages or request less neighboring context.",
         );
       }

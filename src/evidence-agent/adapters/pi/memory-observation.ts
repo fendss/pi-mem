@@ -38,6 +38,7 @@ interface CreateMemoryObservationOptions {
   question?: string;
   questionDate?: string;
   maxSearchCalls?: number;
+  compact?: boolean;
 }
 
 const MAX_ACTIVE_UNREAD_FINDINGS = 20;
@@ -422,6 +423,31 @@ export function createMemoryObservation(
               Math.floor(DIRECTORY_PREVIEW_BUDGET / visibleDirectoryCount),
             ),
           );
+
+      if (options.compact) {
+        return [
+          "<MEMORY>",
+          `Working memory: ${workingMemory ?? "No established facts yet."}`,
+          searchStatus,
+          ...(latestFindingCount === undefined
+            ? []
+            : [
+                "Current search results",
+                ...renderUnreadFindings(
+                  activeUnread,
+                  options.ledger,
+                  options.questionDate,
+                  280,
+                ),
+                ...(latestPagination?.hasMore
+                  ? ["More results are available through search_more."]
+                  : []),
+              ]),
+          `Exact sources already read: ${String(options.ledger.inspectedEvidence.length)}.`,
+          "Read only promising candidates. Search for a missing fact, or finish when the exact sources read cover the question.",
+          "</MEMORY>",
+        ].join("\n");
+      }
 
       return [
         "<MEMORY>",

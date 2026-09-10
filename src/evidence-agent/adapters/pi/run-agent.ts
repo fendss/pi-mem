@@ -1,7 +1,12 @@
 import { WORK_PROGRESS_PROMPT } from "./work-progress-contract.js";
 import { Agent } from "@earendil-works/pi-agent-core";
 import { createEphemeralMemoryContext } from "./ephemeral-context.js";
-import { createWorkingMemoryContext, WORKING_MEMORY_POLICY_PROMPT, REWRITE_WORKING_MEMORY_PROMPT } from "./working-memory-context.js";
+import {
+  COMPACT_REWRITE_WORKING_MEMORY_PROMPT,
+  createWorkingMemoryContext,
+  REWRITE_WORKING_MEMORY_PROMPT,
+  WORKING_MEMORY_POLICY_PROMPT,
+} from "./working-memory-context.js";
 import {
   aggregateAssistantUsage,
   assistantMessageText,
@@ -9,7 +14,6 @@ import {
   validateResponseModels,
 } from "./assistant-messages.js";
 import {
-  PI_MEM_TOOL_SYSTEM_PROMPT,
   piMemSystemPrompt,
   type PiMemSkill,
 } from "./retrieval-prompt.js";
@@ -151,7 +155,24 @@ function providerResponseModel(message: string): string | undefined {
   )?.[1];
 }
 
-function questionPrompt(question: string, questionDate?: string): string {
+function questionPrompt(
+  question: string,
+  questionDate?: string,
+  compact = false,
+): string {
+  if (compact) {
+    return [
+      "Question:",
+      question,
+      ...(questionDate === undefined
+        ? []
+        : ["", `Question date (source timezone unspecified): ${questionDate}`]),
+      "",
+      "Find and read exact source evidence. Search from the facts still missing. " +
+        "Finish sufficient only when the sources read cover every required relationship. " +
+        "Do not answer the question.",
+    ].join("\n");
+  }
   return [
     "Question:",
     question,
@@ -177,8 +198,13 @@ export async function runPiMem(
   options: RunPiMemOptions,
 ): Promise<PiMemResult> {
   options.signal?.throwIfAborted();
-  if (options.contextPolicy !== undefined && options.contextPolicy !== "current-window" &&
-      options.contextPolicy !== "working-memory-v2" && options.contextPolicy !== "working-memory-v3" && options.contextPolicy !== "working-memory-rewrite") {
+  const skill = options.skill ?? "pimem-v0";
+  const compactInterface = skill === "pimem-minimal";
+  const contextPolicy = options.contextPolicy ?? (
+    compactInterface ? "working-memory-rewrite" : undefined
+  );
+  if (contextPolicy !== undefined && contextPolicy !== "current-window" &&
+      contextPolicy !== "working-memory-v2" && contextPolicy !== "working-memory-v3" && contextPolicy !== "working-memory-rewrite") {
     throw new Error("Unsupported contextPolicy. Use working-memory-rewrite for a single note, working-memory-v2 for entries or working-memory-v3 for current task progress; the old working-memory-v1 replacement policy is available only in its frozen experiment snapshot.");
   }
   const scopeId = assertNonEmpty(options.scopeId, "scopeId");
@@ -215,12 +241,19 @@ export async function runPiMem(
   };
   const retrievalMetricsBefore =
     options.store.snapshotRetrievalMetrics?.() ?? zeroRetrievalMetrics;
-  const workingMode = options.contextPolicy === "working-memory-rewrite" ? "rewrite"
-    : options.contextPolicy === "working-memory-v3" ? "progress"
-    : options.contextPolicy === "working-memory-v2" ? "entries" : undefined;
+  const workingMode = contextPolicy === "working-memory-rewrite" ? "rewrite"
+    : contextPolicy === "working-memory-v3" ? "progress"
+    : contextPolicy === "working-memory-v2" ? "entries" : undefined;
   const workingContext = workingMode === undefined ? undefined
-    : createWorkingMemoryContext(ledger, options.maxSearchCalls, workingMode);
-  const workingPrompt = workingMode === "rewrite" ? REWRITE_WORKING_MEMORY_PROMPT
+    : createWorkingMemoryContext(
+        ledger,
+        options.maxSearchCalls,
+        workingMode,
+        compactInterface,
+      );
+  const workingPrompt = workingMode === "rewrite" && compactInterface
+    ? COMPACT_REWRITE_WORKING_MEMORY_PROMPT
+    : workingMode === "rewrite" ? REWRITE_WORKING_MEMORY_PROMPT
     : workingMode === "progress" ? WORK_PROGRESS_PROMPT : WORKING_MEMORY_POLICY_PROMPT;
   const adaptiveTools = workingMode === "progress" || workingMode === "rewrite";
   const ephemeralContext = workingContext ?? createEphemeralMemoryContext();
@@ -245,6 +278,7 @@ export async function runPiMem(
       limit: 20,
       order: "relevance",
     },
+    interfaceMode: compactInterface ? "compact" : "full",
     ...(options.maxSearchCalls === undefined
       ? {}
       : { maxSearchCalls: options.maxSearchCalls }),
@@ -263,8 +297,8 @@ export async function runPiMem(
   const agent = new Agent({
     initialState: {
       systemPrompt: piMemSystemPrompt(
-        options.skill ?? "pimem-v0",
-        options.systemPrompt ?? PI_MEM_TOOL_SYSTEM_PROMPT,
+        skill,
+        options.systemPrompt,
         operatorCatalog.list(),
       ) + (workingContext === undefined ? "" : workingPrompt),
       model: options.modelRuntime.model,
@@ -427,7 +461,11 @@ export async function runPiMem(
   options.signal?.addEventListener("abort", abortFromCaller, { once: true });
   try {
     try {
-      await agent.prompt(questionPrompt(question, options.questionDate));
+      await agent.prompt(questionPrompt(
+        question,
+        options.questionDate,
+        compactInterface,
+      ));
     } catch (error) {
       throw guardFailure() ?? failure(
         "runtime_error",
@@ -455,15 +493,15 @@ export async function runPiMem(
       }
       if (nudge >= maxProtocolNudges) break;
       try {
-        await agent.prompt(
-          "Protocol reminder: do not answer the question. Continue retrieval " +
+        await agent.prompt(compactInterface
+          ? "Protocol reminder: do not answer. Search or read if a required fact is missing; otherwise call finish alone with an honest status."
+          : "Protocol reminder: do not answer the question. Continue retrieval " +
             "if a useful evidence need or frontier remains; otherwise call " +
             "finish as the only tool call in this turn, with an honest status " +
             "(evidenceSummary is optional). Read " +
             "the preceding search frontier or exact READ_RESULT before " +
             "finishing. Every source returned by read is committed; the harness " +
-            "generates its citations and provenance.",
-        );
+            "generates its citations and provenance.");
       } catch (error) {
         throw guardFailure() ?? failure(
           "runtime_error",

@@ -9,7 +9,7 @@ import { sha256 } from "../../../util.js";
 export type PiMemSkill = "none" | "pimem-minimal" | "pimem-v0";
 
 export const PIMEM_SKILL_VERSION = "pimem-v0-harness-context-13";
-export const PIMEM_MINIMAL_SKILL_VERSION = "pimem-minimal-harness-context-8";
+export const PIMEM_MINIMAL_SKILL_VERSION = "pimem-minimal-compact-interface-9";
 
 const DEFAULT_SKILL_PATH = fileURLToPath(
   new URL("../../../../.agents/skills/pimem-retrieval/SKILL.md", import.meta.url),
@@ -42,6 +42,16 @@ Tool contract:
 - finish reports status; evidenceSummary is an optional audit note that should normally be omitted. The harness automatically commits every exact source returned by read and generates citations, hashes, provenance, and answer-package formatting. Observe prior tool results, then call finish as the only tool call in that assistant turn.
 - The harness owns source identity, provenance, package limits, and formatting.`;
 
+export const PI_MEM_MINIMAL_TOOL_SYSTEM_PROMPT = `You are PiMem, a memory retrieval agent.
+
+Find direct source evidence for the caller. Do not answer the question.
+
+- search accepts focused queries and returns one bounded page of candidates. The harness owns retrieval strategy and keeps later pages private until search_more.
+- read accepts a small set of visible candidate handles and returns exact source excerpts. The harness retains their full identity and provenance.
+- Keep workingMemory short: only established facts and facts still missing. Do not copy handles, candidate lists, search history, or reasoning.
+- Continue searching from the entity or relationship still missing. Call finish with sufficient only after the exact sources read cover the question.
+- The harness commits all read sources and prepares the final evidence package.`;
+
 function activeSkillPrompt(skill: Exclude<PiMemSkill, "none">): string {
   const minimal = skill === "pimem-minimal";
   const name = minimal ? "pimem-retrieval-minimal" : "pimem-retrieval";
@@ -55,8 +65,11 @@ export function piMemSystemPrompt(
   basePrompt?: string,
   operatorCatalog: readonly SearchOperatorCatalogEntry[] = [],
 ): string {
-  const resolvedBasePrompt = basePrompt ?? PI_MEM_TOOL_SYSTEM_PROMPT;
-  const catalogPrompt = operatorCatalog.length === 0
+  const minimal = skill === "pimem-minimal";
+  const resolvedBasePrompt = basePrompt ?? (
+    minimal ? PI_MEM_MINIMAL_TOOL_SYSTEM_PROMPT : PI_MEM_TOOL_SYSTEM_PROMPT
+  );
+  const catalogPrompt = minimal || operatorCatalog.length === 0
     ? ""
     : `<search_operator_catalog>\n${renderSearchOperatorCatalog(operatorCatalog)}\n</search_operator_catalog>`;
   return [

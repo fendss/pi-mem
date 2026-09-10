@@ -29,10 +29,29 @@ insufficient when the remaining budget cannot resolve the gap. The program commi
 all read sources. A final note and evidenceSummary are optional.
 `;
 
+export const COMPACT_REWRITE_WORKING_MEMORY_PROMPT = `
+Context policy: compact working memory.
+After each successful action, the harness removes old tool payloads and keeps
+exact read sources privately. workingMemory is optional plain text. When it
+changes, replace it with only:
+- Established: source-supported facts still relevant to the question.
+- Missing: facts or relationships still needed.
+Do not include handles, candidate lists, search history, or reasoning. Use the
+missing fact to choose the next query. Finish sufficient only when exact sources
+already read cover every required relationship.
+`;
+
 /** Notes are optional annotations. Only real tool arguments authorize source reads. */
-export function createRewriteWorkingMemoryContext(ledger: MemoryLedger, maxSearchCalls?: number) {
+export function createRewriteWorkingMemoryContext(
+  ledger: MemoryLedger,
+  maxSearchCalls?: number,
+  compact = false,
+) {
   const memory = new RewriteWorkingMemory(() => {});
-  const observation = createWorkingMemoryObservation(ledger, maxSearchCalls, { refreshResults: true });
+  const observation = createWorkingMemoryObservation(ledger, maxSearchCalls, {
+    refreshResults: true,
+    compact,
+  });
   const acknowledged = new Set<string>();
   const expiredNavigation = new Set<string>();
   const expiredReads = new Set<string>();

@@ -165,6 +165,8 @@ export interface CreatePiMemToolsOptions {
   questionDate?: string;
   searchDefaults?: Pick<SearchRequest, "limit" | "order" | "maxPerSession">;
   maxSearchCalls?: number;
+  /** Keep advanced retrieval implementation private behind a small model-facing contract. */
+  interfaceMode?: "full" | "compact";
   /** Shared model-facing snapshot. Created automatically by createPiMemTools. */
   observation?: MemoryObservation;
 }

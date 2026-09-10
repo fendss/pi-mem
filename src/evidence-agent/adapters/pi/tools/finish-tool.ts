@@ -1,20 +1,24 @@
 import type { PiMemSelection } from "../../../model/evidence.js";
 import type { CreatePiMemToolsOptions, FinishToolDetails, PiMemTools } from "./contracts.js";
-import { FinishParameters } from "./schemas.js";
+import { CompactFinishParameters, FinishParameters } from "./schemas.js";
 import { compactPreview } from "../../../../util.js";
 
 export function createFinishTool(
   options: CreatePiMemToolsOptions,
 ): PiMemTools["finish"] {
+  const compact = options.interfaceMode === "compact";
   return {
     name: "finish",
     label: "Finish",
-    description:
-      "Stop retrieval and commit every exact source returned by read. The " +
-      "harness generates citations, hashes, provenance, deduplication, and formatting. " +
-      "Call this alone, only after observing the latest search or read result in " +
-      "an earlier assistant turn.",
-    parameters: FinishParameters,
+    description: compact
+      ? "Finish retrieval. Use sufficient only when the exact sources already read cover every fact needed by the question."
+      : "Stop retrieval and commit every exact source returned by read. The " +
+        "harness generates citations, hashes, provenance, deduplication, and formatting. " +
+        "Call this alone, only after observing the latest search or read result in " +
+        "an earlier assistant turn.",
+    parameters: (compact
+      ? CompactFinishParameters
+      : FinishParameters) as PiMemTools["finish"]["parameters"],
     executionMode: "sequential",
     async execute(_toolCallId, params) {
       const evidence = options.ledger.inspectedEvidence;
