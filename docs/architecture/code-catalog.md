@@ -722,7 +722,7 @@ _No top-level functions, classes, or class methods._
 
 | Symbol | Purpose | Kind | Visibility | Source |
 |---|---|---|---|---|
-| `createRewriteWorkingMemoryContext(ledger: MemoryLedger, maxSearchCalls?: number, compact = false)` | Notes are optional annotations. | function | exported | [line 46](../../src/evidence-agent/adapters/pi/rewrite-working-memory-context.ts#L46) |
+| `createRewriteWorkingMemoryContext(ledger: MemoryLedger, maxSearchCalls?: number, compact = false)` | Notes are optional annotations. | function | exported | [line 50](../../src/evidence-agent/adapters/pi/rewrite-working-memory-context.ts#L50) |
 ## `src/evidence-agent/adapters/pi/run-agent.ts`
 
 | Symbol | Purpose | Kind | Visibility | Source |
@@ -732,7 +732,7 @@ _No top-level functions, classes, or class methods._
 | `providerFailureKind(message: string): PiMemProviderFailureKind` | Implements the provider failure kind operation. | function | internal | [line 136](../../src/evidence-agent/adapters/pi/run-agent.ts#L136) |
 | `providerResponseModel(message: string): string \| undefined` | Implements the provider response model operation. | function | internal | [line 156](../../src/evidence-agent/adapters/pi/run-agent.ts#L156) |
 | `questionPrompt(question: string, questionDate?: string, compact = false): string` | Builds the user prompt from the question and optional question date. | function | internal | [line 162](../../src/evidence-agent/adapters/pi/run-agent.ts#L162) |
-| `runPiMem(options: RunPiMemOptions): Promise<PiMemResult>` | Runs one bounded evidence-agent session and returns its provenance-backed result. | function | exported | [line 202](../../src/evidence-agent/adapters/pi/run-agent.ts#L202) |
+| `runPiMem(options: RunPiMemOptions): Promise<PiMemResult>` | Runs one bounded evidence-agent session and returns its provenance-backed result. | function | exported | [line 204](../../src/evidence-agent/adapters/pi/run-agent.ts#L204) |
 ## `src/evidence-agent/adapters/pi/tools.ts`
 
 _No top-level functions, classes, or class methods._
@@ -773,7 +773,7 @@ _No top-level functions, classes, or class methods._
 
 | Symbol | Purpose | Kind | Visibility | Source |
 |---|---|---|---|---|
-| `createReadTool(options: CreatePiMemToolsOptions): PiMemTools["read"]` | Creates read tool. | function | exported | [line 15](../../src/evidence-agent/adapters/pi/tools/read-tool.ts#L15) |
+| `createReadTool(options: CreatePiMemToolsOptions): PiMemTools["read"]` | Creates read tool. | function | exported | [line 17](../../src/evidence-agent/adapters/pi/tools/read-tool.ts#L17) |
 ## `src/evidence-agent/adapters/pi/tools/render-tool-result.ts`
 
 | Symbol | Purpose | Kind | Visibility | Source |
@@ -903,8 +903,10 @@ _No top-level functions, classes, or class methods._
 
 | Symbol | Purpose | Kind | Visibility | Source |
 |---|---|---|---|---|
-| `candidatePreview(hit: RetrievalHit): string` | Legacy adapters may return unbounded previews; store and display the same view. | function | exported | [line 6](../../src/evidence-agent/model/source-preview-spans.ts#L6) |
-| `sourcePreviewSpans(content: string, preview: string): SourceSpan[]` | Recover only verbatim source fragments; whitespace compaction is reversible. | function | exported | [line 14](../../src/evidence-agent/model/source-preview-spans.ts#L14) |
+| `isSentenceBoundary(content: string, index: number): boolean` | Checks whether sentence boundary. | function | internal | [line 7](../../src/evidence-agent/model/source-preview-spans.ts#L7) |
+| `completeNearbySentence(content: string, span: SourceSpan): SourceSpan` | A query-centred preview may stop in the middle of the matched sentence. | function | internal | [line 17](../../src/evidence-agent/model/source-preview-spans.ts#L17) |
+| `candidatePreview(hit: RetrievalHit): string` | Legacy adapters may return unbounded previews; store and display the same view. | function | exported | [line 41](../../src/evidence-agent/model/source-preview-spans.ts#L41) |
+| `sourcePreviewSpans(content: string, preview: string): SourceSpan[]` | Recover only verbatim source fragments; whitespace compaction is reversible. | function | exported | [line 49](../../src/evidence-agent/model/source-preview-spans.ts#L49) |
 ## `src/evidence-agent/model/work-progress.ts`
 
 | Symbol | Purpose | Kind | Visibility | Source |

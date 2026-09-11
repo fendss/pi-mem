@@ -2,6 +2,18 @@
 
 ## Unreleased
 
+## 1.4.1 - 2026-09-11
+
+- Preserve the full composable search-operator interface while allowing the
+  compact evidence view and retrieval skill to evolve independently.
+- Simplify optional working-memory progress and move history retirement into
+  the harness without adding a separate state-model call.
+- Keep stable candidate references, exact source coordinates, readable
+  passages, and immutable parent evidence through read and answer handoff.
+- Complete nearby sentence boundaries around source-matched legacy previews so
+  read evidence does not end in the middle of a matched fact.
+- Keep retrieval adequacy model-owned and strengthen CA trust, request
+  timeouts, answer context fitting, concurrency control, and resumable evals.
 - Keep source-role filtering in the harness-owned retrieval layer and remove it
   from Agent-authored search requests and run-local operator definitions.
 

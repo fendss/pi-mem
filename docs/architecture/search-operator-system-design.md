@@ -1,6 +1,6 @@
 # PiMem Declarative Search Operators
 
-Status: aligned with v1.4.0 engineering review, 2026-09-09
+Status: aligned with v1.4.1 engineering review, 2026-09-11
 
 ## 1. Decision
 
